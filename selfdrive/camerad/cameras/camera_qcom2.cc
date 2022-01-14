@@ -22,11 +22,15 @@
 #include "selfdrive/common/swaglog.h"
 #include "selfdrive/camerad/cameras/sensor2_i2c.h"
 
+// For debugging:
+// echo "4294967295" > /sys/module/cam_debug_util/parameters/debug_mdl
+
 extern ExitHandler do_exit;
 
 const size_t FRAME_WIDTH = 1928;
 const size_t FRAME_HEIGHT = 1208;
-const size_t FRAME_STRIDE = 2416;  // for 10 bit output
+//const size_t FRAME_STRIDE = 2416;  // for 10 bit output
+const size_t FRAME_STRIDE = 3312;  // for 12 bit output
 
 const int MIPI_SETTLE_CNT = 33;  // Calculated by camera_freqs.py
 
@@ -227,8 +231,9 @@ void sensors_init(int video0_fd, int sensor_fd, int camera_num) {
   buf_desc[0].size = buf_desc[0].length = sizeof(struct cam_cmd_i2c_info) + sizeof(struct cam_cmd_probe);
   buf_desc[0].type = CAM_CMD_BUF_LEGACY;
   struct cam_cmd_i2c_info *i2c_info = (struct cam_cmd_i2c_info *)alloc_w_mmu_hdl(video0_fd, buf_desc[0].size, (uint32_t*)&buf_desc[0].mem_handle);
-  struct cam_cmd_probe *probe = (struct cam_cmd_probe *)((uint8_t *)i2c_info) + sizeof(struct cam_cmd_i2c_info);
+  auto probe = (struct cam_cmd_probe *)(i2c_info + 1);
 
+  printf("camera_num %d\n", camera_num);
   switch (camera_num) {
     case 0:
       // port 0
@@ -237,7 +242,9 @@ void sensors_init(int video0_fd, int sensor_fd, int camera_num) {
       break;
     case 1:
       // port 1
-      i2c_info->slave_addr = 0x30;
+      //i2c_info->slave_addr = 0x30;
+      // imx390
+      i2c_info->slave_addr = 0x36;
       probe->camera_id = 1;
       break;
     case 2:
@@ -256,9 +263,14 @@ void sensors_init(int video0_fd, int sensor_fd, int camera_num) {
   probe->addr_type = CAMERA_SENSOR_I2C_TYPE_WORD;
   probe->op_code = 3;   // don't care?
   probe->cmd_type = CAMERA_SENSOR_CMD_TYPE_PROBE;
-  probe->reg_addr = 0x3000; //0x300a; //0x300b;
-  probe->expected_data = 0x354; //0x7750; //0x885a;
-  probe->data_mask = 0;
+
+  // ar0231
+  /*probe->reg_addr = 0x3000;
+  probe->expected_data = 0x354;*/
+
+  // imx390
+  probe->reg_addr = 0x330;
+  probe->expected_data = 0x1538;
 
   //buf_desc[1].size = buf_desc[1].length = 148;
   buf_desc[1].size = buf_desc[1].length = 196;
@@ -286,7 +298,8 @@ void sensors_init(int video0_fd, int sensor_fd, int camera_num) {
   power->count = 1;
   power->cmd_type = CAMERA_SENSOR_CMD_TYPE_PWR_UP;
   power->power_settings[0].power_seq_type = 0;
-  power->power_settings[0].config_val_low = 19200000; //Hz
+  //power->power_settings[0].config_val_low = 19200000; //Hz
+  power->power_settings[0].config_val_low = 24000000; //Hz
   power = power_set_wait(power, 10);
 
   // 8,1 is this reset?
@@ -584,9 +597,10 @@ static void camera_open(CameraState *s) {
       .lane_cfg = 0x3210,
 
       .vc = 0x0,
-      // .dt = 0x2C; //CSI_RAW12
-      .dt = 0x2B,  //CSI_RAW10
-      .format = CAM_FORMAT_MIPI_RAW_10,
+      .dt = 0x2C, //CSI_RAW12
+      //.dt = 0x2B,  //CSI_RAW10
+      .format = CAM_FORMAT_MIPI_RAW_12,
+      //.format = CAM_FORMAT_MIPI_RAW_10,
 
       .test_pattern = 0x2,  // 0x3?
       .usage_type = 0x0,
@@ -612,7 +626,8 @@ static void camera_open(CameraState *s) {
       .num_out_res = 0x1,
       .data[0] = (struct cam_isp_out_port_info){
           .res_type = CAM_ISP_IFE_OUT_RES_RDI_0,
-          .format = CAM_FORMAT_MIPI_RAW_10,
+          //.format = CAM_FORMAT_MIPI_RAW_10,
+          .format = CAM_FORMAT_MIPI_RAW_12,
           .width = FRAME_WIDTH,
           .height = FRAME_HEIGHT,
           .comp_grp_id = 0x0, .split_point = 0x0, .secure_mode = 0x0,
@@ -641,7 +656,8 @@ static void camera_open(CameraState *s) {
   config_isp(s, 0, 0, 1, s->buf0_handle, 0);
 
   LOG("-- Configuring sensor");
-  sensors_i2c(s, init_array_ar0231, std::size(init_array_ar0231), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
+  sensors_i2c(s, init_array_imx390, std::size(init_array_imx390), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
+  //sensors_i2c(s, init_array_ar0231, std::size(init_array_ar0231), CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
   //sensors_i2c(s, start_reg_array, std::size(start_reg_array), CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMON);
   //sensors_i2c(s, stop_reg_array, std::size(stop_reg_array), CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMOFF);
 
@@ -711,12 +727,12 @@ void cameras_init(VisionIpcServer *v, MultiCameraState *s, cl_device_id device_i
   camera_init(s, v, &s->road_cam, CAMERA_ID_AR0231, 1, 20, device_id, ctx,
               VISION_STREAM_RGB_BACK, VISION_STREAM_ROAD); // swap left/right
   printf("road camera initted \n");
-  camera_init(s, v, &s->wide_road_cam, CAMERA_ID_AR0231, 0, 20, device_id, ctx,
+  /*camera_init(s, v, &s->wide_road_cam, CAMERA_ID_AR0231, 0, 20, device_id, ctx,
               VISION_STREAM_RGB_WIDE, VISION_STREAM_WIDE_ROAD);
   printf("wide road camera initted \n");
   camera_init(s, v, &s->driver_cam, CAMERA_ID_AR0231, 2, 20, device_id, ctx,
               VISION_STREAM_RGB_FRONT, VISION_STREAM_DRIVER);
-  printf("driver camera initted \n");
+  printf("driver camera initted \n");*/
 
   s->sm = new SubMaster({"driverState"});
   s->pm = new PubMaster({"roadCameraState", "driverCameraState", "wideRoadCameraState", "thumbnail"});
@@ -765,10 +781,10 @@ void cameras_open(MultiCameraState *s) {
 
   camera_open(&s->road_cam);
   printf("road camera opened \n");
-  camera_open(&s->wide_road_cam);
+  /*camera_open(&s->wide_road_cam);
   printf("wide road camera opened \n");
   camera_open(&s->driver_cam);
-  printf("driver camera opened \n");
+  printf("driver camera opened \n");*/
 }
 
 static void camera_close(CameraState *s) {
@@ -973,13 +989,14 @@ static void set_camera_exposure(CameraState *s, float grey_frac) {
   // LOGE("ae - camera %d, cur_t %.5f, sof %.5f, dt %.5f", s->camera_num, 1e-9 * nanos_since_boot(), 1e-9 * s->buf.cur_frame_data.timestamp_sof, 1e-9 * (nanos_since_boot() - s->buf.cur_frame_data.timestamp_sof));
 
   uint16_t analog_gain_reg = 0xFF00 | (new_g << 4) | new_g;
-  struct i2c_random_wr_payload exp_reg_array[] = {
+  printf("analog_gain_reg: %d  exposure_time: %d\n", analog_gain_reg, s->exposure_time);
+  /*struct i2c_random_wr_payload exp_reg_array[] = {
                                                   {0x3366, analog_gain_reg},
                                                   {0x3362, (uint16_t)(s->dc_gain_enabled ? 0x1 : 0x0)},
                                                   {0x3012, (uint16_t)s->exposure_time},
                                                 };
   sensors_i2c(s, exp_reg_array, sizeof(exp_reg_array)/sizeof(struct i2c_random_wr_payload),
-              CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
+              CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);*/
 
 }
 
@@ -1018,8 +1035,8 @@ void cameras_run(MultiCameraState *s) {
   LOG("-- Starting devices");
   int start_reg_len = sizeof(start_reg_array) / sizeof(struct i2c_random_wr_payload);
   sensors_i2c(&s->road_cam, start_reg_array, start_reg_len, CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
-  sensors_i2c(&s->wide_road_cam, start_reg_array, start_reg_len, CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
-  sensors_i2c(&s->driver_cam, start_reg_array, start_reg_len, CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
+  /*sensors_i2c(&s->wide_road_cam, start_reg_array, start_reg_len, CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);
+  sensors_i2c(&s->driver_cam, start_reg_array, start_reg_len, CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG);*/
 
   // poll events
   LOG("-- Dequeueing Video events");

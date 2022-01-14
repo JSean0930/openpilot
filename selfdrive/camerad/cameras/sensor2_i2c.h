@@ -1,5 +1,36 @@
-struct i2c_random_wr_payload start_reg_array[] = {{0x301A, 0x91C}};
-struct i2c_random_wr_payload stop_reg_array[] = {{0x301A, 0x918}};
+/*struct i2c_random_wr_payload start_reg_array[] = {{0x301A, 0x91C}};
+struct i2c_random_wr_payload stop_reg_array[] = {{0x301A, 0x918}};*/
+
+struct i2c_random_wr_payload start_reg_array[] = {{0x0, 0}};
+
+struct i2c_random_wr_payload init_array_imx390[] = {
+  {0x2008, 0x04B7}, // MODE_VMAX
+  {0x200c, 0x0ce4}, // MODE_HMAX
+
+  /*{0x2014, 0x0001}, // MODE_ADBIT_CU : 12-bit ADC
+
+  // is crop enabled?
+  {0x3410, 0x0788}, // CROP_H_SIZE
+  {0x3418, 0x04b8}, // CROP_V_SIZE*/
+
+  // external trigger
+  {0x3650, 1},  // CU_MODE
+
+  // exposure
+  {0x000C, 0x2f2},
+  {0x0010, 0x2f2},
+
+  // analog gain
+  {0x0018, 50},
+  {0x001A, 50},
+
+  // digital gain?
+  {0x0024, 50},
+  {0x0026, 50},
+  {0x0028, 50},
+  {0x002c, 50},
+  {0x002e, 50},
+};
 
 struct i2c_random_wr_payload init_array_ar0231[] = {
   {0x301A, 0x0018}, // RESET_REGISTER
