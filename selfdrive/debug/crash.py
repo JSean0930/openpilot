@@ -35,18 +35,26 @@ def crasher():
     os.system(f"LD_LIBRARY_PATH= svc data {d}")
     time.sleep(random.uniform(0., 1.))
 
-    os.system(f"LD_LIBRARY_PATH= svc wifi {w}")
-    time.sleep(random.uniform(0., 1.))
+    #os.system(f"LD_LIBRARY_PATH= svc wifi {w}")
+    #time.sleep(random.uniform(0., 1.))
+
+    if random.random() > 0.9:
+      print("killing netd in 1s")
+      log("killing netd in 1s")
+      time.sleep(1)
+      os.system("pkill -SIGUSR2 -f netd")
+
+    os.system("dumpsys netpolicy --unsnooze")
 
 
 if __name__ == "__main__":
   procs = []
   try:
-    for _ in range(10):
-      p = multiprocessing.Process(target=netactivity)
-      p.daemon = True
-      p.start()
-      procs.append(p)
+    #for _ in range(10):
+    #  p = multiprocessing.Process(target=netactivity)
+    #  p.daemon = True
+    #  p.start()
+    #  procs.append(p)
     crasher()
   finally:
     for p in procs:
