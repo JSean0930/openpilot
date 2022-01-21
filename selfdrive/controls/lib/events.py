@@ -670,8 +670,11 @@ EVENTS: Dict[int, Dict[str, Union[Alert, AlertCallbackType]]] = {
   # is not processing frames fast enough they have to be dropped. This alert is
   # thrown when over 20% of frames are dropped.
   EventName.modeldLagging: {
-    ET.SOFT_DISABLE: soft_disable_alert("Driving model lagging"),
-    ET.NO_ENTRY: NoEntryAlert("Driving model lagging"),
+    ET.WARNING: Alert(
+      "Modeld lagging",
+      "",
+      AlertStatus.normal, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
   },
 
   # Besides predicting the path, lane lines and lead car data the model also
