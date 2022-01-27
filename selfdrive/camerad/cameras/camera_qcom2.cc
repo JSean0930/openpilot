@@ -383,14 +383,17 @@ void config_isp(struct CameraState *s, int io_mem_handle, int fence, int request
   buf_desc[0].mem_handle = buf0_mem_handle;
   buf_desc[0].offset = buf0_offset;
 
+  unsigned char* isp_prog;
   if (buf0_offset == 0) {
-    buf_desc[0].length = sizeof(isp_prog1);
-    memcpy(s->buf0_ptr + buf0_offset, isp_prog1, buf_desc[0].length);
+    buf_desc[0].length = sizeof(isp_prog1)-1;
+    isp_prog = isp_prog1;
   } else {
-    buf_desc[0].length = sizeof(isp_prog2);
-    memcpy(s->buf0_ptr + buf0_offset, isp_prog2, buf_desc[0].length);
+    buf_desc[0].length = sizeof(isp_prog2)-1;
+    isp_prog = isp_prog2;
   }
-  ptr->kmd_cmd_buf_offset = buf_desc[0].length;
+  printf("isp program length %d\n", buf_desc[0].length);
+  memcpy((unsigned char*)s->buf0_ptr + buf0_offset, isp_prog, buf_desc[0].length);
+  pkt->kmd_cmd_buf_offset = buf_desc[0].length;
 
   // parsed by cam_isp_packet_generic_blob_handler
   struct isp_packet {
