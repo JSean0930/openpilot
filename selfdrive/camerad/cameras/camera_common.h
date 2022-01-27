@@ -68,7 +68,6 @@ typedef struct FrameMetadata {
 
   // Focus
   unsigned int lens_pos;
-  float lens_sag;
   float lens_err;
   float lens_true_pos;
 } FrameMetadata;
@@ -130,3 +129,4 @@ void cameras_open(MultiCameraState *s);
 void cameras_run(MultiCameraState *s);
 void cameras_close(MultiCameraState *s);
 void camera_autoexposure(CameraState *s, float grey_frac);
+void camerad_thread();

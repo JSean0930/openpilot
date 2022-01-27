@@ -45,6 +45,7 @@ struct __attribute__((packed)) health_t {
   uint8_t fault_status;
   uint8_t power_save_enabled;
   uint8_t heartbeat_lost;
+  uint16_t unsafe_mode;
 };
 
 struct __attribute__((packed)) can_header {
@@ -108,7 +109,7 @@ class Panda {
   std::optional<std::string> get_serial();
   void set_power_saving(bool power_saving);
   void set_usb_power_mode(cereal::PeripheralState::UsbPowerMode power_mode);
-  void send_heartbeat();
+  void send_heartbeat(bool engaged);
   void set_can_speed_kbps(uint16_t bus, uint16_t speed);
   void set_data_speed_kbps(uint16_t bus, uint16_t speed);
   void can_send(capnp::List<cereal::CanData>::Reader can_data_list);

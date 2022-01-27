@@ -1,4 +1,4 @@
-#/!/usr/bin/env python3
+#!/usr/bin/env python3
 import time
 import json
 import jwt
@@ -15,6 +15,11 @@ from selfdrive.swaglog import cloudlog
 
 
 UNREGISTERED_DONGLE_ID = "UnregisteredDevice"
+
+
+def is_registered_device() -> bool:
+  dongle = Params().get("DongleId", encoding='utf-8')
+  return dongle not in (None, UNREGISTERED_DONGLE_ID)
 
 
 def register(show_spinner=False) -> str:
