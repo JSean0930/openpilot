@@ -38,6 +38,7 @@ typedef struct CameraState {
 
   int32_t link_handle;
 
+  void *buf0_ptr;
   int buf0_handle;
   int buf_handle[FRAME_BUF_COUNT];
   int sync_objs[FRAME_BUF_COUNT];

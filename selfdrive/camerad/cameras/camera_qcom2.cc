@@ -22,6 +22,8 @@
 #include "selfdrive/common/swaglog.h"
 #include "selfdrive/camerad/cameras/sensor2_i2c.h"
 
+#include "isp_programs.h"
+
 extern ExitHandler do_exit;
 
 const size_t FRAME_WIDTH = 1928;
@@ -354,7 +356,7 @@ void config_isp(struct CameraState *s, int io_mem_handle, int fence, int request
   pkt->num_cmd_buf = 2;
   pkt->kmd_cmd_buf_index = 0;
   // YUV has kmd_cmd_buf_offset = 1780
-  // I guess this is the ISP command
+  // I guess this is the ISP command (before this)
   // YUV also has patch_offset = 0x1030 and num_patches = 10
 
   if (io_mem_handle != 0) {
@@ -373,12 +375,22 @@ void config_isp(struct CameraState *s, int io_mem_handle, int fence, int request
   struct cam_buf_io_cfg *io_cfg = (struct cam_buf_io_cfg *)((char*)&pkt->payload + pkt->io_configs_offset);
 
   // TODO: support MMU
+  // This is ISP command
   buf_desc[0].size = 65624;
   buf_desc[0].length = 0;
   buf_desc[0].type = CAM_CMD_BUF_DIRECT;
   buf_desc[0].meta_data = 3;
   buf_desc[0].mem_handle = buf0_mem_handle;
   buf_desc[0].offset = buf0_offset;
+
+  if (buf0_offset == 0) {
+    buf_desc[0].length = sizeof(isp_prog1);
+    memcpy(s->buf0_ptr + buf0_offset, isp_prog1, buf_desc[0].length);
+  } else {
+    buf_desc[0].length = sizeof(isp_prog2);
+    memcpy(s->buf0_ptr + buf0_offset, isp_prog2, buf_desc[0].length);
+  }
+  ptr->kmd_cmd_buf_offset = buf_desc[0].length;
 
   // parsed by cam_isp_packet_generic_blob_handler
   struct isp_packet {
@@ -401,7 +413,8 @@ void config_isp(struct CameraState *s, int io_mem_handle, int fence, int request
   tmp.resource_hfr = {
     .num_ports = 1,  // 10 for YUV (but I don't think we need them)
     .port_hfr_config[0] = {
-      .resource_type = CAM_ISP_IFE_OUT_RES_RDI_0, // CAM_ISP_IFE_OUT_RES_FULL for YUV
+      //.resource_type = CAM_ISP_IFE_OUT_RES_RDI_0, // CAM_ISP_IFE_OUT_RES_FULL for YUV
+      .resource_type = CAM_ISP_IFE_OUT_RES_FULL,
       .subsample_pattern = 1,
       .subsample_period = 0,
       .framedrop_pattern = 1,
@@ -450,6 +463,7 @@ void config_isp(struct CameraState *s, int io_mem_handle, int fence, int request
 
   if (io_mem_handle != 0) {
     io_cfg[0].mem_handle[0] = io_mem_handle;
+    io_cfg[0].mem_handle[1] = io_mem_handle;
 		io_cfg[0].planes[0] = (struct cam_plane_cfg){
 		 .width = FRAME_WIDTH,
 		 .height = FRAME_HEIGHT,
@@ -464,11 +478,17 @@ void config_isp(struct CameraState *s, int io_mem_handle, int fence, int request
 		 .h_init = 0x0,
 		 .v_init = 0x0,
 		};
-    io_cfg[0].format = CAM_FORMAT_MIPI_RAW_10;             // CAM_FORMAT_UBWC_TP10 for YUV
-    io_cfg[0].color_space = CAM_COLOR_SPACE_BASE;          // CAM_COLOR_SPACE_BT601_FULL for YUV
+    //io_cfg[0].format = CAM_FORMAT_MIPI_RAW_10;             // CAM_FORMAT_UBWC_TP10 for YUV
+    //io_cfg[0].format = CAM_FORMAT_UBWC_TP10;
+    io_cfg[0].format = CAM_FORMAT_NV12;
+    /*io_cfg[0].color_space = CAM_COLOR_SPACE_BASE;          // CAM_COLOR_SPACE_BT601_FULL for YUV
     io_cfg[0].color_pattern = 0x5;                         // 0x0 for YUV
-    io_cfg[0].bpp = 0xa;
-    io_cfg[0].resource_type = CAM_ISP_IFE_OUT_RES_RDI_0;   // CAM_ISP_IFE_OUT_RES_FULL for YUV
+    io_cfg[0].bpp = 0xa;*/
+    io_cfg[0].color_space = CAM_COLOR_SPACE_BT601_FULL;
+    io_cfg[0].color_pattern = 0x0;
+    io_cfg[0].bpp = 0x0;
+    //io_cfg[0].resource_type = CAM_ISP_IFE_OUT_RES_RDI_0;   // CAM_ISP_IFE_OUT_RES_FULL for YUV
+    io_cfg[0].resource_type = CAM_ISP_IFE_OUT_RES_FULL;
     io_cfg[0].fence = fence;
     io_cfg[0].direction = CAM_BUF_OUTPUT;
     io_cfg[0].subsample_pattern = 0x1;
@@ -648,8 +668,11 @@ static void camera_open(CameraState *s) {
 
       .num_out_res = 0x1,
       .data[0] = (struct cam_isp_out_port_info){
-          .res_type = CAM_ISP_IFE_OUT_RES_RDI_0,
-          .format = CAM_FORMAT_MIPI_RAW_10,
+          //.res_type = CAM_ISP_IFE_OUT_RES_RDI_0,
+          .res_type = CAM_ISP_IFE_OUT_RES_FULL,
+          //.format = CAM_FORMAT_MIPI_RAW_10,
+          //.format = CAM_FORMAT_UBWC_TP10,
+          .format = CAM_FORMAT_NV12,
           .width = FRAME_WIDTH,
           .height = FRAME_HEIGHT,
           .comp_grp_id = 0x0, .split_point = 0x0, .secure_mode = 0x0,
@@ -678,7 +701,7 @@ static void camera_open(CameraState *s) {
   LOGD("acquire csiphy dev");
 
   // config ISP
-  alloc_w_mmu_hdl(s->multi_cam_state->video0_fd, 984480, (uint32_t*)&s->buf0_handle, 0x20, CAM_MEM_FLAG_HW_READ_WRITE | CAM_MEM_FLAG_KMD_ACCESS | CAM_MEM_FLAG_UMD_ACCESS | CAM_MEM_FLAG_CMD_BUF_TYPE, s->multi_cam_state->device_iommu, s->multi_cam_state->cdm_iommu);
+  s->buf0_ptr = alloc_w_mmu_hdl(s->multi_cam_state->video0_fd, 984480, (uint32_t*)&s->buf0_handle, 0x20, CAM_MEM_FLAG_HW_READ_WRITE | CAM_MEM_FLAG_KMD_ACCESS | CAM_MEM_FLAG_UMD_ACCESS | CAM_MEM_FLAG_CMD_BUF_TYPE, s->multi_cam_state->device_iommu, s->multi_cam_state->cdm_iommu);
   config_isp(s, 0, 0, 1, s->buf0_handle, 0);
 
   LOG("-- Configuring sensor");
