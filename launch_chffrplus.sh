@@ -9,12 +9,32 @@ source "$BASEDIR/launch_env.sh"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 function two_init {
+  export LD_LIBRARY_PATH="$BASEDIR/third_party/mapbox-gl-native-qt/aarch64:$LD_LIBRARY_PATH"
+  python /data/openpilot/scripts/installers/language_installer.py
+  python /data/openpilot/scripts/installers/sshkey_installer.py
+  python /data/openpilot/scripts/installers/font_installer.py
+  mount -o remount,rw /system
+  if [ ! -f /ONEPLUS ] && ! $(grep -q "letv" /proc/cmdline); then
+    cp -f "$BASEDIR/selfdrive/hardware/eon/update.zip" "/data/media/0/update.zip"
+    sed -i -e 's#/dev/input/event1#/dev/input/event2#g' ~/.bash_profile
+    touch /ONEPLUS
+  else
+    if [ ! -f /LEECO ]; then
+      touch /LEECO
+    fi
+  fi
+  mount -o remount,r /system
 
   # set IO scheduler
   setprop sys.io.scheduler noop
   for f in /sys/block/*/queue/scheduler; do
     echo noop > $f
   done
+
+  # set vol to 100 when boot
+  service call audio 3 i32 2 i32 100
+  service call audio 3 i32 3 i32 100
+  service call audio 3 i32 4 i32 100
 
   # *** shield cores 2-3 ***
 
@@ -66,6 +86,9 @@ function two_init {
 
   # USB traffic needs realtime handling on cpu 3
   [ -d "/proc/irq/733" ] && echo 3 > /proc/irq/733/smp_affinity_list
+  if [ -f /ONEPLUS ]; then
+    [ -d "/proc/irq/736" ] && echo 3 > /proc/irq/736/smp_affinity_list # USB for OP3T
+  fi
 
   # GPU and camera get cpu 2
   CAM_IRQS="177 178 179 180 181 182 183 184 185 186 192"
@@ -89,12 +112,24 @@ function two_init {
   wpa_cli IFNAME=wlan0 SCAN
 
   # Check for NEOS update
-  if [ $(< /VERSION) != "$REQUIRED_NEOS_VERSION" ]; then
+  if [ -f /LEECO ] && [ $(< /VERSION) != "$REQUIRED_NEOS_VERSION" ]; then
     echo "Installing NEOS update"
     NEOS_PY="$DIR/selfdrive/hardware/eon/neos.py"
     MANIFEST="$DIR/selfdrive/hardware/eon/neos.json"
     $NEOS_PY --swap-if-ready $MANIFEST
     $DIR/selfdrive/hardware/eon/updater $NEOS_PY $MANIFEST
+  fi
+
+  # One-time fix for a subset of OP3T with gyro orientation offsets.
+  # Remove and regenerate qcom sensor registry. Only done on OP3T mainboards.
+  # Performed exactly once. The old registry is preserved just-in-case, and
+  # doubles as a flag denoting we've already done the reset.
+  if [ -f /ONEPLUS ] && [ ! -f "/persist/comma/op3t-sns-reg-backup" ]; then
+    echo "Performing OP3T sensor registry reset"
+    mv /persist/sensors/sns.reg /persist/comma/op3t-sns-reg-backup &&
+      rm -f /persist/sensors/sensors_settings /persist/sensors/error_log /persist/sensors/gyro_sensitity_cal &&
+      echo "restart" > /sys/kernel/debug/msm_subsys/slpi &&
+      sleep 5  # Give Android sensor subsystem a moment to recover
   fi
 }
 
@@ -128,6 +163,70 @@ function tici_init {
   fi
 }
 
+# jetpack 4.6
+function jetson_init {
+  # modeld need this
+  export LD_LIBRARY_PATH="/usr/lib/aarch64-linux-gnu:$BASEDIR/third_party/mapbox-gl-native-qt/jarch64:$LD_LIBRARY_PATH"
+  # jetpack 4.6 has mode 8
+  sudo nvpmodel -m 8
+
+  # use performance governor
+  sudo echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+
+  # run higher fan speed in case we need compilation
+  sudo echo 200 > /sys/devices/pwm-fan/target_pwm
+
+  # prevent throttling
+  echo 7000 > /sys/devices/c250000.i2c/i2c-7/7-0040/iio:device0/crit_current_limit_0
+
+  # use highest available cpu freq
+  for i in /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq; do
+    echo 1907200 > $i;
+  done
+
+  # gpu min set to highest
+  sudo echo 1109250000 > /sys/devices/17000000.gv11b/devfreq/17000000.gv11b/min_freq
+
+  # set IO scheduler
+  for f in /sys/block/*/queue/scheduler; do
+    echo noop > $f
+  done
+
+  # give nvargus-daemon higer priority
+  for pid in $(pgrep "nvargus-daemon"); do
+    chrt -f -p 52 $pid
+  done
+
+  # scale 4.3" 800x480 to 1920x1080
+  if [ "$(xdpyinfo | awk '/dimensions/{print $2}')" == "800x480" ]; then
+    xrandr --output HDMI-0 --mode 800x480 --scale 2.4x2.25
+  fi
+
+  # enable jetson mode
+  echo -n 1 > /data/params/d/dp_jetson
+
+  # disable blank screen etc.
+  xset s off
+  xset s noblank
+  xset -dpms
+
+  # hide mouse cursor
+  unclutter -idle 0 &
+
+  # prep for model
+  rm -fr $DIR/models/*.dlc
+  if [ -f "$DIR/models/supercombo.onnx" ]; then
+    file_check_sum=$(md5sum $DIR/models/supercombo.onnx | cut -d " " -f1)
+    if [[ $file_check_sum != "e9e19c5127f717dd94e8182201a08ab8" ]]; then
+      rm -fr $DIR/models/supercombo.onnx
+    fi
+  fi
+  # make sure we have right models
+  if [ ! -f "$DIR/models/supercombo.onnx" ]; then
+    wget https://github.com/commaai/openpilot/raw/be89044c51406eccb7ce7ae7678004a8fc774a7a/models/supercombo.onnx -O "$DIR/models/supercombo.onnx"
+  fi
+}
+
 function launch {
   # Remove orphaned git lock if it exists on boot
   [ -f "$DIR/.git/index.lock" ] && rm -f $DIR/.git/index.lock
@@ -145,10 +244,10 @@ function launch {
   #    that completed successfully and synced to disk.
 
   if [ -f "${BASEDIR}/.overlay_init" ]; then
-    find ${BASEDIR}/.git -newer ${BASEDIR}/.overlay_init | grep -q '.' 2> /dev/null
-    if [ $? -eq 0 ]; then
-      echo "${BASEDIR} has been modified, skipping overlay update installation"
-    else
+#    find ${BASEDIR}/.git -newer ${BASEDIR}/.overlay_init | grep -q '.' 2> /dev/null
+#    if [ $? -eq 0 ]; then
+#      echo "${BASEDIR} has been modified, skipping overlay update installation"
+#    else
       if [ -f "${STAGING_ROOT}/finalized/.overlay_consistent" ]; then
         if [ ! -d /data/safe_staging/old_openpilot ]; then
           echo "Valid overlay update found, installing"
@@ -167,18 +266,27 @@ function launch {
           # TODO: restore backup? This means the updater didn't start after swapping
         fi
       fi
-    fi
+#    fi
   fi
 
   # handle pythonpath
   ln -sfn $(pwd) /data/pythonpath
   export PYTHONPATH="$PWD:$PWD/pyextra"
 
+  # dp - ignore chmod changes
+  git -C $DIR config core.fileMode false
+
+  # dp - apply custom patch
+  if [ -f "/data/media/0/dp_patcher.py" ]; then
+    python /data/media/0/dp_patcher.py
+  fi
   # hardware specific init
   if [ -f /EON ]; then
     two_init
   elif [ -f /TICI ]; then
     tici_init
+  elif [ -f /JETSON ]; then
+    jetson_init
   fi
 
   # write tmux scrollback to a file
@@ -186,7 +294,21 @@ function launch {
 
   # start manager
   cd selfdrive/manager
-  ./build.py && ./manager.py
+  if [ -f /EON ]; then
+    if [ ! -f "/system/comma/usr/lib/libgfortran.so.5.0.0" ]; then
+      mount -o remount,rw /system
+      tar -zxvf /data/openpilot/selfdrive/mapd/assets/libgfortran.tar.gz -C /system/comma/usr/lib/
+      mount -o remount,r /system
+    fi
+    if [ ! -d "/system/comma/usr/lib/python3.8/site-packages/opspline" ]; then
+      mount -o remount,rw /system
+      tar -zxvf /data/openpilot/selfdrive/mapd/assets/opspline.tar.gz -C /system/comma/usr/lib/python3.8/site-packages/
+      mount -o remount,r /system
+    fi
+    ./build.py && ./manager.py
+  else
+    ./custom_dep.py && ./build.py && ./manager.py
+  fi
 
   # if broken, keep on screen error
   while true; do sleep 1; done
