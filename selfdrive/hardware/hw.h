@@ -2,6 +2,7 @@
 
 #include "selfdrive/hardware/base.h"
 #include "selfdrive/common/util.h"
+#include "selfdrive/common/params.h"
 
 #ifdef QCOM
 #include "selfdrive/hardware/eon/hardware.h"
@@ -9,6 +10,9 @@
 #elif QCOM2
 #include "selfdrive/hardware/tici/hardware.h"
 #define Hardware HardwareTici
+#elif XNX
+#include "selfdrive/hardware/jetson/hardware.h"
+#define Hardware HardwareJetson
 #else
 class HardwarePC : public HardwareNone {
 public:
@@ -25,7 +29,11 @@ inline std::string log_root() {
   if (const char *env = getenv("LOG_ROOT")) {
     return env;
   }
-  return Hardware::PC() ? HOME + "/.comma/media/0/realdata" : "/data/media/0/realdata";
+  if (Params().getBool("dp_atl") || Params().getBool("dp_jetson") || Params().getBool("dp_api_custom")) {
+    return "/data/media/0/fakedata";
+  } else {
+    return Hardware::PC() ? HOME + "/.comma/media/0/realdata" : "/data/media/0/realdata";
+  }
 }
 inline std::string params() {
   return Hardware::PC() ? HOME + "/.comma/params" : "/data/params";

@@ -74,8 +74,8 @@ class PowerMonitoring:
         with self.integration_lock:
           self.power_used_uWh = 0
           integration_time_h = (now - self.last_measurement_time) / 3600
-          if integration_time_h < 0:
-            raise ValueError(f"Negative integration time: {integration_time_h}h")
+          # if integration_time_h < 0:
+          #   raise ValueError(f"Negative integration time: {integration_time_h}h")
           self.car_battery_capacity_uWh += (CAR_CHARGING_RATE_W * 1e6 * integration_time_h)
           self.last_measurement_time = now
       else:
@@ -141,8 +141,8 @@ class PowerMonitoring:
         if self.last_measurement_time:
           integration_time_h = (t - self.last_measurement_time) / 3600
           power_used = (current_power * 1000000) * integration_time_h
-          if power_used < 0:
-            raise ValueError(f"Negative power used! Integration time: {integration_time_h} h Current Power: {power_used} uWh")
+          # if power_used < 0:
+          #   raise ValueError(f"Negative power used! Integration time: {integration_time_h} h Current Power: {power_used} uWh")
           self.power_used_uWh += power_used
           self.car_battery_capacity_uWh -= power_used
           self.last_measurement_time = t
@@ -157,12 +157,14 @@ class PowerMonitoring:
     return int(self.car_battery_capacity_uWh)
 
   # See if we need to disable charging
-  def should_disable_charging(self, ignition, in_car, offroad_timestamp):
+  def should_disable_charging(self, ignition, in_car, offroad_timestamp, dp_auto_shutdown, dp_auto_shutdown_in):
     if offroad_timestamp is None:
       return False
 
     now = sec_since_boot()
     disable_charging = False
+    if dp_auto_shutdown:
+      disable_charging |= (now - offroad_timestamp) > dp_auto_shutdown_in * 60
     disable_charging |= (now - offroad_timestamp) > MAX_TIME_OFFROAD_S
     disable_charging |= (self.car_voltage_mV < (VBATT_PAUSE_CHARGING * 1e3)) and (self.car_voltage_instant_mV > (VBATT_INSTANT_PAUSE_CHARGING * 1e3))
     disable_charging |= (self.car_battery_capacity_uWh <= 0)
@@ -173,7 +175,7 @@ class PowerMonitoring:
     return disable_charging
 
   # See if we need to shutdown
-  def should_shutdown(self, peripheralState, ignition, in_car, offroad_timestamp, started_seen):
+  def should_shutdown(self, peripheralState, ignition, in_car, offroad_timestamp, started_seen, dp_auto_shutdown, dp_auto_shutdown_in):
     if offroad_timestamp is None:
       return False
 
@@ -183,7 +185,7 @@ class PowerMonitoring:
 
     should_shutdown = False
     # Wait until we have shut down charging before powering down
-    should_shutdown |= (not panda_charging and self.should_disable_charging(ignition, in_car, offroad_timestamp))
+    should_shutdown |= (not panda_charging and self.should_disable_charging(ignition, in_car, offroad_timestamp, dp_auto_shutdown, dp_auto_shutdown_in))
     should_shutdown |= ((HARDWARE.get_battery_capacity() < BATT_PERC_OFF) and (not HARDWARE.get_battery_charging()) and ((now - offroad_timestamp) > 60))
     should_shutdown &= started_seen or (now > MIN_ON_TIME_S)
     return should_shutdown
