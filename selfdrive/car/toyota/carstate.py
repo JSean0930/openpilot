@@ -1,3 +1,4 @@
+import cereal.messaging as messaging
 from cereal import car
 from common.numpy_fast import mean
 from common.filter_simple import FirstOrderFilter
@@ -202,7 +203,10 @@ class CarState(CarStateBase):
 
     # dp
     # distance button
-    self.distance = 1 if cp_cam.vl["ACC_CONTROL"]["DISTANCE"] == 1 else 0
+    if self.CP.carFingerprint in TSS2_CAR:
+      self.distance = 1 if cp_cam.vl["ACC_CONTROL"]["DISTANCE"] == 1 else 0
+    elif self.CP.smartDsu:
+      self.distance = 1 if cp.vl["SDSU"]["FD_BUTTON"] == 1 else 0
     ret.distanceLines = cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"]
     self._update_traffic_signals(cp_cam)
     ret.cruiseState.speedLimit = self._calculate_speed_limit()
@@ -337,6 +341,7 @@ class CarState(CarStateBase):
       ("STEER_ANGLE_SENSOR", 80),
       ("PCM_CRUISE", 33),
       ("STEER_TORQUE_SENSOR", 50),
+      ("PCM_CRUISE_SM", 1),
       #dp
       ("ENGINE_RPM", 100),
     ]
@@ -385,6 +390,12 @@ class CarState(CarStateBase):
 
     if Params().get('dp_toyota_zss') == b'1':
       signals += [("ZORRO_STEER", "SECONDARY_STEER_ANGLE", 0)]
+
+    # KRKeegan - Add support for toyota distance button
+    if CP.smartDsu:
+      signals.append(("FD_BUTTON", "SDSU", 0))
+      checks.append(("SDSU", 33))
+
 
     return CANParser(DBC[CP.carFingerprint]["pt"], signals, checks, 0)
 
