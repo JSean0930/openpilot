@@ -237,7 +237,7 @@ def uploader_fn(exit_event):
         time.sleep(60 if offroad else 5)
       continue
 
-    d = uploader.next_file_to_upload()
+    d = None
     if d is None:  # Nothing to upload
       if allow_sleep:
         time.sleep(60 if offroad else 5)
