@@ -1,4 +1,5 @@
 from cereal import car
+from common.realtime import DT_CTRL
 from common.numpy_fast import clip, interp
 from selfdrive.car import apply_toyota_steer_torque_limits, create_gas_interceptor_command, make_can_msg
 from selfdrive.car.toyota.toyotacan import create_steer_command, create_ui_command, \
@@ -17,6 +18,10 @@ class CarController():
     self.last_standstill = False
     self.standstill_req = False
     self.steer_rate_limited = False
+    self.permit_braking = True
+    self.last_gas_press_frame = 0
+    self.last_standstill_frame = 0
+    self.last_zero_speed_frame = 0
 
     self.packer = CANPacker(dbc_name)
     self.gas = 0
@@ -91,14 +96,44 @@ class CarController():
     if (frame % 3 == 0 and CS.CP.openpilotLongitudinalControl) or pcm_cancel_cmd:
       lead = lead or CS.out.vEgo < 12.    # at low speed we always assume the lead is present so ACC can be engaged
 
+      # handle permit braking logic
+      # record accelerator depression frame
+      if CS.out.gasPressed:
+        self.last_gas_press_frame = frame
+      # record standstill exit frame
+      if CS.pcm_acc_status == 7:
+        self.last_standstill_frame = frame
+      # record last frame when vego is 0
+      if CS.out.vEgo == 0:
+        self.last_zero_speed_frame = frame
+      # accelerator depression logic - note by cydia2020
+      # openpilot should not apply any brakes when the accelerator is depressed
+      # this allows the car's pcm to smoothly apply the brakes by first requesting < 0 acceleration
+      # creating a coasting then braking effect
+      #
+      # standstill logic - note by cydia2020
+      # Setting permit braking to 1 will adversely affect openpilot's stop and go performance
+      # this is due to openpilot's long mpc briefly requesting a very small acceleration on
+      # startup for some unknown reasons, if permit braking is set to 1, the car will think that
+      # openpilot wants to stop, thus applying the brakes, annoying the rear car, and decreasing
+      # stop and go performance. This hack mitigates that by setting permit braking to 0 for
+      # 2 seconds after the car goes out of standstill, the actuator condition prevents the car
+      # from coasting forward if the driver accidently touches the resume button
+      if (CS.out.gasPressed or 1. / DT_CTRL > (frame - self.last_gas_press_frame)) \
+         or ((actuators.accel > - 1.95) and (2. / DT_CTRL > (frame - self.last_standstill_frame))) \
+         or ((actuators.accel > - 1.95) and (2. / DT_CTRL > (frame - self.last_zero_speed_frame))):
+        self.permit_braking = False
+      else:
+        self.permit_braking = True
+
       # Lexus IS uses a different cancellation message
       if pcm_cancel_cmd and CS.CP.carFingerprint in (CAR.LEXUS_IS, CAR.LEXUS_RC):
         can_sends.append(create_acc_cancel_command(self.packer))
       elif CS.CP.openpilotLongitudinalControl:
-        can_sends.append(create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type, CS.distance_btn))
+        can_sends.append(create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type, self.permit_braking, CS.distance_btn))
         self.accel = pcm_accel_cmd
       else:
-        can_sends.append(create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, CS.distance_btn))
+        can_sends.append(create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, True, CS.distance_btn))
 
     if frame % 2 == 0 and CS.CP.enableGasInterceptor and CS.CP.openpilotLongitudinalControl:
       # send exactly zero if gas cmd is zero. Interceptor will send the max between read value and gas cmd.
