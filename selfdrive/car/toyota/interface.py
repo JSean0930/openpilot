@@ -220,15 +220,6 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 3736.8 * CV.LB_TO_KG + STD_CARGO_KG
       set_lat_tune(ret.lateralTuning, LatTunes.PID_L)
 
-    elif candidate in [CAR.PRIUS_ALPHA]:
-      stop_and_go = False
-      ret.safetyConfigs[0].safetyParam = 73
-      ret.wheelbase = 2.78
-      ret.steerRatio = 18
-      tire_stiffness_factor = 0.5533
-      ret.mass = 4387. * CV.LB_TO_KG + STD_CARGO_KG
-      set_lat_tune(ret.lateralTuning, LatTunes.PID_L)
-
     elif candidate == CAR.LEXUS_GSH:
       stop_and_go = True # set to true because it's a hybrid
       ret.safetyConfigs[0].safetyParam = 130
