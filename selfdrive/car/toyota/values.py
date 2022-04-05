@@ -69,6 +69,12 @@ class CAR:
   LEXUS_RXH = "LEXUS RX HYBRID 2017"
   LEXUS_RX_TSS2 = "LEXUS RX 2020"
   LEXUS_RXH_TSS2 = "LEXUS RX HYBRID 2020"
+  # dp
+  LEXUS_ISH = "LEXUS ISH 2017"
+  PRIUS_ALPHA = "TOYOTA PRIUS ALPHA 2017"
+  LEXUS_GSH = "LEXUS GS450h 2017"
+  LEXUS_NXT = "LEXUS NX200T 2015"
+  CHR_TSS2 = "TOYOTA C-HR 2021"
 
 # (addr, cars, bus, 1/freq*100, vl)
 STATIC_DSU_MSGS = [
@@ -93,6 +99,10 @@ STATIC_DSU_MSGS = [
 ]
 
 FW_VERSIONS = {
+  CAR.LEXUS_ISH: {(Ecu.esp, 0xfff, None): [b'\x00']},
+  CAR.LEXUS_GSH: {(Ecu.esp, 0xfff, None): [b'\x00']},
+  CAR.LEXUS_NXT: {(Ecu.esp, 0xfff, None): [b'\x00']},
+  CAR.CHR_TSS2: {(Ecu.esp, 0xfff, None): [b'\x00']},
   CAR.AVALON: {
     (Ecu.esp, 0x7b0, None): [
       b'F152607060\x00\x00\x00\x00\x00\x00',
@@ -1402,6 +1412,23 @@ FW_VERSIONS = {
       b'\x028646F7803100\x00\x00\x00\x008646G2601400\x00\x00\x00\x00',
     ],
   },
+  CAR.PRIUS_ALPHA: {
+    (Ecu.esp, 0x7b0, None): [
+      b'F152647280\x00\x00\x00\x00\x00\x00',
+    ],
+    (Ecu.engine, 0x7e0, None): [
+      b'\x0234781000\x00\x00\x00\x00\x00\x00\x00\x00A4701000\x00\x00\x00\x00\x00\x00\x00\x00',
+    ],
+    (Ecu.dsu, 0x791, None): [
+      b'881514705100\x00\x00\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x750, 0xf): [
+      b'8821F4702300\x00\x00\x00\x00',
+    ],
+    (Ecu.fwdCamera, 0x750, 0x6d): [
+      b'8646F4703300\x00\x00\x00\x00',
+    ],
+  },
   CAR.LEXUS_NXH: {
     (Ecu.engine, 0x7e0, None): [
       b'\x0237841000\x00\x00\x00\x00\x00\x00\x00\x00A4701000\x00\x00\x00\x00\x00\x00\x00\x00',
@@ -1706,15 +1733,21 @@ DBC = {
   CAR.PRIUS_TSS2: dbc_dict('toyota_nodsu_pt_generated', 'toyota_tss2_adas'),
   CAR.MIRAI: dbc_dict('toyota_nodsu_pt_generated', 'toyota_tss2_adas'),
   CAR.ALPHARD_TSS2: dbc_dict('toyota_nodsu_pt_generated', 'toyota_tss2_adas'),
+  # dp
+  CAR.LEXUS_ISH: dbc_dict('lexus_is300h_2017_pt_generated', 'toyota_adas'),
+  CAR.PRIUS_ALPHA: dbc_dict('toyota_prius_alpha_2017_pt_generated', 'toyota_adas'),
+  CAR.LEXUS_GSH: dbc_dict('lexus_is300h_2017_pt_generated', 'toyota_adas'),
+  CAR.LEXUS_NXT: dbc_dict('lexus_nxt_2015_pt_generated', 'toyota_adas'),
+  CAR.CHR_TSS2: dbc_dict('toyota_nodsu_pt_generated', 'toyota_adas'),
 }
 
 # These cars have non-standard EPS torque scale factors. All others are 73
-EPS_SCALE = defaultdict(lambda: 73, {CAR.PRIUS: 66, CAR.COROLLA: 88, CAR.LEXUS_IS: 77, CAR.LEXUS_RC: 77, CAR.LEXUS_CTH: 100, CAR.PRIUS_V: 100})
+EPS_SCALE = defaultdict(lambda: 73, {CAR.PRIUS: 66, CAR.COROLLA: 88, CAR.LEXUS_IS: 77, CAR.LEXUS_RC: 77, CAR.LEXUS_CTH: 100, CAR.PRIUS_V: 100, CAR.LEXUS_ISH: 130})
 
 # Toyota/Lexus Safety Sense 2.0 and 2.5
 TSS2_CAR = {CAR.RAV4_TSS2, CAR.COROLLA_TSS2, CAR.COROLLAH_TSS2, CAR.LEXUS_ES_TSS2, CAR.LEXUS_ESH_TSS2, CAR.RAV4H_TSS2,
             CAR.LEXUS_RX_TSS2, CAR.LEXUS_RXH_TSS2, CAR.HIGHLANDER_TSS2, CAR.HIGHLANDERH_TSS2, CAR.PRIUS_TSS2, CAR.CAMRY_TSS2, CAR.CAMRYH_TSS2,
-            CAR.MIRAI, CAR.LEXUS_NX_TSS2, CAR.ALPHARD_TSS2, CAR.AVALON_TSS2}
+            CAR.MIRAI, CAR.LEXUS_NX_TSS2, CAR.ALPHARD_TSS2, CAR.AVALON_TSS2, CAR.CHR_TSS2}
 
 NO_DSU_CAR = TSS2_CAR | {CAR.CHR, CAR.CHRH, CAR.CAMRY, CAR.CAMRYH}
 
@@ -1723,4 +1756,4 @@ EV_HYBRID_CAR = {CAR.AVALONH_2019, CAR.CAMRYH, CAR.CAMRYH_TSS2, CAR.CHRH, CAR.CO
                  CAR.LEXUS_RXH_TSS2, CAR.PRIUS_TSS2}
 
 # no resume button press required
-NO_STOP_TIMER_CAR = TSS2_CAR | {CAR.PRIUS_V, CAR.RAV4H, CAR.HIGHLANDERH, CAR.HIGHLANDER, CAR.SIENNA, CAR.LEXUS_ESH}
+NO_STOP_TIMER_CAR = TSS2_CAR | {CAR.PRIUS_ALPHA, CAR.PRIUS_V, CAR.RAV4H, CAR.HIGHLANDERH, CAR.HIGHLANDER, CAR.SIENNA, CAR.LEXUS_ESH}

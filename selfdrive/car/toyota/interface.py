@@ -5,11 +5,19 @@ from selfdrive.car.toyota.tunes import LatTunes, LongTunes, set_long_tune, set_l
 from selfdrive.car.toyota.values import Ecu, CAR, ToyotaFlags, TSS2_CAR, NO_DSU_CAR, MIN_ACC_SPEED, EPS_SCALE, EV_HYBRID_CAR, CarControllerParams
 from selfdrive.car import STD_CARGO_KG, scale_rot_inertia, scale_tire_stiffness, gen_empty_fingerprint, get_safety_config
 from selfdrive.car.interfaces import CarInterfaceBase
+from common.dp_common import common_interface_atl, common_interface_get_params_lqr
+from common.params import Params
 
 EventName = car.CarEvent.EventName
-
+GearShifter = car.CarState.GearShifter
 
 class CarInterface(CarInterfaceBase):
+  def __init__(self, CP, CarController, CarState):
+    super().__init__(CP, CarController, CarState)
+
+    # dp
+    self.dp_cruise_speed = 0.
+
   @staticmethod
   def get_pid_accel_limits(CP, current_speed, cruise_speed):
     return CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX
@@ -53,6 +61,10 @@ class CarInterface(CarInterfaceBase):
       tire_stiffness_factor = 0.5533
       ret.mass = 3650. * CV.LB_TO_KG + STD_CARGO_KG  # mean between normal and hybrid
       set_lat_tune(ret.lateralTuning, LatTunes.LQR_RAV4)
+      if ret.enableGasInterceptor:
+        ret.longitudinalTuning.kpV = [0.4, 0.36, 0.325]  # arne's tune.
+        ret.longitudinalTuning.kiV = [0.195, 0.10]
+
 
     elif candidate == CAR.COROLLA:
       ret.wheelbase = 2.70
@@ -70,7 +82,7 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 4481. * CV.LB_TO_KG + STD_CARGO_KG  # mean between min and max
       set_lat_tune(ret.lateralTuning, LatTunes.PID_C)
 
-    elif candidate in (CAR.CHR, CAR.CHRH):
+    elif candidate in (CAR.CHR, CAR.CHRH, CAR.CHR_TSS2):
       stop_and_go = True
       ret.wheelbase = 2.63906
       ret.steerRatio = 13.6
@@ -177,7 +189,10 @@ class CarInterface(CarInterfaceBase):
       ret.steerRatio = 13.4   # True steerRatio from older prius
       tire_stiffness_factor = 0.6371   # hand-tune
       ret.mass = 3115. * CV.LB_TO_KG + STD_CARGO_KG
-      set_lat_tune(ret.lateralTuning, LatTunes.PID_N)
+      set_lat_tune(ret.lateralTuning, LatTunes.INDI_PRIUS_TSS2)
+      ret.steerActuatorDelay = 0.3
+      ret.steerRateCost = 1.25
+      ret.steerLimitTimer = 0.5
 
     elif candidate == CAR.MIRAI:
       stop_and_go = True
@@ -194,6 +209,43 @@ class CarInterface(CarInterfaceBase):
       tire_stiffness_factor = 0.444
       ret.mass = 4305. * CV.LB_TO_KG + STD_CARGO_KG
       set_lat_tune(ret.lateralTuning, LatTunes.PID_J)
+
+    # dp
+    elif candidate == CAR.LEXUS_ISH:
+      stop_and_go = True
+      ret.safetyConfigs[0].safetyParam = 130
+      ret.wheelbase = 2.79908
+      ret.steerRatio = 13.3
+      tire_stiffness_factor = 0.444
+      ret.mass = 3736.8 * CV.LB_TO_KG + STD_CARGO_KG
+      set_lat_tune(ret.lateralTuning, LatTunes.PID_L)
+
+    elif candidate in [CAR.PRIUS_ALPHA]:
+      stop_and_go = False
+      ret.safetyConfigs[0].safetyParam = 73
+      ret.wheelbase = 2.78
+      ret.steerRatio = 18
+      tire_stiffness_factor = 0.5533
+      ret.mass = 4387. * CV.LB_TO_KG + STD_CARGO_KG
+      set_lat_tune(ret.lateralTuning, LatTunes.PID_L)
+
+    elif candidate == CAR.LEXUS_GSH:
+      stop_and_go = True # set to true because it's a hybrid
+      ret.safetyConfigs[0].safetyParam = 130
+      ret.wheelbase = 2.84988
+      ret.steerRatio = 14.35 # range from 11.5 - 17.2, lets try 14.35
+      tire_stiffness_factor = 0.444
+      ret.mass = 4112 * CV.LB_TO_KG + STD_CARGO_KG
+      set_lat_tune(ret.lateralTuning, LatTunes.PID_L)
+
+    elif candidate == CAR.LEXUS_NXT:
+      stop_and_go = True
+      ret.safetyConfigs[0].safetyParam = 100
+      ret.wheelbase = 2.66
+      ret.steerRatio = 14.7
+      tire_stiffness_factor = 0.444 # not optimized yet
+      ret.mass = 4070 * CV.LB_TO_KG + STD_CARGO_KG
+      set_lat_tune(ret.lateralTuning, LatTunes.PID_L)
 
     ret.steerRateCost = 1.
     ret.centerToFront = ret.wheelbase * 0.44
@@ -216,6 +268,8 @@ class CarInterface(CarInterfaceBase):
     ret.enableGasInterceptor = 0x201 in fingerprint[0]
     # if the smartDSU is detected, openpilot can send ACC_CMD (and the smartDSU will block it from the DSU) or not (the DSU is "connected")
     ret.openpilotLongitudinalControl = smartDsu or ret.enableDsu or candidate in TSS2_CAR
+    if Params().get_bool('dp_atl') and not Params().get_bool('dp_atl_op_long'):
+      ret.openpilotLongitudinalControl = False
 
     # we can't use the fingerprint to detect this reliably, since
     # the EV gas pedal signal can take a couple seconds to appear
@@ -225,30 +279,61 @@ class CarInterface(CarInterfaceBase):
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter.
     ret.minEnableSpeed = -1. if (stop_and_go or ret.enableGasInterceptor) else MIN_ACC_SPEED
+    if Params().get_bool('dp_toyota_no_min_acc_limit'):
+      ret.minEnableSpeed = -1.
 
     if ret.enableGasInterceptor:
       set_long_tune(ret.longitudinalTuning, LongTunes.PEDAL)
     elif candidate in TSS2_CAR:
       set_long_tune(ret.longitudinalTuning, LongTunes.TSS2)
-      ret.stoppingDecelRate = 0.3  # reach stopping target smoothly
+      ret.vEgoStopping = 0.2  # car is near 0.1 to 0.2 when car starts requesting stopping accel
+      ret.vEgoStarting = 0.2  # needs to be > or == vEgoStopping
+      ret.stopAccel = -2.0  # Toyota requests -0.4 when stopped
+      ret.stoppingDecelRate = 0.8  # reach stopping target smoothly - seems to take 0.5 seconds to go from 0 to -0.4
     else:
       set_long_tune(ret.longitudinalTuning, LongTunes.TSS)
+
+    # dp
+    ret = common_interface_get_params_lqr(ret)
+    if candidate == CAR.PRIUS and Params().get_bool('dp_toyota_zss'):
+      ret.mass = 3370. * CV.LB_TO_KG + STD_CARGO_KG
+      ret.lateralTuning.indi.timeConstantV = [0.1]
+      ret.lateralTuning.indi.timeConstantBP = [0.]
+      ret.steerRateCost = 0.5
 
     return ret
 
   # returns a car.CarState
-  def update(self, c, can_strings):
+  def update(self, c, can_strings, dragonconf):
     # ******************* do can recv *******************
     self.cp.update_strings(can_strings)
     self.cp_cam.update_strings(can_strings)
 
     ret = self.CS.update(self.cp, self.cp_cam)
+    # dp
+    self.dragonconf = dragonconf
+    ret.cruiseState.enabled = common_interface_atl(ret, dragonconf.dpAtl)
+
+    # low speed re-write
+    if ret.cruiseState.enabled and dragonconf.dpToyotaCruiseOverride and ret.cruiseState.speed < dragonconf.dpToyotaCruiseOverrideAt * CV.KPH_TO_MS:
+      if dragonconf.dpToyotaCruiseOverrideVego:
+        if self.dp_cruise_speed == 0.:
+          ret.cruiseState.speed = self.dp_cruise_speed = max( dragonconf.dpToyotaCruiseOverrideSpeed * CV.KPH_TO_MS,ret.vEgo)
+        else:
+          ret.cruiseState.speed = self.dp_cruise_speed
+      else:
+        ret.cruiseState.speed = dragonconf.dpToyotaCruiseOverrideSpeed * CV.KPH_TO_MS
+    else:
+      self.dp_cruise_speed = 0.
 
     ret.canValid = self.cp.can_valid and self.cp_cam.can_valid
     ret.steeringRateLimited = self.CC.steer_rate_limited if self.CC is not None else False
 
+    # gear except P, R
+    extra_gears = [GearShifter.neutral, GearShifter.eco, GearShifter.manumatic, GearShifter.drive, GearShifter.sport, GearShifter.low, GearShifter.brake, GearShifter.unknown]
+
     # events
-    events = self.create_common_events(ret)
+    events = self.create_common_events(ret, extra_gears)
 
     if self.CS.low_speed_lockout and self.CP.openpilotLongitudinalControl:
       events.add(EventName.lowSpeedLockout)
@@ -274,7 +359,7 @@ class CarInterface(CarInterfaceBase):
                          c.actuators, c.cruiseControl.cancel,
                          hud_control.visualAlert, hud_control.leftLaneVisible,
                          hud_control.rightLaneVisible, hud_control.leadVisible,
-                         hud_control.leftLaneDepart, hud_control.rightLaneDepart)
+                         hud_control.leftLaneDepart, hud_control.rightLaneDepart, self.dragonconf)
 
     self.frame += 1
     return ret

@@ -13,7 +13,7 @@ from common.basedir import BASEDIR
 from common.params import Params, ParamKeyType
 from common.text_window import TextWindow
 from selfdrive.boardd.set_time import set_time
-from selfdrive.hardware import HARDWARE, PC
+from selfdrive.hardware import HARDWARE, PC, TICI
 from selfdrive.manager.helpers import unblock_stdout
 from selfdrive.manager.process import ensure_running
 from selfdrive.manager.process_config import managed_processes
@@ -21,7 +21,7 @@ from selfdrive.athena.registration import register, UNREGISTERED_DONGLE_ID
 from selfdrive.swaglog import cloudlog, add_file_handler
 from selfdrive.version import is_dirty, get_commit, get_version, get_origin, get_short_branch, \
                               terms_version, training_version
-
+from common.dp_conf import init_params_vals
 
 sys.path.append(os.path.join(BASEDIR, "pyextra"))
 
@@ -40,6 +40,11 @@ def manager_init() -> None:
     ("CompletedTrainingVersion", "0"),
     ("HasAcceptedTerms", "0"),
     ("OpenpilotEnabledToggle", "1"),
+    ("ShowDebugUI", "0"),
+    ("SpeedLimitControl", "0"),
+    ("SpeedLimitPercOffset", "0"),
+    ("TurnSpeedControl", "0"),
+    ("TurnVisionControl", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))
@@ -54,6 +59,9 @@ def manager_init() -> None:
   for k, v in default_params:
     if params.get(k) is None:
       params.put(k, v)
+
+  # dp init params
+  init_params_vals(params)
 
   # is this dashcam?
   if os.getenv("PASSIVE") is not None:
@@ -120,7 +128,57 @@ def manager_thread() -> None:
 
   params = Params()
 
+  dp_logger = params.get_bool('dp_logger')
+  dp_jetson = params.get_bool('dp_jetson')
+
+  # save boot log
+  if dp_logger:
+    subprocess.call("./bootlog", cwd=os.path.join(BASEDIR, "selfdrive/loggerd"))
+
   ignore: List[str] = []
+
+  if params.get_bool('dp_panda_no_gps'):
+    params.put_bool('dp_otisserv', False)
+    params.put_bool('dp_mapd', False)
+    params.put_bool('dp_gpxd', False)
+    dp_otisserv = False
+    dp_mapd = False
+    dp_gpxd = False
+    ignore += ['ubloxd']
+  else:
+    dp_otisserv = params.get_bool('dp_otisserv')
+    dp_mapd = params.get_bool('dp_mapd')
+    dp_gpxd = params.get_bool('dp_gpxd')
+
+  if not params.get_bool('dp_reg'):
+    params.put_bool('dp_athenad', False)
+    params.put_bool('dp_uploader', False)
+    dp_athenad = False
+    dp_uploader = False
+  else:
+    dp_athenad = params.get_bool('dp_athenad')
+    dp_uploader = params.get_bool('dp_uploader')
+
+  if dp_jetson:
+    ignore += ['dmonitoringmodeld', 'dmonitoringd']
+  if not params.get_bool('dp_dashcamd'):
+    ignore += ['dashcamd']
+  if not params.get_bool('dp_updated'):
+    ignore += ['updated']
+  if not dp_logger:
+    ignore += ['logcatd', 'loggerd', 'proclogd', 'logmessaged', 'tombstoned']
+  if not dp_athenad:
+    ignore += ['manage_athenad']
+  if not dp_athenad and not dp_uploader:
+    ignore += ['deleter']
+  if not dp_mapd:
+    ignore += ['mapd']
+  if not dp_otisserv:
+    ignore += ['otisserv']
+    if not TICI:
+      ignore += ['navd']
+  if not dp_mapd and not dp_otisserv and not dp_gpxd:
+    ignore += ['gpxd']
   if params.get("DongleId", encoding='utf8') in (None, UNREGISTERED_DONGLE_ID):
     ignore += ["manage_athenad", "uploader"]
   if os.getenv("NOBOARD") is not None:

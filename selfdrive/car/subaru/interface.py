@@ -3,6 +3,7 @@ from cereal import car
 from selfdrive.car.subaru.values import CAR, PREGLOBAL_CARS
 from selfdrive.car import STD_CARGO_KG, scale_rot_inertia, scale_tire_stiffness, gen_empty_fingerprint, get_safety_config
 from selfdrive.car.interfaces import CarInterfaceBase
+from common.dp_common import common_interface_atl, common_interface_get_params_lqr
 
 class CarInterface(CarInterfaceBase):
 
@@ -12,6 +13,7 @@ class CarInterface(CarInterfaceBase):
 
     ret.carName = "subaru"
     ret.radarOffCan = True
+    ret.lateralTuning.init('pid')
 
     if candidate in PREGLOBAL_CARS:
       ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.subaruLegacy)]
@@ -104,15 +106,20 @@ class CarInterface(CarInterfaceBase):
     # mass and CG position, so all cars will have approximately similar dyn behaviors
     ret.tireStiffnessFront, ret.tireStiffnessRear = scale_tire_stiffness(ret.mass, ret.wheelbase, ret.centerToFront)
 
+    # dp
+    ret = common_interface_get_params_lqr(ret)
+
     return ret
 
   # returns a car.CarState
-  def update(self, c, can_strings):
+  def update(self, c, can_strings, dragonconf):
     self.cp.update_strings(can_strings)
     self.cp_cam.update_strings(can_strings)
 
     ret = self.CS.update(self.cp, self.cp_cam)
-
+    # dp
+    self.dragonconf = dragonconf
+    ret.cruiseState.enabled = common_interface_atl(ret, dragonconf.dpAtl)
     ret.canValid = self.cp.can_valid and self.cp_cam.can_valid
     ret.steeringRateLimited = self.CC.steer_rate_limited if self.CC is not None else False
 
@@ -125,6 +132,6 @@ class CarInterface(CarInterfaceBase):
     hud_control = c.hudControl
     ret = self.CC.update(c, c.enabled, self.CS, self.frame, c.actuators,
                          c.cruiseControl.cancel, hud_control.visualAlert,
-                         hud_control.leftLaneVisible, hud_control.rightLaneVisible, hud_control.leftLaneDepart, hud_control.rightLaneDepart)
+                         hud_control.leftLaneVisible, hud_control.rightLaneVisible, hud_control.leftLaneDepart, hud_control.rightLaneDepart, self.dragonconf)
     self.frame += 1
     return ret

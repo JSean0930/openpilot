@@ -15,6 +15,7 @@ public:
   static void poweroff() {}
   static void set_brightness(int percent) {}
   static void set_display_power(bool on) {}
+  static void set_color_blind(int mode) {}
 
   static bool get_ssh_enabled() { return false; }
   static void set_ssh_enabled(bool enabled) {}
@@ -22,4 +23,5 @@ public:
   static bool PC() { return false; }
   static bool EON() { return false; }
   static bool TICI() { return false; }
+  static bool JETSON() { return false; }
 };

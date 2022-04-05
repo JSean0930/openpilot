@@ -3,6 +3,7 @@ $Cxx.namespace("cereal");
 
 using Car = import "car.capnp";
 using Legacy = import "legacy.capnp";
+using Dp = import "dp.capnp";
 
 @0xf3b1f17e25a4285b;
 
@@ -44,6 +45,7 @@ struct InitData {
     chffrIos @3;
     tici @4;
     pc @5;
+    jetson @6;
   }
 
   struct PandaInfo {
@@ -305,7 +307,8 @@ struct DeviceState @0xa4d8b5af2aa492eb {
   batteryCurrent @15 :Int32;
   chargingError @17 :Bool;
   chargingDisabled @18 :Bool;
-  offroadPowerUsageUwh @23 :UInt32;
+  # dp, we need Int32 because it could be a negative value
+  offroadPowerUsageUwh @23 :Int32;
   carBatteryCapacityUwh @25 :UInt32;
   powerDrawW @40 :Float32;
 
@@ -678,12 +681,12 @@ struct ControlsState @0x97ff69c53601abf1 {
   decelForTurnDEPRECATED @47 :Bool;
   decelForModelDEPRECATED @54 :Bool;
   awarenessStatusDEPRECATED @26 :Float32;
-  angleSteersDEPRECATED @13 :Float32;
+  angleSteers @13 :Float32; # dp
   vCurvatureDEPRECATED @46 :Float32;
   mapValidDEPRECATED @49 :Bool;
   jerkFactorDEPRECATED @12 :Float32;
   steerOverrideDEPRECATED @20 :Bool;
-  steeringAngleDesiredDegDEPRECATED @29 :Float32;
+  steeringAngleDesiredDeg @29 :Float32; # dp
 }
 
 struct ModelDataV2 {
@@ -826,6 +829,20 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   accels @32 :List(Float32);
   speeds @33 :List(Float32);
   jerks @34 :List(Float32);
+  #mapd
+  visionTurnControllerState @36 :VisionTurnControllerState;
+  visionTurnSpeed @37 :Float32;
+
+  speedLimitControlState @38 :SpeedLimitControlState;
+  speedLimit @39 :Float32;
+  speedLimitOffset @40 :Float32;
+  distToSpeedLimit @41 :Float32;
+  isMapSpeedLimit @42 :Bool;
+
+  distToTurn @43 :Float32;
+  turnSpeed @44 :Float32;
+  turnSpeedControlState @45 :SpeedLimitControlState;
+  turnSign @46 :Int16;
 
   solverExecutionTime @35 :Float32;
 
@@ -835,6 +852,10 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
     lead1 @2;
     lead2 @3;
     e2e @4;
+    #mapd
+    turn @5;
+    limit @6;
+    turnlimit @7;
   }
 
   # deprecated
@@ -870,6 +891,20 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
     x @0 :List(Float32);
     y @1 :List(Float32);
   }
+
+  enum SpeedLimitControlState {
+    inactive @0; # No speed limit set or not enabled by parameter.
+    tempInactive @1; # User wants to ignore speed limit until it changes.
+    adapting @2; # Reducing speed to match new speed limit.
+    active @3; # Cruising at speed limit.
+  }
+
+  enum VisionTurnControllerState {
+    disabled @0; # No predicted substancial turn on vision range or feature disabled.
+    entering @1; # A subsantial turn is predicted ahead, adapting speed to turn confort levels.
+    turning @2; # Actively turning. Managing acceleration to provide a roll on turn feeling.
+    leaving @3; # Road ahead straightens. Start to allow positive acceleration.
+  }
 }
 
 struct LateralPlan @0xe1e9318e2ae8b51e {
@@ -878,6 +913,9 @@ struct LateralPlan @0xe1e9318e2ae8b51e {
   rProb @7 :Float32;
   dPathPoints @20 :List(Float32);
   dProb @21 :Float32;
+  #mapd
+  dPathWLinesX @33 :List(Float32);
+  dPathWLinesY @34 :List(Float32);
 
   mpcSolutionValid @9 :Bool;
   desire @17 :Desire;
@@ -891,6 +929,10 @@ struct LateralPlan @0xe1e9318e2ae8b51e {
   curvatureRates @28 :List(Float32);
 
   solverExecutionTime @30 :Float32;
+  # dp
+  dpALCAStartIn @31 :Float32;
+  dpLaneLessModeIsE2E @32 :Bool;
+  # 33~34 are being used in mapd
 
   enum Desire {
     none @0;
@@ -1536,5 +1578,7 @@ struct Event {
     gpsLocationDEPRECATED @21 :GpsLocationData;
     uiLayoutStateDEPRECATED @57 :Legacy.UiLayoutState;
     pandaStateDEPRECATED @12 :PandaState;
+    dragonConf @86 :Dp.DragonConf;
+    liveMapData @87 :Dp.LiveMapData;
   }
 }

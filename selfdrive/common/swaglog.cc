@@ -54,6 +54,8 @@ class SwaglogState : public LogState {
       ctx_j["device"] =  "eon";
     } else if (Hardware::TICI()) {
       ctx_j["device"] =  "tici";
+    } else if (Hardware::JETSON()) {
+      ctx_j["device"] =  "jetson";
     } else {
       ctx_j["device"] =  "pc";
     }

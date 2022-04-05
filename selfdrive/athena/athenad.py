@@ -22,6 +22,8 @@ import requests
 from jsonrpc import JSONRPCResponseManager, dispatcher
 from websocket import (ABNF, WebSocketException, WebSocketTimeoutException,
                        create_connection)
+from common.params import Params
+API_HOST = os.getenv('API_HOST', 'https://api.commadotai.com') if not Params().get_bool("dp_api_custom") else Params().get("dp_api_custom_url", encoding='utf-8')
 
 import cereal.messaging as messaging
 from cereal import log
@@ -705,7 +707,7 @@ def main():
       params.delete("LastAthenaPingTime")
     except socket.timeout:
       try:
-        r = requests.get("http://api.commadotai.com/v1/me", allow_redirects=False,
+        r = requests.get(API_HOST + "/v1/me", allow_redirects=False,
                          headers={"User-Agent": f"openpilot-{get_version()}"}, timeout=15.0)
         if r.status_code == 302 and r.headers['Location'].startswith("http://u.web2go.com"):
           params.put_bool("PrimeRedirected", True)

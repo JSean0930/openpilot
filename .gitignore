@@ -42,7 +42,6 @@ selfdrive/boardd/boardd
 selfdrive/logcatd/logcatd
 selfdrive/mapd/default_speeds_by_region.json
 selfdrive/proclogd/proclogd
-selfdrive/ui/_ui
 selfdrive/test/longitudinal_maneuvers/out
 selfdrive/visiond/visiond
 selfdrive/loggerd/loggerd
@@ -83,3 +82,6 @@ models/*.thneed
 build/
 
 !**/.gitkeep
+
+!third_party/mapbox-gl-native-qt/aarch64/*.so
+!third_party/mapbox-gl-native-qt/jarch64/*.so

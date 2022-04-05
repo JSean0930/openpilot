@@ -1,6 +1,7 @@
 from cereal import car
 from selfdrive.car import dbc_dict
 Ecu = car.CarParams.Ecu
+from common.params import Params
 
 # Steer torque limits
 class CarControllerParams:

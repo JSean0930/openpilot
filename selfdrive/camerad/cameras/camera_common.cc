@@ -25,6 +25,8 @@
 #include "selfdrive/camerad/cameras/camera_qcom2.h"
 #elif WEBCAM
 #include "selfdrive/camerad/cameras/camera_webcam.h"
+#elif MIPI
+#include "selfdrive/camerad/cameras/camera_mipi.h"
 #else
 #include "selfdrive/camerad/cameras/camera_replay.h"
 #endif
@@ -426,7 +428,11 @@ void common_process_driver_camera(MultiCameraState *s, CameraState *c, int cnt) 
 
 
 void camerad_thread() {
+  #ifdef XNX
+  cl_device_id device_id = cl_get_device_id(CL_DEVICE_TYPE_GPU);
+  #else
   cl_device_id device_id = cl_get_device_id(CL_DEVICE_TYPE_DEFAULT);
+  #endif
    // TODO: do this for QCOM2 too
 #if defined(QCOM)
   const cl_context_properties props[] = {CL_CONTEXT_PRIORITY_HINT_QCOM, CL_PRIORITY_HINT_HIGH_QCOM, 0};

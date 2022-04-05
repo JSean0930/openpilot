@@ -114,10 +114,10 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
   if (pandas.size() == 0) {
     return false;
   }
-
-  pandas[0]->set_safety_model(cereal::CarParams::SafetyModel::ELM327);
-
   Params p = Params();
+
+  if (!pandas[0]->disable_relay) {
+  pandas[0]->set_safety_model(cereal::CarParams::SafetyModel::ELM327);
 
   // switch to SILENT when CarVin param is read
   while (true) {
@@ -136,7 +136,7 @@ bool safety_setter_thread(std::vector<Panda *> pandas) {
   }
 
   pandas[0]->set_safety_model(cereal::CarParams::SafetyModel::ELM327, 1);
-
+  }
   std::string params;
   LOGW("waiting for params to set safety model");
   while (true) {
@@ -195,7 +195,7 @@ Panda *usb_connect(std::string serial="", uint32_t index=0) {
   }
 
   // power on charging, only the first time. Panda can also change mode and it causes a brief disconneciton
-#ifndef __x86_64__
+#if !defined(__x86_64__) && !defined(XNX)
   static std::once_flag connected_once;
   std::call_once(connected_once, &Panda::set_usb_power_mode, panda, cereal::PeripheralState::UsbPowerMode::CDP);
 #endif
@@ -323,21 +323,24 @@ std::optional<bool> send_panda_states(PubMaster *pm, const std::vector<Panda *> 
   for (uint32_t i = 0; i < pandas.size(); i++) {
     auto panda = pandas[i];
     const auto &health = pandaStates[i];
+    if (!panda->disable_relay) {
 
     // Make sure CAN buses are live: safety_setter_thread does not work if Panda CAN are silent and there is only one other CAN node
     if (health.safety_mode_pkt == (uint8_t)(cereal::CarParams::SafetyModel::SILENT)) {
       panda->set_safety_model(cereal::CarParams::SafetyModel::NO_OUTPUT);
     }
+    }
 
-  #ifndef __x86_64__
+  #if !defined(__x86_64__) && !defined(XNX)
     bool power_save_desired = !ignition_local && !pigeon_active;
     if (health.power_save_enabled_pkt != power_save_desired) {
       panda->set_power_saving(power_save_desired);
     }
-
+    if (!panda->disable_relay) {
     // set safety mode to NO_OUTPUT when car is off. ELM327 is an alternative if we want to leverage athenad/connect
     if (!ignition_local && (health.safety_mode_pkt != (uint8_t)(cereal::CarParams::SafetyModel::NO_OUTPUT))) {
       panda->set_safety_model(cereal::CarParams::SafetyModel::NO_OUTPUT);
+    }
     }
   #endif
 
@@ -483,7 +486,7 @@ void panda_state_thread(PubMaster *pm, std::vector<Panda *> pandas, bool spoofin
 void peripheral_control_thread(Panda *panda) {
   util::set_thread_name("boardd_peripheral_control");
 
-  SubMaster sm({"deviceState", "driverCameraState"});
+  SubMaster sm({"deviceState", "driverCameraState", "dragonConf"});
 
   uint64_t last_front_frame_t = 0;
   uint16_t prev_fan_speed = 999;
@@ -498,7 +501,7 @@ void peripheral_control_thread(Panda *panda) {
     cnt++;
     sm.update(1000); // TODO: what happens if EINTR is sent while in sm.update?
 
-    if (!Hardware::PC() && sm.updated("deviceState")) {
+    if (!Hardware::PC() && !Hardware::JETSON() && sm.updated("deviceState")) {
       // Charging mode
       bool charging_disabled = sm["deviceState"].getDeviceState().getChargingDisabled();
       if (charging_disabled != prev_charging_disabled) {
@@ -523,7 +526,7 @@ void peripheral_control_thread(Panda *panda) {
         prev_fan_speed = fan_speed;
       }
     }
-    if (sm.updated("driverCameraState")) {
+    if (!panda->is_old_panda && sm.updated("driverCameraState")) {
       auto event = sm["driverCameraState"];
       int cur_integ_lines = event.getDriverCameraState().getIntegLines();
       float cur_gain = event.getDriverCameraState().getGain();
@@ -568,6 +571,12 @@ static void pigeon_publish_raw(PubMaster &pm, const std::string &dat) {
 
 void pigeon_thread(Panda *panda) {
   util::set_thread_name("boardd_pigeon");
+  // dp - use toyota directly
+  if (panda->disable_relay) {
+    panda->set_safety_model(cereal::CarParams::SafetyModel::TOYOTA);
+  }
+
+  if (!panda->has_gps) return;
 
   PubMaster pm({"ubloxRaw"});
   bool ignition_last = false;
@@ -612,8 +621,17 @@ void pigeon_thread(Panda *panda) {
 void boardd_main_thread(std::vector<std::string> serials) {
   if (serials.size() == 0) serials.push_back("");
 
+  Params params;
+  bool disable_relay = params.getBool("dp_toyota_disable_relay");
+  bool no_gps = params.getBool("dp_panda_no_gps");
+
   PubMaster pm({"pandaStates", "peripheralState"});
   LOGW("attempting to connect");
+
+  #ifdef XNX
+  // re-insert usb automatically
+  std::system("python /data/openpilot/scripts/reset_usb.py");
+  #endif
 
   // connect to all provided serials
   std::vector<Panda *> pandas;
@@ -636,7 +654,13 @@ void boardd_main_thread(std::vector<std::string> serials) {
     Panda *peripheral_panda = pandas[0];
     std::vector<std::thread> threads;
 
-    Params().put("LastPeripheralPandaType", std::to_string((int) peripheral_panda->get_hw_type()));
+    //Params().put("LastPeripheralPandaType", std::to_string((int) peripheral_panda->get_hw_type()));
+    // dp - only control first panda
+    peripheral_panda->disable_relay = disable_relay;
+    if (!peripheral_panda->has_gps) {
+      Params().putBool("dp_panda_no_gps", true);
+    }
+    peripheral_panda->has_gps = peripheral_panda->has_gps && !no_gps;
 
     threads.emplace_back(panda_state_thread, &pm, pandas, getenv("STARTED") != nullptr);
     threads.emplace_back(peripheral_control_thread, peripheral_panda);

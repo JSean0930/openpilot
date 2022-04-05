@@ -1,20 +1,23 @@
 import os
-from common.params import Params
+import threading
+import requests
+from common.params import Params, put_nonblocking
 from common.basedir import BASEDIR
-from selfdrive.version import is_comma_remote, is_tested_branch
+#from selfdrive.version import is_comma_remote, is_tested_branch
 from selfdrive.car.fingerprints import eliminate_incompatible_cars, all_legacy_fingerprint_cars
 from selfdrive.car.vin import get_vin, VIN_UNKNOWN
 from selfdrive.car.fw_versions import get_fw_versions, match_fw_to_car
 from selfdrive.swaglog import cloudlog
 import cereal.messaging as messaging
 from selfdrive.car import gen_empty_fingerprint
+import selfdrive.sentry as sentry
 
 from cereal import car
 EventName = car.CarEvent.EventName
 
 
 def get_startup_event(car_recognized, controller_available, fw_seen):
-  if is_comma_remote() and is_tested_branch():
+  if True: #is_comma_remote() and is_tested_branch():
     event = EventName.startup
   else:
     event = EventName.startupMaster
@@ -83,6 +86,12 @@ interfaces = load_interfaces(interface_names)
 def fingerprint(logcan, sendcan):
   fixed_fingerprint = os.environ.get('FINGERPRINT', "")
   skip_fw_query = os.environ.get('SKIP_FW_QUERY', False)
+
+  dp_car_assigned = Params().get('dp_car_assigned', encoding='utf8')
+  if dp_car_assigned is not None:
+    car_selected = dp_car_assigned.strip()
+    fixed_fingerprint = car_selected
+    skip_fw_query = True
 
   if not fixed_fingerprint and not skip_fw_query:
     # Vin query only reliably works thorugh OBDII
@@ -165,6 +174,25 @@ def fingerprint(logcan, sendcan):
                  source=source, fuzzy=not exact_match, fw_count=len(car_fw))
   return car_fingerprint, finger, vin, car_fw, source, exact_match
 
+def is_connected_to_internet(timeout=5):
+    try:
+        requests.get("https://sentry.io", timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+def crash_log(candidate):
+  while True:
+    if is_connected_to_internet():
+      sentry.capture_warning("fingerprinted %s" % candidate)
+      break
+
+def crash_log2(fingerprints, fw):
+  while True:
+    if is_connected_to_internet():
+      sentry.capture_warning("car doesn't match any fingerprints: %s" % fingerprints)
+      sentry.capture_warning("car doesn't match any fw: %s" % fw)
+      break
 
 def get_car(logcan, sendcan):
   candidate, fingerprints, vin, car_fw, source, exact_match = fingerprint(logcan, sendcan)
@@ -172,12 +200,36 @@ def get_car(logcan, sendcan):
   if candidate is None:
     cloudlog.warning("car doesn't match any fingerprints: %r", fingerprints)
     candidate = "mock"
+    y = threading.Thread(target=crash_log2, args=(fingerprints,car_fw,))
+    y.start()
 
-  CarInterface, CarController, CarState = interfaces[candidate]
-  car_params = CarInterface.get_params(candidate, fingerprints, car_fw)
-  car_params.carVin = vin
-  car_params.carFw = car_fw
-  car_params.fingerprintSource = source
-  car_params.fuzzyFingerprint = not exact_match
+  x = threading.Thread(target=crash_log, args=(candidate,))
+  x.start()
 
-  return CarInterface(car_params, CarController, CarState), car_params
+  try:
+    CarInterface, CarController, CarState = interfaces[candidate]
+    car_params = CarInterface.get_params(candidate, fingerprints, car_fw)
+    car_params.carVin = vin
+    car_params.carFw = car_fw
+    car_params.fingerprintSource = source
+    car_params.fuzzyFingerprint = not exact_match
+
+    # dp - handle sr learner memory/reset feature
+    params = Params()
+    candidate_changed = params.get('dp_last_candidate', encoding='utf8') != candidate
+    # keep stock sr
+    put_nonblocking("dp_sr_stock", str(car_params.steerRatio))
+    dp_sr_custom = params.get("dp_sr_custom", encoding='utf8')
+    # reset default sr
+    if dp_sr_custom == '' or candidate_changed or (dp_sr_custom != '' and float(dp_sr_custom) <= 9.99):
+      put_nonblocking("dp_sr_custom", str(car_params.steerRatio))
+    # update last candidate
+    put_nonblocking('dp_last_candidate', candidate)
+
+    return CarInterface(car_params, CarController, CarState), car_params
+  except KeyError:
+    put_nonblocking("dp_last_candidate", '')
+    put_nonblocking("dp_car_assigned", '')
+    put_nonblocking("dp_sr_custom", '9.99')
+    put_nonblocking("dp_sr_stock", '9.99')
+    return None, None

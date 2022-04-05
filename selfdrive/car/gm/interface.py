@@ -6,6 +6,7 @@ from selfdrive.car.gm.values import CAR, CruiseButtons, \
                                     AccState, CarControllerParams
 from selfdrive.car import STD_CARGO_KG, scale_rot_inertia, scale_tire_stiffness, gen_empty_fingerprint, get_safety_config
 from selfdrive.car.interfaces import CarInterfaceBase
+from common.dp_common import common_interface_atl, common_interface_get_params_lqr
 
 ButtonType = car.CarState.ButtonEvent.Type
 EventName = car.CarEvent.EventName
@@ -42,6 +43,7 @@ class CarInterface(CarInterfaceBase):
     ret = CarInterfaceBase.get_std_params(candidate, fingerprint)
     ret.carName = "gm"
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.gm)]
+    ret.lateralTuning.init('pid')
     ret.pcmCruise = False  # stock cruise control is kept off
 
     # These cars have been put into dashcam only due to both a lack of users and test coverage.
@@ -151,14 +153,20 @@ class CarInterface(CarInterfaceBase):
     ret.steerLimitTimer = 0.4
     ret.radarTimeStep = 0.0667  # GM radar runs at 15Hz instead of standard 20Hz
 
+    # dp
+    ret = common_interface_get_params_lqr(ret)
+
     return ret
 
   # returns a car.CarState
-  def update(self, c, can_strings):
+  def update(self, c, can_strings, dragonconf):
     self.cp.update_strings(can_strings)
     self.cp_loopback.update_strings(can_strings)
 
     ret = self.CS.update(self.cp, self.cp_loopback)
+    # dp
+    self.dragonconf = dragonconf
+    ret.cruiseState.enabled = common_interface_atl(ret, dragonconf.dpAtl)
 
     ret.canValid = self.cp.can_valid and self.cp_loopback.can_valid
     ret.steeringRateLimited = self.CC.steer_rate_limited if self.CC is not None else False
@@ -229,7 +237,7 @@ class CarInterface(CarInterfaceBase):
     ret = self.CC.update(c, enabled, self.CS, self.frame,
                          c.actuators,
                          hud_v_cruise, hud_control.lanesVisible,
-                         hud_control.leadVisible, hud_control.visualAlert)
+                         hud_control.leadVisible, hud_control.visualAlert, self.dragonconf)
 
     self.frame += 1
     return ret
