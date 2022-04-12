@@ -4,7 +4,7 @@ import sys
 import json
 import time
 from math import floor
-from selfdrive.hardware import TICI
+from selfdrive.hardware import EON, TICI
 
 '''
 * type: Bool, Int8, UInt8, UInt16, Float32
@@ -86,8 +86,8 @@ confs = [
   {'name': 'dp_ip_addr', 'default': '', 'type': 'Text', 'conf_type': ['struct']},
   {'name': 'dp_fan_mode', 'default': 0, 'type': 'UInt8', 'min': 0, 'max': 2, 'conf_type': ['param']},
   {'name': 'dp_last_modified', 'default': str(floor(time.time())), 'type': 'Text', 'conf_type': ['param']},
-  {'name': 'dp_camera_offset', 'default': -4 if TICI else 6, 'type': 'Int8', 'min': -100, 'max': 100, 'conf_type': ['param', 'struct']},
-  {'name': 'dp_path_offset', 'default': -4 if TICI else 0, 'type': 'Int8', 'min': -100, 'max': 100, 'conf_type': ['param', 'struct']},
+  {'name': 'dp_camera_offset', 'default': 6 if EON else -4 if TICI else 0, 'type': 'Int8', 'min': -100, 'max': 100, 'conf_type': ['param', 'struct']},
+  {'name': 'dp_path_offset', 'default': 0 if EON else -4 if TICI else 0, 'type': 'Int8', 'min': -100, 'max': 100, 'conf_type': ['param', 'struct']},
 
   {'name': 'dp_locale', 'default': 'en-US', 'type': 'Text', 'conf_type': ['param', 'struct'], 'update_once': True},
   {'name': 'dp_reg', 'default': False, 'type': 'Bool', 'conf_type': ['param']},
