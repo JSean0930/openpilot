@@ -38,10 +38,16 @@ def manager_init() -> None:
   params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
 
   default_params: List[Tuple[str, Union[str, bytes]]] = [
+    ("CarModel", ""),
     ("CompletedTrainingVersion", "0"),
-    ("DisengageOnAccelerator", "1"),
+    ("DisengageOnAccelerator", "0"),
     ("HasAcceptedTerms", "0"),
     ("OpenpilotEnabledToggle", "1"),
+    ("IsLdwEnabled", "1"),
+    ("IsMetric", "1"),
+    ("EndToEndToggle", "1"),
+    ("LQR", "0"),
+    ("TurnVisionControl", "1"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))

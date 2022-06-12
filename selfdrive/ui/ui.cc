@@ -2,7 +2,7 @@
 
 #include <cassert>
 #include <cmath>
-
+#include <string>
 #include <QtConcurrent>
 
 #include "common/transformations/orientation.hpp"
@@ -208,6 +208,7 @@ static void update_state(UIState *s) {
 
 void ui_update_params(UIState *s) {
   s->scene.is_metric = Params().getBool("IsMetric");
+  s->scene.onroadScreenOff = Params().getBool("OnroadScreenOff");
 }
 
 void UIState::updateStatus() {
@@ -243,7 +244,7 @@ UIState::UIState(QObject *parent) : QObject(parent) {
   sm = std::make_unique<SubMaster, const std::initializer_list<const char *>>({
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState", "roadCameraState",
     "pandaStates", "carParams", "driverMonitoringState", "sensorEvents", "carState", "liveLocationKalman",
-    "wideRoadCameraState", "managerState",
+    "wideRoadCameraState", "managerState", "longitudinalPlan",
   });
 
   Params params;
@@ -314,6 +315,8 @@ void Device::updateBrightness(const UIState &s) {
 
   int brightness = brightness_filter.update(clipped_brightness);
   if (!awake) {
+    brightness = 0;
+  } else if (s.scene.started && interactive_timeout == 0 && s.scene.onroadScreenOff) {
     brightness = 0;
   }
 

@@ -9,11 +9,26 @@ from selfdrive.controls.lib.longcontrol import LongCtrlState
 from selfdrive.controls.lib.longitudinal_planner import Planner
 
 
+class SM():
+  def __init__(self, dictionary):
+    self.dictionary = dictionary
+
+  def __getitem__(self, item):
+    return self.dictionary.get(item)
+
+  @property
+  def valid(self):
+    return dict((k, True) for (k, v) in self.dictionary.items())
+
+  @property
+  def logMonoTime(self):
+    return SM(dict((k, 0) for (k, v) in self.dictionary.items()))
+
 class Plant():
   messaging_initialized = False
 
   def __init__(self, lead_relevancy=False, speed=0.0, distance_lead=2.0,
-               only_lead2=False, only_radar=False):
+               only_lead2=False, only_radar=False, distance_lines=0):
     self.rate = 1. / DT_MDL
 
     if not Plant.messaging_initialized:
@@ -28,6 +43,9 @@ class Plant():
     self.distance = 0.
     self.speed = speed
     self.acceleration = 0.0
+
+    # KRKeegan allow testing distance_lines
+    self.distance_lines = distance_lines
 
     # lead car
     self.distance_lead = distance_lead
@@ -89,12 +107,13 @@ class Plant():
     control.controlsState.longControlState = LongCtrlState.pid
     control.controlsState.vCruise = float(v_cruise * 3.6)
     car_state.carState.vEgo = float(self.speed)
+    car_state.carState.distanceLines = self.distance_lines
     car_state.carState.standstill = self.speed < 0.01
 
     # ******** get controlsState messages for plotting ***
-    sm = {'radarState': radar.radarState,
+    sm = SM({'radarState': radar.radarState,
           'carState': car_state.carState,
-          'controlsState': control.controlsState}
+          'controlsState': control.controlsState})
     self.planner.update(sm)
     self.speed = self.planner.v_desired_filter.x
     self.acceleration = self.planner.a_desired
