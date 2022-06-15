@@ -198,7 +198,7 @@ PrimeAdWidget::PrimeAdWidget(QWidget* parent) : QFrame(parent) {
   main_layout->addWidget(features, 0, Qt::AlignBottom);
   main_layout->addSpacing(20);
 
-  QVector<QString> bullets = {"遠端訪問", "存取14天記錄", "開發者福利"};
+  QVector<QString> bullets = {"遠端訪問", "存取1年記錄", "開發者福利"};
   for (auto &b: bullets) {
     const QString check = "<b><font color='#465BEA'>✓</font></b> ";
     QLabel *l = new QLabel(check + b);

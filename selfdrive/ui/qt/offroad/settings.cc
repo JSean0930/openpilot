@@ -127,7 +127,7 @@ DevicePanel::DevicePanel(SettingsWindow *parent) : ListWidget(parent) {
   addItem(resetCalibBtn);
 
   if (!params.getBool("Passive")) {
-    auto retrainingBtn = new ButtonControl("回顧使用教學", "查看", "Review the rules, features, and limitations of openpilot");
+    auto retrainingBtn = new ButtonControl("回顧使用教學", "查看", "查看 Openpilot 的規則、功能和限制");
     connect(retrainingBtn, &ButtonControl::clicked, [=]() {
       if (ConfirmationDialog::confirm("您確定要瀏覽訓練指南嗎？", this)) {
         emit reviewTrainingGuide();
