@@ -129,6 +129,8 @@ def manager_thread() -> None:
   params = Params()
 
   ignore: List[str] = []
+  ignore += ['dmonitoringmodeld', 'dmonitoringd'] if params.get_bool('dp_jetson') else []
+  ignore += ['uploader'] if int(params.get_bool('dp_jetson')) else []
   if params.get("DongleId", encoding='utf8') in (None, UNREGISTERED_DONGLE_ID):
     ignore += ["manage_athenad", "uploader"]
   if os.getenv("NOBOARD") is not None:

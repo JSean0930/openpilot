@@ -550,6 +550,12 @@ TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
                                   "../assets/offroad/icon_road.png",
                                   this));
 
+  toggles.append(new ParamControl("dp_jetson",
+                                  "啟用 Jetson 支援",
+                                  "如果您打算在 Nvidia Jetson NX 上跑 TOP ，請開啟這個選項，但此選項可能造成駕駛監控被關閉及溫度下降，且需重新啟動後生效。",
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
   for (ParamControl *toggle : toggles) {
     if (main_layout->count() != 0) {
       toggle_layout->addWidget(horizontal_line());
