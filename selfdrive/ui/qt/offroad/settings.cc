@@ -528,7 +528,7 @@ TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
 
   toggles.append(new ParamControl("OnroadScreenOff",
                                   "上路關閉螢幕",
-                                  "設備連線後將會關閉螢幕，用以延長 OLED 螢幕的壽命，當觸碰螢幕時會重新開啟螢幕以進行操作設定。可以在汽車啟動時切換此功能。",
+                                  "設備連線後將會關閉螢幕，用以延長 OLED 螢幕的壽命，當觸碰螢幕或有警告提示時，會重新開啟螢幕以進行操作設定及警示駕駛。可以在汽車啟動時切換此功能。",
                                   "../assets/offroad/icon_metric.png",
                                   this));
 
