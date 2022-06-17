@@ -316,11 +316,13 @@ void Device::updateBrightness(const UIState &s) {
   int brightness = brightness_filter.update(clipped_brightness);
   if (!awake) {
     brightness = 0;
-  } else if (s.status == STATUS_WARNING || s.status == STATUS_ALERT) {
-    // I personal feel more comfortable to keep 0.5 second screen on after warning and alert
-    interactive_timeout = 0.5 * UI_FREQ;
-  } else if (s.scene.started && interactive_timeout == 0 && s.scene.onroadScreenOff) {  
-    brightness = 0;
+  } else if (s.scene.onroadScreenOff) {
+      if (s.status == STATUS_WARNING || s.status == STATUS_ALERT) {
+        // I personal feel more comfortable to keep 0.4 second screen-on after warning and alert
+        interactive_timeout = 0.4 * UI_FREQ;
+      } else if (s.scene.started && interactive_timeout == 0 ) {
+        brightness = 0;
+      }
   }
 
   if (brightness != last_brightness) {
