@@ -17,6 +17,7 @@ if EON:
   CAMERA_OFFSET = -0.06
 elif TICI:
   CAMERA_OFFSET = 0.04
+  PATH_OFFSET = 0.04
 else:
   CAMERA_OFFSET = 0.0
 
