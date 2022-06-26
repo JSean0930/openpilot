@@ -71,8 +71,8 @@ class CarInterface(CarInterfaceBase):
       ret.steerRatio = 18.1
       tire_stiffness_factor = 0.5533
       ret.mass = 3340. * CV.LB_TO_KG + STD_CARGO_KG
-      ret.maxLateralAccel = 1.95
-      set_lat_tune(ret.lateralTuning, LatTunes.TORQUE, MAX_LAT_ACCEL=ret.maxLateralAccel, FRICTION=0.041)
+      ret.maxLateralAccel = 2.2
+      set_lat_tune(ret.lateralTuning, LatTunes.TORQUE, MAX_LAT_ACCEL=ret.maxLateralAccel, FRICTION=0.04)
       ret.wheelSpeedFactor = 1.09
 
     elif candidate == CAR.PRIUS_V and LQR:
