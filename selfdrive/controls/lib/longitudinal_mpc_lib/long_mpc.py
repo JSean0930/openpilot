@@ -348,7 +348,7 @@ class LongitudinalMpc:
   def update_TF(self, carstate):
     if carstate.distanceLines == 1: # No Cut In
       self.desired_TF = 0.9
-      self.desired_stop_distance = STOP_DISTANCE - 1.5
+      self.desired_stop_distance = STOP_DISTANCE - 2
 
     elif carstate.distanceLines == 2: # Relaxed
       self.desired_TF = T_FOLLOW

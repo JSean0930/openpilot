@@ -8,8 +8,8 @@ class LongTunes(Enum):
   TSS = 2
 
 class LatTunes(Enum):
-  INDI_PRIUS = 0
-  LQR_RAV4 = 1
+  TORQUE = 0
+  LQR_PV = 1
   PID_A = 2
   PID_B = 3
   PID_C = 4
@@ -24,8 +24,7 @@ class LatTunes(Enum):
   PID_L = 13
   PID_M = 14
   PID_N = 15
-  TORQUE = 16
-  LQR_PV = 17
+
 
 ###### LONG ######
 def set_long_tune(tune, name):
@@ -39,11 +38,9 @@ def set_long_tune(tune, name):
     tune.kiV = [.35, .23, .20, .17, .1]
   # Default longitudinal tune
   elif name == LongTunes.TSS:
-    tune.deadzoneBP = [0., 9.]
-    tune.deadzoneV = [0., .15]
     tune.kpBP = [0., 5., 35.]
     tune.kiBP = [0., 35.]
-    tune.kpV = [3.6, 2.4, 1.5]
+    tune.kpV = [1.8, 1.5, 1.0]
     tune.kiV = [0.54, 0.36]
   else:
     raise NotImplementedError('This longitudinal tune does not exist')

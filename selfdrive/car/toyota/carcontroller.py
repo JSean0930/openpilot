@@ -14,7 +14,7 @@ from common.params import Params
 VisualAlert = car.CarControl.HUDControl.VisualAlert
 
 STEER_FAULT_MAX_RATE = 100
-STEER_FAULT_MAX_FRAMES = 18
+STEER_FAULT_MAX_FRAMES = 19
 
 class CarController:
   def __init__(self, dbc_name, CP, VM):
@@ -23,6 +23,7 @@ class CarController:
     self.frame = 0
     self.last_steer = 0
     self.alert_active = False
+    self.last_standstill = False
     self.standstill_req = False
     self.steer_rate_limited = False
     self.last_off_frame = 0
@@ -38,7 +39,7 @@ class CarController:
   def update(self, CC, CS):
     actuators = CC.actuators
     hud_control = CC.hudControl
-    pcm_cancel_cmd = CC.cruiseControl.cancel
+    pcm_cancel_cmd = CC.cruiseControl.cancel or (not CC.enabled and CS.pcm_acc_status)
 
     # gas and brake
     if self.CP.enableGasInterceptor and CC.longActive:
@@ -77,22 +78,24 @@ class CarController:
     if not CC.latActive:
       apply_steer = 0
       apply_steer_req = 0
-    elif self.rate_limit_counter > STEER_FAULT_MAX_FRAMES:
+    elif self.rate_limit_counter >= STEER_FAULT_MAX_FRAMES:
       apply_steer_req = 0
       self.rate_limit_counter = 0
 
     # TODO: probably can delete this. CS.pcm_acc_status uses a different signal
     # than CS.cruiseState.enabled. confirm they're not meaningfully different
-    if not CC.enabled and CS.pcm_acc_status:
-      pcm_cancel_cmd = 1
+    #if not CC.enabled and CS.pcm_acc_status:
+    #  pcm_cancel_cmd = 1
 
-    # on entering standstill, send standstill request
-    if actuators.accel <= - 0.8 and not self.topsng and CS.out.standstill and self.CP.carFingerprint not in NO_STOP_TIMER_CAR:
+    # resume request
+    if not self.topsng and CS.out.standstill and not self.last_standstill and self.CP.carFingerprint not in NO_STOP_TIMER_CAR:
       self.standstill_req = True
-    else:
+    if CS.pcm_acc_status != 8:
+      # pcm entered standstill or it's disabled
       self.standstill_req = False
 
     self.last_steer = apply_steer
+    self.last_standstill = CS.out.standstill
 
     can_sends = []
 
@@ -118,14 +121,14 @@ class CarController:
       self.last_gas_press_frame = self.frame
 
     # Handle permit braking logic
-    if CS.out.gasPressed or 0.5 / DT_CTRL > (self.frame - self.last_gas_press_frame) or (0.8 / DT_CTRL > (self.frame - self.last_off_frame) and not hud_control.leadVisible):
+    if 0.8 / DT_CTRL > (self.frame - self.last_off_frame) or actuators.accel > 0.35:
       self.permit_braking = False
     else:
       self.permit_braking = True
 
     # we can spam can to cancel the system even if we are using lat only control
     if (self.frame % 3 == 0 and self.CP.openpilotLongitudinalControl) or pcm_cancel_cmd:
-      lead = hud_control.leadVisible or CS.out.vEgo < 12.  # at low speed we always assume the lead is present so ACC can be engaged
+      lead = hud_control.leadVisible or (CS.out.vEgo < 12. and (not CS.out.standstill or CC.enabled))  # at low speed we always assume the lead is present so ACC can be engaged
 
       # Lexus IS uses a different cancellation message
       if pcm_cancel_cmd and self.CP.carFingerprint in (CAR.LEXUS_IS, CAR.LEXUS_RC):
@@ -136,7 +139,7 @@ class CarController:
       else:
         can_sends.append(create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, CS.distance_btn, False))
 
-    if self.frame % 2 == 0 and self.CP.enableGasInterceptor and self.CP.openpilotLongitudinalControl:
+    if self.frame % 2 == 0 and self.CP.enableGasInterceptor and self.CP.openpilotLongitudinalControl and not CS.out.brakePressed:
       # send exactly zero if gas cmd is zero. Interceptor will send the max between read value and gas cmd.
       # This prevents unexpected pedal range rescaling
       can_sends.append(create_gas_interceptor_command(self.packer, interceptor_gas_cmd, self.frame // 2))
