@@ -121,7 +121,7 @@ class CarController:
       self.last_gas_press_frame = self.frame
 
     # Handle permit braking logic
-    if 0.8 / DT_CTRL > (self.frame - self.last_off_frame) or actuators.accel > 0.35:
+    if actuators.accel > 0.35:
       self.permit_braking = False
     else:
       self.permit_braking = True
