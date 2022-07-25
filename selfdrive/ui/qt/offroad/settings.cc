@@ -20,6 +20,7 @@
 #include "selfdrive/ui/qt/widgets/input.h"
 #include "selfdrive/ui/qt/widgets/scrollview.h"
 #include "selfdrive/ui/qt/widgets/ssh_keys.h"
+#include "selfdrive/ui/qt/widgets/timpilot.h"
 #include "selfdrive/ui/qt/widgets/toggle.h"
 #include "selfdrive/ui/ui.h"
 #include "selfdrive/ui/qt/util.h"
@@ -315,7 +316,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
   QPushButton *close_btn = new QPushButton(tr("×"));
   close_btn->setStyleSheet(R"(
     QPushButton {
-      font-size: 140px;
+      font-size: 120px;
       padding-bottom: 20px;
       font-weight: bold;
       border 1px grey solid;
@@ -327,9 +328,9 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
       background-color: #3B3B3B;
     }
   )");
-  close_btn->setFixedSize(200, 200);
-  sidebar_layout->addSpacing(45);
-  sidebar_layout->addWidget(close_btn, 0, Qt::AlignCenter);
+  close_btn->setFixedSize(140, 140);
+  sidebar_layout->addSpacing(40);
+  sidebar_layout->addWidget(close_btn, 0, Qt::AlignLeft);
   QObject::connect(close_btn, &QPushButton::clicked, this, &SettingsWindow::closeSettings);
 
   // setup panels
@@ -342,6 +343,7 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
     {tr("Network"), new Networking(this)},
     {tr("Toggles"), new TogglesPanel(this)},
     {tr("Software"), new SoftwarePanel(this)},
+    {tr("T.O.P"), new TimpilotPanel(this)},
   };
 
 #ifdef ENABLE_MAPS
@@ -407,4 +409,108 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QFrame(parent) {
       background-color: black;
     }
   )");
+}
+
+void SettingsWindow::hideEvent(QHideEvent *event) {
+#ifdef QCOM
+  HardwareEon::close_activities();
+#endif
+}
+
+TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
+  main_layout = new QStackedLayout(this);
+  home = new QWidget(this);
+  QVBoxLayout* fcr_layout = new QVBoxLayout(home);
+  fcr_layout->setContentsMargins(0, 20, 0, 20);
+
+  QString set = QString::fromStdString(Params().get("CarModel"));
+
+  QPushButton* setCarBtn = new QPushButton(set.length() ? set : tr("Select Car"));
+  setCarBtn->setObjectName("setCarBtn");
+  setCarBtn->setStyleSheet("margin-right: 30px;");
+  connect(setCarBtn, &QPushButton::clicked, [=]() { main_layout->setCurrentWidget(setCar); });
+  fcr_layout->addSpacing(10);
+  fcr_layout->addWidget(setCarBtn, 0, Qt::AlignRight);
+  fcr_layout->addSpacing(10);
+
+  home_widget = new QWidget(this);
+  QVBoxLayout* toggle_layout = new QVBoxLayout(home_widget);
+  home_widget->setObjectName("homeWidget");
+
+  ScrollView *scroller = new ScrollView(home_widget, this);
+  scroller->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  fcr_layout->addWidget(scroller, 1);
+
+  main_layout->addWidget(home);
+
+  setCar = new ForceCarRecognition(this);
+  connect(setCar, &ForceCarRecognition::backPress, [=]() { main_layout->setCurrentWidget(home); });
+  connect(setCar, &ForceCarRecognition::selectedCar, [=]() {
+    QString set = QString::fromStdString(Params().get("CarModel"));
+    setCarBtn->setText(set.length() ? set : tr("Select your car"));
+    main_layout->setCurrentWidget(home);
+  });
+  main_layout->addWidget(setCar);
+
+  QPalette pal = palette();
+  pal.setColor(QPalette::Background, QColor(0x29, 0x29, 0x29));
+  setAutoFillBackground(true);
+  setPalette(pal);
+
+  setStyleSheet(R"(
+    #backBtn, #setCarBtn {
+      font-size: 50px;
+      margin: 0px;
+      padding: 20px;
+      border-width: 0;
+      border-radius: 30px;
+      color: #dddddd;
+      background-color: #444444;
+    }
+  )");
+
+  QList<ParamControl*> toggles;
+
+  toggles.append(new ParamControl("QuietDrive",
+                                  tr("Quiet Drive"),
+                                  tr("TOP will display alerts but only play the most important warning sounds. This feature can be toggled while the car is on."),
+                                  "../assets/offroad/icon_mute.png",
+                                  this));
+
+  toggles.append(new ParamControl("OnroadScreenOff",
+                                  tr("Driving Screen Off"),
+                                  tr("Turn off the device screen to protect the OLED panel after driving starts. It automatically brightens or turns on when a touch or event occurs."),
+                                  "../assets/offroad/icon_metric.png",
+                                  this));
+
+  toggles.append(new ParamControl("topsng",
+                                  tr("Stop And Go"),
+                                  tr("Enabled the Stop And Go feature and get auto hold."),
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
+  toggles.append(new ParamControl("TurnVisionControl",
+                                  tr("Enable vision based turn control"),
+                                  tr("Use vision path predictions to estimate the appropiate speed to drive through turns ahead."),
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
+  toggles.append(new ParamControl("LQR",
+                                  tr("Enable LQR control (For PRIUS ALPHA)"),
+                                  tr("Enable LQR control mode to replace the default Torque control mode。 (For PRIUS ALPHA only)"),
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
+  toggles.append(new ParamControl("UploadRaw",
+                                  tr("Upload Raw Logs"),
+                                  tr("Upload full logs and full resolution video by default while on Wi-Fi. If not enabled, individual logs can be marked for upload at useradmin.comma.ai."),
+                                  "../assets/offroad/icon_network.png",
+                                  this));
+
+  for (ParamControl *toggle : toggles) {
+    if (main_layout->count() != 0) {
+      toggle_layout->addWidget(horizontal_line());
+    }
+    toggle_layout->addWidget(toggle);
+  }
 }

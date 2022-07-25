@@ -24,6 +24,7 @@ from selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from selfdrive.controls.lib.latcontrol_indi import LatControlINDI
 from selfdrive.controls.lib.latcontrol_angle import LatControlAngle
 from selfdrive.controls.lib.latcontrol_torque import LatControlTorque
+from selfdrive.controls.lib.latcontrol_lqr import LatControlLQR
 from selfdrive.controls.lib.events import Events, ET
 from selfdrive.controls.lib.alertmanager import AlertManager, set_offroad_alert
 from selfdrive.controls.lib.vehicle_model import VehicleModel
@@ -96,11 +97,7 @@ class Controls:
 
     self.sm = sm
     if self.sm is None:
-      ignore = []
-      if SIMULATION:
-        ignore += ['driverCameraState', 'managerState']
-      if params.get_bool('WideCameraOnly'):
-        ignore += ['roadCameraState']
+      ignore = ['driverCameraState', 'managerState'] if SIMULATION else None
       self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                      'driverMonitoringState', 'longitudinalPlan', 'lateralPlan', 'liveLocationKalman',
                                      'managerState', 'liveParameters', 'radarState'] + self.camera_packets + joystick_packet,
@@ -153,6 +150,8 @@ class Controls:
       self.LaC = LatControlPID(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'indi':
       self.LaC = LatControlINDI(self.CP, self.CI)
+    elif self.CP.lateralTuning.which() == 'lqr':
+      self.LaC = LatControlLQR(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI)
 
@@ -228,8 +227,12 @@ class Controls:
     if not self.CP.notCar:
       self.events.add_from_msg(self.sm['driverMonitoringState'].events)
 
-    # Add car events, ignore if CAN isn't valid
-    if CS.canValid:
+    # Handle car events. Ignore when CAN is invalid
+    if CS.canTimeout:
+      self.events.add(EventName.canBusMissing)
+    elif not CS.canValid:
+      self.events.add(EventName.canError)
+    else:
       self.events.add_from_msg(CS.events)
 
     # Create events for temperature, disk space, and memory
@@ -309,19 +312,14 @@ class Controls:
           self.events.add(EventName.cameraFrameRate)
     if self.rk.lagging:
       self.events.add(EventName.controlsdLagging)
-    if len(self.sm['radarState'].radarErrors) or not self.sm.all_checks(['radarState']):
+    if len(self.sm['radarState'].radarErrors):
       self.events.add(EventName.radarFault)
     if not self.sm.valid['pandaStates']:
       self.events.add(EventName.usbError)
-    if CS.canTimeout:
-      self.events.add(EventName.canBusMissing)
-    elif not CS.canValid:
-      self.events.add(EventName.canError)
 
     # generic catch-all. ideally, a more specific event should be added above instead
-    has_disable_events = self.events.any(ET.NO_ENTRY) and (self.events.any(ET.SOFT_DISABLE) or self.events.any(ET.IMMEDIATE_DISABLE))
-    no_system_errors = (not has_disable_events) or (len(self.events) == num_events)
-    if (not self.sm.all_checks() or self.can_rcv_error) and no_system_errors:
+    no_system_errors = len(self.events) != num_events
+    if (not self.sm.all_checks() or self.can_rcv_error) and no_system_errors and CS.canValid and not CS.canTimeout:
       if not self.sm.all_alive():
         self.events.add(EventName.commIssue)
       elif not self.sm.all_freq_ok():
@@ -769,6 +767,8 @@ class Controls:
       controlsState.lateralControlState.pidState = lac_log
     elif lat_tuning == 'torque':
       controlsState.lateralControlState.torqueState = lac_log
+    elif lat_tuning == 'lqr':
+      controlsState.lateralControlState.lqrState = lac_log
     elif lat_tuning == 'indi':
       controlsState.lateralControlState.indiState = lac_log
 

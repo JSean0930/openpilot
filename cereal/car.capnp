@@ -206,6 +206,8 @@ struct CarState {
   leftBlindspot @33 :Bool; # Is there something blocking the left lane change
   rightBlindspot @34 :Bool; # Is there something blocking the right lane change
 
+  # KRKeegan toyota distance lines
+  distanceLines @44 :UInt8;
   fuelGauge @41 :Float32; # battery or fuel tank level from 0.0 to 1.0
   charging @43 :Bool;
 
@@ -473,6 +475,7 @@ struct CarParams {
   radarTimeStep @45: Float32 = 0.05;  # time delta between radar updates, 20Hz is very standard
   fingerprintSource @49: FingerprintSource;
   networkLocation @50 :NetworkLocation;  # Where Panda/C2 is integrated into the car's CAN network
+  smartDsu @69: Bool;  # true if sDSU is detected
 
   wheelSpeedFactor @63 :Float32; # Multiplier on wheels speeds to computer actual speeds
 

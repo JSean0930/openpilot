@@ -85,6 +85,19 @@ const QColor bg_colors [] = {
   [STATUS_ALERT] = QColor(0xC9, 0x22, 0x31, 0xf1),
 };
 
+const QColor tcs_colors [] = {
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::DISABLED)] =  QColor(0x0, 0x0, 0x0, 0xff),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::ENTERING)] = QColor(0xC9, 0x22, 0x31, 0xf1),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::TURNING)] = QColor(0xDA, 0x6F, 0x25, 0xf1),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::LEAVING)
+  ] = QColor(0x17, 0x86, 0x44, 0xf1),
+};
+
+typedef struct {
+  QPointF v[TRAJECTORY_SIZE * 2];
+  int cnt;
+} line_vertices_data;
+
 typedef struct UIScene {
   bool calibration_valid = false;
   mat3 view_from_calib = DEFAULT_CALIBRATION;
@@ -103,6 +116,8 @@ typedef struct UIScene {
   float light_sensor, accel_sensor, gyro_sensor;
   bool started, ignition, is_metric, longitudinal_control;
   uint64_t started_frame;
+  int onroadScreenOff, osoTimer, brightness, onroadScreenOffBrightness, awake;
+  bool touched2 = false;
 } UIScene;
 
 class UIState : public QObject {
@@ -168,6 +183,8 @@ private:
   void updateWakefulness(const UIState &s);
   bool motionTriggered(const UIState &s);
   void setAwake(bool on);
+
+  int sleep_time = -1;
 
 signals:
   void displayPowerChanged(bool on);

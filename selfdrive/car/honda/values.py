@@ -1406,6 +1406,7 @@ FW_VERSIONS = {
       b'38897-T20-A020\x00\x00',
       b'38897-T20-A510\x00\x00',
       b'38897-T21-A010\x00\x00',
+      b'38897-T20-A210\x00\x00',
     ],
     (Ecu.srs, 0x18DA53F1, None): [
       b'77959-T20-A970\x00\x00',
@@ -1415,6 +1416,7 @@ FW_VERSIONS = {
       b'78108-T21-A220\x00\x00',
       b'78108-T21-A620\x00\x00',
       b'78108-T23-A110\x00\x00',
+      b'78108-T21-A230\x00\x00',
     ],
     (Ecu.vsa, 0x18DA28F1, None): [
       b'57114-T20-AB40\x00\x00',
@@ -1429,6 +1431,7 @@ FW_VERSIONS = {
       b'37805-64L-A540\x00\x00',
       b'37805-64S-A540\x00\x00',
       b'37805-64S-A720\x00\x00',
+      b'37805-64A-A540\x00\x00',
     ],
   },
 }
@@ -1472,3 +1475,11 @@ HONDA_BOSCH = {CAR.ACCORD, CAR.ACCORDH, CAR.CIVIC_BOSCH, CAR.CIVIC_BOSCH_DIESEL,
                CAR.CRV_HYBRID, CAR.INSIGHT, CAR.ACURA_RDX_3G, CAR.HONDA_E, CAR.CIVIC_2022}
 HONDA_BOSCH_ALT_BRAKE_SIGNAL = {CAR.ACCORD, CAR.CRV_5G, CAR.ACURA_RDX_3G}
 HONDA_BOSCH_RADARLESS = {CAR.CIVIC_2022}
+
+def main():
+  for member, value in vars(CAR).items():
+    if not member.startswith("_"):
+      print(value)
+
+if __name__ == "__main__":
+  main()

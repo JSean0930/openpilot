@@ -23,7 +23,7 @@ class LatTunes(Enum):
   PID_L = 13
   PID_M = 14
   PID_N = 15
-
+  LQR_PV = 16
 
 ###### LONG ######
 def set_long_tune(tune, name):
@@ -37,11 +37,9 @@ def set_long_tune(tune, name):
     tune.kiV = [.35, .23, .20, .17, .1]
   # Default longitudinal tune
   elif name == LongTunes.TSS:
-    tune.deadzoneBP = [0., 9.]
-    tune.deadzoneV = [0., .15]
     tune.kpBP = [0., 5., 35.]
     tune.kiBP = [0., 35.]
-    tune.kpV = [3.6, 2.4, 1.5]
+    tune.kpV = [1.8, 1.5, 1.0]
     tune.kiV = [0.54, 0.36]
   else:
     raise NotImplementedError('This longitudinal tune does not exist')
@@ -49,7 +47,17 @@ def set_long_tune(tune, name):
 
 ###### LAT ######
 def set_lat_tune(tune, name, MAX_LAT_ACCEL=2.5, FRICTION=0.01, steering_angle_deadzone_deg=0.0, use_steering_angle=True):
-  if 'PID' in str(name):
+  if name == LatTunes.LQR_PV:
+    tune.init('lqr')
+    tune.lqr.scale = 1650.0
+    tune.lqr.ki = 0.028
+    tune.lqr.a = [0., 1., -0.22619643, 1.21822268]
+    tune.lqr.b = [-1.92006585e-04, 3.95603032e-05]
+    tune.lqr.c = [1., 0.]
+    tune.lqr.k = [-110.73572306, 451.22718255]
+    tune.lqr.l = [0.3233671, 0.3185757]
+    tune.lqr.dcGain = 0.0028
+  elif 'PID' in str(name):
     tune.init('pid')
     tune.pid.kiBP = [0.0]
     tune.pid.kpBP = [0.0]

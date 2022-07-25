@@ -1272,3 +1272,11 @@ DBC = {
   CAR.KIA_EV6: dbc_dict('kia_ev6', None),
   CAR.SONATA_HYBRID: dbc_dict('hyundai_kia_generic', 'hyundai_kia_mando_front_radar'),
 }
+
+def main():
+  for member, value in vars(CAR).items():
+    if not member.startswith("_"):
+      print(value)
+
+if __name__ == "__main__":
+  main()

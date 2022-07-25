@@ -11,6 +11,7 @@
 #include "selfdrive/ui/qt/maps/map_helpers.h"
 #endif
 
+#define FONT_OPEN_SANS "Inter" //"Open Sans"
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
   main_layout->setMargin(bdr_s);
@@ -207,6 +208,17 @@ void NvgWindow::updateState(const UIState &s) {
   if (sm.frame % (UI_FREQ / 2) == 0) {
     setProperty("engageable", cs.getEngageable() || cs.getEnabled());
     setProperty("dmActive", sm["driverMonitoringState"].getDriverMonitoringState().getIsActiveMode());
+
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    const auto vtcState = lp.getVisionTurnControllerState();
+    const float vtc_speed = lp.getVisionTurnSpeed() * (s.scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
+    const auto lpSoruce = lp.getLongitudinalPlanSource();
+    QColor vtc_color = tcs_colors[int(vtcState)];
+    vtc_color.setAlpha(lpSoruce == cereal::LongitudinalPlan::LongitudinalPlanSource::TURN ? 255 : 100);
+
+    setProperty("showVTC", vtcState > cereal::LongitudinalPlan::VisionTurnControllerState::DISABLED);
+    setProperty("vtcSpeed", QString::number(std::nearbyint(vtc_speed)));
+    setProperty("vtcColor", vtc_color);
   }
 
   if (s.scene.calibration_valid) {
@@ -365,8 +377,13 @@ void NvgWindow::drawHud(QPainter &p) {
 
   // engage-ability icon
   if (engageable) {
-    drawIcon(p, rect().right() - radius / 2 - bdr_s * 2, radius / 2 + int(bdr_s * 1.5),
-             engage_img, bg_colors[status], 1.0);
+    if (showVTC) {
+      drawVisionTurnControllerUI(p, rect().right() - 184 - bdr_s, int(bdr_s * 1.5), 184, vtcColor, vtcSpeed, 100);
+    } else {
+      // engage-ability icon
+      drawIcon(p, rect().right() - radius / 2 - bdr_s * 2, radius / 2 + int(bdr_s * 1.5),
+               engage_img, bg_colors[status], 1.0);
+    }
   }
 
   // dm icon
@@ -385,6 +402,16 @@ void NvgWindow::drawText(QPainter &p, int x, int y, const QString &text, int alp
   p.drawText(real_rect.x(), real_rect.bottom(), text);
 }
 
+void NvgWindow::drawCenteredText(QPainter &p, int x, int y, const QString &text, QColor color) {
+  QFontMetrics fm(p.font());
+  QRect init_rect = fm.boundingRect(text);
+  QRect real_rect = fm.boundingRect(init_rect, 0, text);
+  real_rect.moveCenter({x, y});
+
+  p.setPen(color);
+  p.drawText(real_rect, Qt::AlignCenter, text);
+}
+
 void NvgWindow::drawIcon(QPainter &p, int x, int y, QPixmap &img, QBrush bg, float opacity) {
   p.setPen(Qt::NoPen);
   p.setBrush(bg);
@@ -393,6 +420,17 @@ void NvgWindow::drawIcon(QPainter &p, int x, int y, QPixmap &img, QBrush bg, flo
   p.drawPixmap(x - img_size / 2, y - img_size / 2, img);
 }
 
+void NvgWindow::drawVisionTurnControllerUI(QPainter &p, int x, int y, int size, const QColor &color, 
+                                           const QString &vision_speed, int alpha) {
+  QRect rvtc(x, y, size, size);
+  p.setPen(QPen(color, 10));
+  p.setBrush(QColor(0, 0, 0, alpha));
+  p.drawRoundedRect(rvtc, 20, 20);
+  p.setPen(Qt::NoPen);
+
+  configFont(p, "Open Sans", 56, "SemiBold");
+  drawCenteredText(p, rvtc.center().x(), rvtc.center().y(), vision_speed, color);
+}
 
 void NvgWindow::initializeGL() {
   CameraViewWidget::initializeGL();
@@ -460,13 +498,15 @@ void NvgWindow::drawLaneLines(QPainter &painter, const UIState *s) {
   painter.restore();
 }
 
-void NvgWindow::drawLead(QPainter &painter, const cereal::ModelDataV2::LeadDataV3::Reader &lead_data, const QPointF &vd) {
+void NvgWindow::drawLead(QPainter &painter, const cereal::ModelDataV2::LeadDataV3::Reader &lead_data, const QPointF &vd , int num , size_t leads_num) {
   painter.save();
-
   const float speedBuff = 10.;
   const float leadBuff = 40.;
   const float d_rel = lead_data.getX()[0];
   const float v_rel = lead_data.getV()[0];
+//  const float t_rel = lead_data.getT()[0];
+//  const float y_rel = lead_data.getY()[0];
+//  const float a_rel = lead_data.getA()[0];
 
   float fillAlpha = 0;
   if (d_rel < leadBuff) {
@@ -484,16 +524,40 @@ void NvgWindow::drawLead(QPainter &painter, const cereal::ModelDataV2::LeadDataV
   float g_xo = sz / 5;
   float g_yo = sz / 10;
 
-  QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
+  //QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
+  float homebase_h = 12;
+  QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo + homebase_h},{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo},{x - (sz * 1.35) - g_xo, y + sz + g_yo + homebase_h}, {x, y + sz + homebase_h + g_yo + 10}};
   painter.setBrush(QColor(218, 202, 37, 255));
   painter.drawPolygon(glow, std::size(glow));
 
   // chevron
-  QPointF chevron[] = {{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz}};
+  //QPointF chevron[] = {{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz}};
+  QPointF chevron[] = {{x + (sz * 1.25), y + sz + homebase_h},{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz},{x - (sz * 1.25), y + sz + homebase_h}, {x, y + sz + homebase_h - 7}};
   painter.setBrush(redColor(fillAlpha));
   painter.drawPolygon(chevron, std::size(chevron));
 
-  painter.restore();
+  if(num == 0){ //顯示到第 0 輛前車的距離
+    //float dist = d_rel; //lead_data.getT()[0];
+    QString dist = QString::number(d_rel,'f',1) + "m";
+    int str_w = 200;
+//    dist += "<" + QString::number(rect().height()) + ">"; str_w += 500;c2 和 c3 的屏幕高度均為 1020。
+//    dist += "<" + QString::number(leads_num) + ">";
+//   int str_w = 600; //200;
+//    dist += QString::number(v_rel,'f',1) + "v";
+//    dist += QString::number(t_rel,'f',1) + "t";
+//    dist += QString::number(y_rel,'f',1) + "y";
+//    dist += QString::number(a_rel,'f',1) + "a";
+    configFont(painter, FONT_OPEN_SANS, 44, "SemiBold");
+    painter.setPen(QColor(0x0, 0x0, 0x0 , 200)); //影
+    float lock_indicator_dx = 2; //避免向下的十字準星。
+    painter.drawText(QRect(x+2+lock_indicator_dx, y-50+2, str_w, 50), Qt::AlignBottom | Qt::AlignLeft, dist);
+    painter.setPen(QColor(0xff, 0xff, 0xff));
+    painter.drawText(QRect(x+lock_indicator_dx, y-50, str_w, 50), Qt::AlignBottom | Qt::AlignLeft, dist);
+    painter.setPen(Qt::NoPen);
+  }
+
+    painter.restore();
+
 }
 
 void NvgWindow::paintGL() {
@@ -512,11 +576,12 @@ void NvgWindow::paintGL() {
 
     if (s->scene.longitudinal_control) {
       const auto leads = model.getLeadsV3();
+      size_t leads_num = leads.size();
       if (leads[0].getProb() > .5) {
-        drawLead(painter, leads[0], s->scene.lead_vertices[0]);
+        drawLead(painter, leads[0], s->scene.lead_vertices[0] , 0 , leads_num);
       }
       if (leads[1].getProb() > .5 && (std::abs(leads[1].getX()[0] - leads[0].getX()[0]) > 3.0)) {
-        drawLead(painter, leads[1], s->scene.lead_vertices[1]);
+        drawLead(painter, leads[1], s->scene.lead_vertices[1] , 1 , leads_num);
       }
     }
   }
