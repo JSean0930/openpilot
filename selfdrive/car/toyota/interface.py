@@ -123,20 +123,12 @@ class CarInterface(CarInterfaceBase):
       if candidate not in (CAR.CAMRY_TSS2, CAR.CAMRYH_TSS2):
         set_lat_tune(ret.lateralTuning, LatTunes.PID_C)
 
-    elif candidate in (CAR.HIGHLANDER_TSS2, CAR.HIGHLANDERH_TSS2):
+    elif candidate in (CAR.HIGHLANDER, CAR.HIGHLANDERH, CAR.HIGHLANDER_TSS2, CAR.HIGHLANDERH_TSS2):
       stop_and_go = True
-      ret.wheelbase = 2.84988  # 112.2 in = 2.84988 m
+      ret.wheelbase = 2.8194  # average of 109.8 and 112.2 in
       ret.steerRatio = 16.0
       tire_stiffness_factor = 0.8
-      ret.mass = 4700. * CV.LB_TO_KG + STD_CARGO_KG  # 4260 + 4-5 people
-      set_lat_tune(ret.lateralTuning, LatTunes.PID_G)
-
-    elif candidate in (CAR.HIGHLANDER, CAR.HIGHLANDERH):
-      stop_and_go = True
-      ret.wheelbase = 2.78
-      ret.steerRatio = 16.0
-      tire_stiffness_factor = 0.8
-      ret.mass = 4607. * CV.LB_TO_KG + STD_CARGO_KG  # mean between normal and hybrid limited
+      ret.mass = 4516. * CV.LB_TO_KG + STD_CARGO_KG  # mean between normal and hybrid
       set_lat_tune(ret.lateralTuning, LatTunes.PID_G)
 
     elif candidate in (CAR.AVALON, CAR.AVALON_2019, CAR.AVALONH_2019, CAR.AVALON_TSS2, CAR.AVALONH_TSS2):
@@ -202,7 +194,7 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 3108 * CV.LB_TO_KG + STD_CARGO_KG  # mean between min and max
       set_lat_tune(ret.lateralTuning, LatTunes.PID_M)
 
-    elif candidate in (CAR.LEXUS_NXH, CAR.LEXUS_NX, CAR.LEXUS_NX_TSS2):
+    elif candidate in (CAR.LEXUS_NX, CAR.LEXUS_NXH, CAR.LEXUS_NX_TSS2, CAR.LEXUS_NXH_TSS2):
       stop_and_go = True
       ret.wheelbase = 2.66
       ret.steerRatio = 14.7
@@ -271,12 +263,13 @@ class CarInterface(CarInterfaceBase):
       set_long_tune(ret.longitudinalTuning, LongTunes.PEDAL)
     elif candidate in TSS2_CAR:
       set_long_tune(ret.longitudinalTuning, LongTunes.TSS2)
+      ret.stoppingDecelRate = 0.3  # reach stopping target smoothly
       # Improved longitudinal tune settings from sshane
-      ret.vEgoStopping = 0.2  # car is near 0.1 to 0.2 when car starts requesting stopping accel
-      ret.vEgoStarting = 0.2  # needs to be > or == vEgoStopping
-      ret.stoppingDecelRate = 0.4  # reach stopping target smoothly - seems to take 0.5 seconds to go from 0 to -0.4
-      ret.longitudinalActuatorDelayLowerBound = 0.3
-      ret.longitudinalActuatorDelayUpperBound = 0.3
+      # ret.vEgoStopping = 0.2  # car is near 0.1 to 0.2 when car starts requesting stopping accel
+      # ret.vEgoStarting = 0.2  # needs to be > or == vEgoStopping
+      # ret.stoppingDecelRate = 0.4  # reach stopping target smoothly - seems to take 0.5 seconds to go from 0 to -0.4
+      # ret.longitudinalActuatorDelayLowerBound = 0.3
+      # ret.longitudinalActuatorDelayUpperBound = 0.3
     else:
       set_long_tune(ret.longitudinalTuning, LongTunes.TSS)
 

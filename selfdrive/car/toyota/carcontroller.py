@@ -1,5 +1,4 @@
 from cereal import car
-from common.realtime import DT_CTRL
 from common.numpy_fast import clip, interp
 from selfdrive.car import apply_toyota_steer_torque_limits, create_gas_interceptor_command, make_can_msg
 from selfdrive.car.toyota.toyotacan import create_steer_command, create_ui_command, \
@@ -160,12 +159,12 @@ class CarController:
       # forcing the pcm to disengage causes a bad fault sound so play a good sound instead
       send_ui = True
 
-    if self.frame % 100 == 0 or send_ui:
+    if (self.frame % 100 == 0 or send_ui) and (self.CP.carFingerprint != CAR.PRIUS_V):
       can_sends.append(create_ui_command(self.packer, steer_alert, pcm_cancel_cmd, hud_control.leftLaneVisible,
                                          hud_control.rightLaneVisible, hud_control.leftLaneDepart,
                                          hud_control.rightLaneDepart, CC.enabled))
 
-    if self.frame % 100 == 0 and self.CP.enableDsu:
+    if (self.frame % 100 == 0 or send_ui) and self.CP.enableDsu:
       can_sends.append(create_fcw_command(self.packer, fcw_alert))
 
     # *** static msgs ***
