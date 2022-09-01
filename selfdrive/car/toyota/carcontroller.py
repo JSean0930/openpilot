@@ -1,4 +1,5 @@
 from cereal import car
+from common.realtime import DT_CTRL
 from common.numpy_fast import clip, interp
 from selfdrive.car import apply_toyota_steer_torque_limits, create_gas_interceptor_command, make_can_msg
 from selfdrive.car.toyota.toyotacan import create_steer_command, create_ui_command, \
@@ -26,7 +27,6 @@ class CarController:
     self.standstill_req = False
     self.steer_rate_limited = False
     self.last_off_frame = 0
-    self.last_gas_press_frame = 0
     self.permit_braking = True
     self.topsng = Params().get_bool('topsng')
     self.rate_limit_counter = 0
@@ -81,10 +81,12 @@ class CarController:
       apply_steer_req = 0
       self.rate_limit_counter = 0
 
+    lead_vehicle_stopped = hud_control.leadVelocity < 0.5 and hud_control.leadVisible  # Give radar some room for error
+
     # TODO: probably can delete this. CS.pcm_acc_status uses a different signal
     # than CS.cruiseState.enabled. confirm they're not meaningfully different
-    #if not CC.enabled and CS.pcm_acc_status:
-    #  pcm_cancel_cmd = 1
+    if not CC.enabled and CS.pcm_acc_status:
+      pcm_cancel_cmd = 1
 
     # resume request
     if not self.topsng and CS.out.standstill and not self.last_standstill and self.CP.carFingerprint not in NO_STOP_TIMER_CAR:
@@ -120,7 +122,7 @@ class CarController:
       self.last_gas_press_frame = self.frame
 
     # Handle permit braking logic
-    if actuators.accel > 0.35:
+    if (actuators.accel > 0.35) or not CC.enabled or (0.5 / DT_CTRL > (self.frame - self.last_off_frame) and not lead_vehicle_stopped):
       self.permit_braking = False
     else:
       self.permit_braking = True
@@ -133,12 +135,12 @@ class CarController:
       if pcm_cancel_cmd and self.CP.carFingerprint in (CAR.LEXUS_IS, CAR.LEXUS_RC):
         can_sends.append(create_acc_cancel_command(self.packer))
       elif self.CP.openpilotLongitudinalControl:
-        can_sends.append(create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type, CS.distance_btn, self.permit_braking))
+        can_sends.append(create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type, CS.distance_btn, self.permit_braking, lead_vehicle_stopped))
         self.accel = pcm_accel_cmd
       else:
-        can_sends.append(create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, CS.distance_btn, False))
+        can_sends.append(create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, CS.distance_btn, False, False))
 
-    if self.frame % 2 == 0 and self.CP.enableGasInterceptor and self.CP.openpilotLongitudinalControl and not CS.out.brakePressed:
+    if self.frame % 2 == 0 and self.CP.enableGasInterceptor and self.CP.openpilotLongitudinalControl:
       # send exactly zero if gas cmd is zero. Interceptor will send the max between read value and gas cmd.
       # This prevents unexpected pedal range rescaling
       can_sends.append(create_gas_interceptor_command(self.packer, interceptor_gas_cmd, self.frame // 2))
