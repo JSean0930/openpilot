@@ -10,11 +10,16 @@ from selfdrive.car.toyota.values import CAR, STATIC_DSU_MSGS, NO_STOP_TIMER_CAR,
 from selfdrive.car.toyota.interface import CarInterface
 from opendbc.can.packer import CANPacker
 from common.params import Params
+from common.conversions import Conversions as CV
 
 VisualAlert = car.CarControl.HUDControl.VisualAlert
 
 STEER_FAULT_MAX_RATE = 100
 STEER_FAULT_MAX_FRAMES = 19
+GearShifter = car.CarState.GearShifter
+UNLOCK_CMD = b'\x40\x05\x30\x11\x00\x40\x00\x00'
+LOCK_CMD = b'\x40\x05\x30\x11\x00\x80\x00\x00'
+LOCK_AT_SPEED = 10 * CV.KPH_TO_MS
 
 class CarController:
   def __init__(self, dbc_name, CP, VM):
@@ -28,14 +33,20 @@ class CarController:
     self.steer_rate_limited = False
     self.last_off_frame = 0
     self.permit_braking = True
-    self.topsng = Params().get_bool('topsng')
     self.rate_limit_counter = 0
 
     self.packer = CANPacker(dbc_name)
     self.gas = 0
     self.accel = 0
 
+    self.last_gear = GearShifter.park
+    self.lock_once = False
+
   def update(self, CC, CS):
+    self.topsng = Params().get_bool('topsng')
+    self.toyotaautolock = Params().get_bool('toyotaautolock')
+    self.toyotaautounlock = Params().get_bool('toyotaautounlock')
+
     actuators = CC.actuators
     hud_control = CC.hudControl
     pcm_cancel_cmd = CC.cruiseControl.cancel or (not CC.enabled and CS.pcm_acc_status)
@@ -99,6 +110,21 @@ class CarController:
     self.last_standstill = CS.out.standstill
 
     can_sends = []
+
+    # dp - door auto lock / unlock logic
+    # thanks to AlexandreSato & cydia2020
+    # https://github.com/AlexandreSato/openpilot/blob/personal/doors.py
+    if self.toyotaautolock or self.toyotaautounlock:
+      gear = CS.out.gearShifter
+      if self.last_gear != gear and gear == GearShifter.park:
+        if self.toyotaautounlock:
+          can_sends.append(make_can_msg(0x750, UNLOCK_CMD, 0))
+        if self.toyotaautolock:
+          self.lock_once = False
+      elif self.toyotaautolock and gear == GearShifter.drive and not self.lock_once and CS.out.vEgo >= LOCK_AT_SPEED:
+        can_sends.append(make_can_msg(0x750, LOCK_CMD, 0))
+        self.lock_once = True
+      self.last_gear = gear
 
     # *** control msgs ***
     # print("steer {0} {1} {2} {3}".format(apply_steer, min_lim, max_lim, CS.steer_torque_motor)

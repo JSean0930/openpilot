@@ -544,6 +544,18 @@ TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
                                   "../assets/offroad/icon_road.png",
                                   this));
 
+  toggles.append(new ParamControl("toyotaautolock",
+                                  "開啟車門自動上鎖",
+                                  "啟用此功能後，當在車速超過 25 公里時將自動鎖上車門。僅適用於某些Toyota車款。",
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
+  toggles.append(new ParamControl("toyotaautounlock",
+                                  "開啟車門自動解鎖",
+                                  "啟用此功能後，當檔位進到P檔時將自動解鎖車門。僅適用於某些Toyota車款。",
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
   toggles.append(new ParamControl("LQR",
                                   "啟用 LQR 控制 (PRIUS ALPHA 專用)",
                                   "開啟 LQR 操控模式，用以取代預設的 Torque 操控模式。 (PRIUS ALPHA專用)",
