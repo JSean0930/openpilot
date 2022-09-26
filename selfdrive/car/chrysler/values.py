@@ -236,3 +236,13 @@ DBC = {
   CAR.RAM_1500: dbc_dict('chrysler_ram_dt_generated', None),
   CAR.RAM_HD: dbc_dict('chrysler_ram_hd_generated', None),
 }
+
+
+def main():
+  for member, value in vars(CAR).items():
+    if not member.startswith("_"):
+      print(value)
+
+
+if __name__ == "__main__":
+  main()

@@ -2,7 +2,7 @@
 
 #include <cassert>
 #include <cmath>
-
+#include <string>
 #include <QtConcurrent>
 
 #include "common/transformations/orientation.hpp"
@@ -195,6 +195,7 @@ void ui_update_params(UIState *s) {
   auto params = Params();
   s->scene.is_metric = params.getBool("IsMetric");
   s->scene.map_on_left = params.getBool("NavSettingLeftSide");
+  s->scene.onroadScreenOff = Params().getBool("OnroadScreenOff");
 }
 
 void UIState::updateStatus() {
@@ -229,7 +230,7 @@ UIState::UIState(QObject *parent) : QObject(parent) {
   sm = std::make_unique<SubMaster, const std::initializer_list<const char *>>({
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState", "roadCameraState",
     "pandaStates", "carParams", "driverMonitoringState", "sensorEvents", "carState", "liveLocationKalman",
-    "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "gnssMeasurements",
+    "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "gnssMeasurements", "longitudinalPlan",
   });
 
   Params params;
@@ -301,6 +302,13 @@ void Device::updateBrightness(const UIState &s) {
   int brightness = brightness_filter.update(clipped_brightness);
   if (!awake) {
     brightness = 0;
+  } else if (s.scene.onroadScreenOff) {
+      if (s.status == STATUS_WARNING || s.status == STATUS_ALERT) {
+        // I personal feel more comfortable to keep 0.4 second screen-on after warning and alert
+        interactive_timeout = 0.4 * UI_FREQ;
+      } else if (s.scene.started && interactive_timeout == 0 ) {
+        brightness = 0;
+      }
   }
 
   if (brightness != last_brightness) {

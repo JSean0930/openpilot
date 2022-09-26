@@ -24,6 +24,7 @@ from selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from selfdrive.controls.lib.latcontrol_indi import LatControlINDI
 from selfdrive.controls.lib.latcontrol_angle import LatControlAngle
 from selfdrive.controls.lib.latcontrol_torque import LatControlTorque
+from selfdrive.controls.lib.latcontrol_lqr import LatControlLQR
 from selfdrive.controls.lib.events import Events, ET
 from selfdrive.controls.lib.alertmanager import AlertManager, set_offroad_alert
 from selfdrive.controls.lib.vehicle_model import VehicleModel
@@ -104,7 +105,7 @@ class Controls:
         ignore += ['roadCameraState']
       self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                      'driverMonitoringState', 'longitudinalPlan', 'lateralPlan', 'liveLocationKalman',
-                                     'managerState', 'liveParameters', 'radarState'] + self.camera_packets + joystick_packet,
+                                     'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters'] + self.camera_packets + joystick_packet,
                                     ignore_alive=ignore, ignore_avg_freq=['radarState', 'longitudinalPlan'])
 
     # set alternative experiences from parameters
@@ -119,6 +120,7 @@ class Controls:
     # read params
     self.is_metric = params.get_bool("IsMetric")
     self.is_ldw_enabled = params.get_bool("IsLdwEnabled")
+    self.live_torque = params.get_bool("LiveTorque")
     openpilot_enabled_toggle = params.get_bool("OpenpilotEnabledToggle")
     passive = params.get_bool("Passive") or not openpilot_enabled_toggle
 
@@ -154,6 +156,8 @@ class Controls:
       self.LaC = LatControlPID(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'indi':
       self.LaC = LatControlINDI(self.CP, self.CI)
+    elif self.CP.lateralTuning.which() == 'lqr':
+      self.LaC = LatControlLQR(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI)
 
@@ -574,6 +578,12 @@ class Controls:
     sr = max(params.steerRatio, 0.1)
     self.VM.update_params(x, sr)
 
+    # Update Torque Params
+    if self.CP.lateralTuning.which() == 'torque':
+      torque_params = self.sm['liveTorqueParameters']
+      if self.sm.all_checks(['liveTorqueParameters']) and (torque_params.useParams or self.live_torque):
+        self.LaC.update_live_torque_params(torque_params.latAccelFactorFiltered, torque_params.latAccelOffsetFiltered, torque_params.frictionCoefficientFiltered)
+
     lat_plan = self.sm['lateralPlan']
     long_plan = self.sm['longitudinalPlan']
 
@@ -698,6 +708,7 @@ class Controls:
     hudControl.speedVisible = self.enabled
     hudControl.lanesVisible = self.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
+    hudControl.leadVelocity = self.sm['radarState'].leadOne.vLeadK if self.sm['longitudinalPlan'].hasLead else 0.0
 
     hudControl.rightLaneVisible = True
     hudControl.leftLaneVisible = True
@@ -796,6 +807,8 @@ class Controls:
       controlsState.lateralControlState.pidState = lac_log
     elif lat_tuning == 'torque':
       controlsState.lateralControlState.torqueState = lac_log
+    elif lat_tuning == 'lqr':
+      controlsState.lateralControlState.lqrState = lac_log
     elif lat_tuning == 'indi':
       controlsState.lateralControlState.indiState = lac_log
 

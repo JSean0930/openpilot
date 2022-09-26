@@ -82,6 +82,19 @@ function launch {
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1000 > /tmp/launch_log
 
+  if [ -f "$BASEDIR/prebuilt" ]; then
+    python /data/openpilot/common/spinner.py &
+  fi
+
+  python ./selfdrive/car/chrysler/values.py > /data/params/d/ChryslerCars
+  python ./selfdrive/car/honda/values.py > /data/params/d/HondaCars
+  python ./selfdrive/car/hyundai/values.py > /data/params/d/HyundaiCars
+  python ./selfdrive/car/subaru/values.py > /data/params/d/SubaruCars
+  python ./selfdrive/car/toyota/values.py > /data/params/d/ToyotaCars
+  python ./selfdrive/car/volkswagen/values.py > /data/params/d/VolkswagenCars
+
+  python ./force_car_recognition.py
+
   # start manager
   cd selfdrive/manager
   ./build.py && ./manager.py

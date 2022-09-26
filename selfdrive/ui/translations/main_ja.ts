@@ -108,152 +108,152 @@
 <context>
     <name>DevicePanel</name>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="100"/>
+        <location filename="../qt/offroad/settings.cc" line="101"/>
         <source>Dongle ID</source>
         <translation>ドングル番号 (Dongle ID)</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="100"/>
+        <location filename="../qt/offroad/settings.cc" line="101"/>
         <source>N/A</source>
         <translation>N/A</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="101"/>
+        <location filename="../qt/offroad/settings.cc" line="102"/>
         <source>Serial</source>
         <translation>シリアル番号</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="105"/>
+        <location filename="../qt/offroad/settings.cc" line="106"/>
         <source>Driver Camera</source>
         <translation>車内カメラ</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="105"/>
+        <location filename="../qt/offroad/settings.cc" line="106"/>
         <source>PREVIEW</source>
         <translation>見る</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="106"/>
+        <location filename="../qt/offroad/settings.cc" line="107"/>
         <source>Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)</source>
         <translation>車内カメラをプレビューして、ドライバー監視システムの視界を確認ができます。(車両の電源を切る必要があります)</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="110"/>
+        <location filename="../qt/offroad/settings.cc" line="111"/>
         <source>Reset Calibration</source>
         <translation>ｷｬﾘﾌﾞﾚｰｼｮﾝをﾘｾｯﾄ</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="110"/>
+        <location filename="../qt/offroad/settings.cc" line="111"/>
         <source>RESET</source>
         <translation>ﾘｾｯﾄ</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="113"/>
+        <location filename="../qt/offroad/settings.cc" line="114"/>
         <source>Are you sure you want to reset calibration?</source>
         <translation>ｷｬﾘﾌﾞﾚｰｼｮﾝをリセットしてもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="120"/>
+        <location filename="../qt/offroad/settings.cc" line="121"/>
         <source>Review Training Guide</source>
         <translation>入門書を見る</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="120"/>
+        <location filename="../qt/offroad/settings.cc" line="121"/>
         <source>REVIEW</source>
         <translation>見る</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="120"/>
+        <location filename="../qt/offroad/settings.cc" line="121"/>
         <source>Review the rules, features, and limitations of openpilot</source>
         <translation>openpilot の特徴を見る</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="122"/>
+        <location filename="../qt/offroad/settings.cc" line="123"/>
         <source>Are you sure you want to review the training guide?</source>
         <translation>入門書を見てもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="130"/>
+        <location filename="../qt/offroad/settings.cc" line="131"/>
         <source>Regulatory</source>
         <translation>認証情報</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="130"/>
+        <location filename="../qt/offroad/settings.cc" line="131"/>
         <source>VIEW</source>
         <translation>見る</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="138"/>
+        <location filename="../qt/offroad/settings.cc" line="139"/>
         <source>Change Language</source>
         <translation>言語を変更</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="138"/>
+        <location filename="../qt/offroad/settings.cc" line="139"/>
         <source>CHANGE</source>
         <translation>変更</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="142"/>
+        <location filename="../qt/offroad/settings.cc" line="143"/>
         <source>Select a language</source>
         <translation>言語を選択</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="162"/>
+        <location filename="../qt/offroad/settings.cc" line="163"/>
         <source>Reboot</source>
         <translation>再起動</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="167"/>
+        <location filename="../qt/offroad/settings.cc" line="168"/>
         <source>Power Off</source>
         <translation>電源を切る</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="187"/>
+        <location filename="../qt/offroad/settings.cc" line="188"/>
         <source>openpilot requires the device to be mounted within 4° left or right and within 5° up or 8° down. openpilot is continuously calibrating, resetting is rarely required.</source>
         <translation>openpilot は、左または右の4°以内、上の5°または下の8°以内にデバイスを取付ける必要があります。キャリブレーションを引き続きます、リセットはほとんど必要ありません。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="198"/>
+        <location filename="../qt/offroad/settings.cc" line="199"/>
         <source> Your device is pointed %1° %2 and %3° %4.</source>
         <translation> このデバイスは%2の%1°、%4の%3°に向けます。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="199"/>
+        <location filename="../qt/offroad/settings.cc" line="200"/>
         <source>down</source>
         <translation>下</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="199"/>
+        <location filename="../qt/offroad/settings.cc" line="200"/>
         <source>up</source>
         <translation>上</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="200"/>
+        <location filename="../qt/offroad/settings.cc" line="201"/>
         <source>left</source>
         <translation>左</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="200"/>
+        <location filename="../qt/offroad/settings.cc" line="201"/>
         <source>right</source>
         <translation>右</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="211"/>
+        <location filename="../qt/offroad/settings.cc" line="212"/>
         <source>Are you sure you want to reboot?</source>
         <translation>再起動してもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="218"/>
+        <location filename="../qt/offroad/settings.cc" line="219"/>
         <source>Disengage to Reboot</source>
         <translation>openpilot をキャンセルして再起動ができます</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="224"/>
+        <location filename="../qt/offroad/settings.cc" line="225"/>
         <source>Are you sure you want to power off?</source>
         <translation>シャットダウンしてもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="231"/>
+        <location filename="../qt/offroad/settings.cc" line="232"/>
         <source>Disengage to Power Off</source>
         <translation>openpilot をキャンセルしてシャットダウンができます</translation>
     </message>
@@ -297,6 +297,19 @@
         <location filename="../qt/offroad/driverview.cc" line="55"/>
         <source>camera starting</source>
         <translation>ｶﾒﾗを起動しています</translation>
+    </message>
+</context>
+<context>
+    <name>ForceCarRecognition</name>
+    <message>
+        <location filename="../qt/widgets/timpilot.cc" line="46"/>
+        <source>Back</source>
+        <translation type="unfinished">戻る</translation>
+    </message>
+    <message>
+        <location filename="../qt/widgets/timpilot.cc" line="57"/>
+        <source>[-Not selected-]</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -490,30 +503,30 @@ location set</source>
 <context>
     <name>NvgWindow</name>
     <message>
-        <location filename="../qt/onroad.cc" line="218"/>
+        <location filename="../qt/onroad.cc" line="219"/>
         <source>km/h</source>
         <translation>km/h</translation>
     </message>
     <message>
-        <location filename="../qt/onroad.cc" line="218"/>
+        <location filename="../qt/onroad.cc" line="219"/>
         <source>mph</source>
         <translation>mph</translation>
     </message>
     <message>
-        <location filename="../qt/onroad.cc" line="286"/>
-        <location filename="../qt/onroad.cc" line="289"/>
+        <location filename="../qt/onroad.cc" line="299"/>
+        <location filename="../qt/onroad.cc" line="302"/>
         <source>MAX</source>
         <translation>最高速度</translation>
     </message>
     <message>
-        <location filename="../qt/onroad.cc" line="333"/>
-        <location filename="../qt/onroad.cc" line="336"/>
+        <location filename="../qt/onroad.cc" line="346"/>
+        <location filename="../qt/onroad.cc" line="349"/>
         <source>SPEED</source>
         <translation>速度</translation>
     </message>
     <message>
-        <location filename="../qt/onroad.cc" line="339"/>
-        <location filename="../qt/onroad.cc" line="342"/>
+        <location filename="../qt/onroad.cc" line="352"/>
+        <location filename="../qt/onroad.cc" line="355"/>
         <source>LIMIT</source>
         <translation>制限速度</translation>
     </message>
@@ -634,8 +647,8 @@ location set</source>
     </message>
     <message>
         <location filename="../qt/util.cc" line="21"/>
-        <source>openpilot</source>
-        <translation>openpilot</translation>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
         <location filename="../qt/util.cc" line="82"/>
@@ -718,33 +731,38 @@ location set</source>
 <context>
     <name>SettingsWindow</name>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="332"/>
+        <location filename="../qt/offroad/settings.cc" line="333"/>
         <source>×</source>
         <translation>×</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="358"/>
+        <location filename="../qt/offroad/settings.cc" line="359"/>
         <source>Device</source>
         <translation>デバイス</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="359"/>
-        <location filename="../qt/offroad/settings.cc" line="398"/>
+        <location filename="../qt/offroad/settings.cc" line="360"/>
+        <location filename="../qt/offroad/settings.cc" line="400"/>
         <source>Network</source>
         <translation>ﾈｯﾄﾜｰｸ</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="360"/>
+        <location filename="../qt/offroad/settings.cc" line="361"/>
         <source>Toggles</source>
         <translation>切り替え</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="361"/>
+        <location filename="../qt/offroad/settings.cc" line="362"/>
         <source>Software</source>
         <translation>ｿﾌﾄｳｪｱ</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="366"/>
+        <location filename="../qt/offroad/settings.cc" line="363"/>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="368"/>
         <source>Navigation</source>
         <translation>ﾅﾋﾞｹﾞｰｼｮﾝ</translation>
     </message>
@@ -888,7 +906,7 @@ location set</source>
     </message>
     <message>
         <location filename="../qt/sidebar.cc" line="76"/>
-        <location filename="../qt/sidebar.cc" line="89"/>
+        <location filename="../qt/sidebar.cc" line="91"/>
         <source>ONLINE</source>
         <translation>オンライン</translation>
     </message>
@@ -898,49 +916,34 @@ location set</source>
         <translation>エラー</translation>
     </message>
     <message>
-        <location filename="../qt/sidebar.cc" line="80"/>
-        <location filename="../qt/sidebar.cc" line="83"/>
-        <location filename="../qt/sidebar.cc" line="85"/>
+        <location filename="../qt/sidebar.cc" line="81"/>
+        <location filename="../qt/sidebar.cc" line="84"/>
+        <location filename="../qt/sidebar.cc" line="87"/>
         <source>TEMP</source>
         <translation>温度</translation>
     </message>
     <message>
-        <location filename="../qt/sidebar.cc" line="80"/>
-        <source>HIGH</source>
-        <translation>高温</translation>
-    </message>
-    <message>
-        <location filename="../qt/sidebar.cc" line="83"/>
-        <source>GOOD</source>
-        <translation>最適</translation>
-    </message>
-    <message>
-        <location filename="../qt/sidebar.cc" line="85"/>
-        <source>OK</source>
-        <translation>OK</translation>
-    </message>
-    <message>
-        <location filename="../qt/sidebar.cc" line="89"/>
+        <location filename="../qt/sidebar.cc" line="91"/>
         <source>VEHICLE</source>
         <translation>車両</translation>
     </message>
     <message>
-        <location filename="../qt/sidebar.cc" line="91"/>
+        <location filename="../qt/sidebar.cc" line="93"/>
         <source>NO</source>
         <translation>NO</translation>
     </message>
     <message>
-        <location filename="../qt/sidebar.cc" line="91"/>
+        <location filename="../qt/sidebar.cc" line="93"/>
         <source>PANDA</source>
         <translation>PANDA</translation>
     </message>
     <message>
-        <location filename="../qt/sidebar.cc" line="93"/>
+        <location filename="../qt/sidebar.cc" line="95"/>
         <source>GPS</source>
         <translation>GPS</translation>
     </message>
     <message>
-        <location filename="../qt/sidebar.cc" line="93"/>
+        <location filename="../qt/sidebar.cc" line="95"/>
         <source>SEARCH</source>
         <translation>検索</translation>
     </message>
@@ -983,89 +986,89 @@ location set</source>
 <context>
     <name>SoftwarePanel</name>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="236"/>
+        <location filename="../qt/offroad/settings.cc" line="237"/>
         <source>Git Branch</source>
         <translation>Git ブランチ</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="237"/>
+        <location filename="../qt/offroad/settings.cc" line="238"/>
         <source>Git Commit</source>
         <translation>Git コミット</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="238"/>
+        <location filename="../qt/offroad/settings.cc" line="239"/>
         <source>OS Version</source>
         <translation>OS バージョン</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="239"/>
+        <location filename="../qt/offroad/settings.cc" line="240"/>
         <source>Version</source>
         <translation>バージョン</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="240"/>
+        <location filename="../qt/offroad/settings.cc" line="241"/>
         <source>Last Update Check</source>
         <translation>最終更新確認</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="240"/>
+        <location filename="../qt/offroad/settings.cc" line="241"/>
         <source>The last time openpilot successfully checked for an update. The updater only runs while the car is off.</source>
         <translation>openpilotが最後にアップデートの確認に成功してからの時間です。アップデート処理は、車の電源が切れているときのみ実行されます。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="241"/>
+        <location filename="../qt/offroad/settings.cc" line="242"/>
         <source>Check for Update</source>
         <translation>更新プログラムをチェック</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="246"/>
+        <location filename="../qt/offroad/settings.cc" line="247"/>
         <source>CHECKING</source>
         <translation>確認中</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="253"/>
+        <location filename="../qt/offroad/settings.cc" line="254"/>
         <source>Switch Branch</source>
         <translation>ブランチの切り替え</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="253"/>
+        <location filename="../qt/offroad/settings.cc" line="254"/>
         <source>ENTER</source>
         <translation>切替</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="253"/>
-        <location filename="../qt/offroad/settings.cc" line="255"/>
+        <location filename="../qt/offroad/settings.cc" line="254"/>
+        <location filename="../qt/offroad/settings.cc" line="256"/>
         <source>The new branch will be pulled the next time the updater runs.</source>
         <translation>updater を実行する時にブランチを切り替えます。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="255"/>
+        <location filename="../qt/offroad/settings.cc" line="256"/>
         <source>Enter branch name</source>
         <translation>ブランチ名を入力</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="266"/>
+        <location filename="../qt/offroad/settings.cc" line="267"/>
         <source>UNINSTALL</source>
         <translation>アンインストール</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="266"/>
+        <location filename="../qt/offroad/settings.cc" line="267"/>
         <source>Uninstall %1</source>
         <translation>%1をアンインストール</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="268"/>
+        <location filename="../qt/offroad/settings.cc" line="269"/>
         <source>Are you sure you want to uninstall?</source>
         <translation>アンインストールしてもよろしいですか？</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="285"/>
+        <location filename="../qt/offroad/settings.cc" line="286"/>
         <source>failed to fetch update</source>
         <translation>更新のﾀﾞｳﾝﾛｰﾄﾞにｴﾗｰが発生しました</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="286"/>
-        <location filename="../qt/offroad/settings.cc" line="307"/>
+        <location filename="../qt/offroad/settings.cc" line="287"/>
+        <location filename="../qt/offroad/settings.cc" line="308"/>
         <source>CHECK</source>
         <translation>確認</translation>
     </message>
@@ -1151,84 +1154,187 @@ location set</source>
     </message>
 </context>
 <context>
+    <name>TimpilotPanel</name>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="445"/>
+        <source>Select Car</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="467"/>
+        <source>Select your car</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="492"/>
+        <source>Quiet Drive</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="493"/>
+        <source>TOP will display alerts but only play the most important warning sounds. This feature can be toggled while the car is on.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="498"/>
+        <source>Driving Screen Off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="499"/>
+        <source>Turn off the device screen to protect the OLED panel after driving starts. It automatically brightens or turns on when a touch or event occurs.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="504"/>
+        <source>Stop And Go</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="505"/>
+        <source>Enabled the Stop And Go feature and get auto hold.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="510"/>
+        <source>Enable vision based turn control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="511"/>
+        <source>Use vision path predictions to estimate the appropriate speed to drive through turns ahead.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="516"/>
+        <source>Lat: Use Torque Controller</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="517"/>
+        <source>Experimental: use the new torque controller, please turn this off if you experience ping-pongs.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="522"/>
+        <source>Enable LiveTorque</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="523"/>
+        <source>Learn torque parameters live for each car as opposed to using platform average values, which improves lateral control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="528"/>
+        <source>Enable Door Auto Lock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="529"/>
+        <source>Enabled this to lock doors when drive above 25 km/h. Only work on some Toyota vehicles.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="534"/>
+        <source>Enable Door Auto Unlock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="535"/>
+        <source>Enabled this to unlock doors when shift to gear P. Only work on some Toyota vehicles.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="540"/>
+        <source>Upload Raw Logs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../qt/offroad/settings.cc" line="541"/>
+        <source>Upload full logs and full resolution video by default while on Wi-Fi. If not enabled, individual logs can be marked for upload at useradmin.comma.ai.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>TogglesPanel</name>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="34"/>
+        <location filename="../qt/offroad/settings.cc" line="35"/>
         <source>Enable openpilot</source>
         <translation>openpilot を有効化</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="35"/>
+        <location filename="../qt/offroad/settings.cc" line="36"/>
         <source>Use the openpilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature. Changing this setting takes effect when the car is powered off.</source>
         <translation>アダプティブクルーズコントロールとレーンキーピングドライバーアシスト（openpilotシステム）。この機能を使用するには、常に注意が必要です。この設定を変更すると、車の電源が切れたときに有効になります。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="40"/>
+        <location filename="../qt/offroad/settings.cc" line="41"/>
         <source>Enable Lane Departure Warnings</source>
         <translation>車線逸脱警報機能を有効化</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="41"/>
+        <location filename="../qt/offroad/settings.cc" line="42"/>
         <source>Receive alerts to steer back into the lane when your vehicle drifts over a detected lane line without a turn signal activated while driving over 31 mph (50 km/h).</source>
         <translation>時速31マイル（50km）を超えるスピードで走行中、方向指示器を作動させずに検出された車線ライン上に車両が触れた場合、車線に戻るアラートを受信します。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="46"/>
+        <location filename="../qt/offroad/settings.cc" line="47"/>
         <source>Use Metric System</source>
         <translation>メートル法を有効化</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="47"/>
+        <location filename="../qt/offroad/settings.cc" line="48"/>
         <source>Display speed in km/h instead of mph.</source>
         <translation>速度は mph ではなく km/h で表示されます。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="52"/>
+        <location filename="../qt/offroad/settings.cc" line="53"/>
         <source>Record and Upload Driver Camera</source>
         <translation>車内カメラの録画とアップロード</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="53"/>
+        <location filename="../qt/offroad/settings.cc" line="54"/>
         <source>Upload data from the driver facing camera and help improve the driver monitoring algorithm.</source>
         <translation>車内カメラの映像をアップロードし、ドライバー監視システムのアルゴリズムの向上に役立てます。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="58"/>
+        <location filename="../qt/offroad/settings.cc" line="59"/>
         <source>Disengage On Accelerator Pedal</source>
         <translation>ｱｸｾﾙ踏むと openpilot をｷｬﾝｾﾙ</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="59"/>
+        <location filename="../qt/offroad/settings.cc" line="60"/>
         <source>When enabled, pressing the accelerator pedal will disengage openpilot.</source>
         <translation>有効な場合は、アクセルを踏むと openpilot をキャンセルします。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="65"/>
+        <location filename="../qt/offroad/settings.cc" line="66"/>
         <source>Show ETA in 24h Format</source>
         <translation>24時間表示</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="66"/>
+        <location filename="../qt/offroad/settings.cc" line="67"/>
         <source>Use 24h format instead of am/pm</source>
         <translation>AM/PM の代わりに24時間形式を使用します</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="71"/>
+        <location filename="../qt/offroad/settings.cc" line="72"/>
         <source>Show Map on Left Side of UI</source>
         <translation>ﾃﾞｨｽﾌﾟﾚｲの左側にﾏｯﾌﾟを表示</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="72"/>
+        <location filename="../qt/offroad/settings.cc" line="73"/>
         <source>Show map on left side when in split screen view.</source>
         <translation>分割画面表示の場合、ディスプレイの左側にマップを表示します。</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="84"/>
+        <location filename="../qt/offroad/settings.cc" line="85"/>
         <source>openpilot Longitudinal Control</source>
         <translation>openpilot 縦方向制御</translation>
     </message>
     <message>
-        <location filename="../qt/offroad/settings.cc" line="85"/>
+        <location filename="../qt/offroad/settings.cc" line="86"/>
         <source>openpilot will disable the car&apos;s radar and will take over control of gas and brakes. Warning: this disables AEB!</source>
         <translation>openpilot は、車のレーダーを無効化し、アクセルとブレーキの制御を引き継ぎます。注意：AEB を無効化にします！</translation>
     </message>
