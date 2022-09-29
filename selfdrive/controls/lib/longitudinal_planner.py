@@ -8,6 +8,7 @@ from common.conversions import Conversions as CV
 from common.filter_simple import FirstOrderFilter
 from common.realtime import DT_MDL
 from selfdrive.modeld.constants import T_IDXS
+from selfdrive.car.toyota.values import TSS2_CAR
 from selfdrive.controls.lib.longcontrol import LongCtrlState
 from selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
 from selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
@@ -18,16 +19,25 @@ from system.swaglog import cloudlog
 LON_MPC_STEP = 0.2  # first step is 0.2s
 AWARENESS_DECEL = -0.2  # car smoothly decel at .2m/s^2 when user is distracted
 A_CRUISE_MIN = -1.2
-A_CRUISE_MAX_VALS = [2.0, 1.2, 0.7, 0.6]  # Sets the limits of the planner accel, PID may exceed
-A_CRUISE_MAX_BP = [0., 10., 25., 40.]
+A_CRUISE_MAX_VALS = [1.2, 1.2, 0.8, 0.6]
+A_CRUISE_MAX_BP = [0., 15., 25., 40.]
 
 # Lookup table for turns
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
 
-def get_max_accel(v_ego):
-  return interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
+def get_max_accel(v_ego, CP):
+  if CP.carName == "toyota":
+    if CP.carFingerprint in TSS2_CAR:
+      a_cruise_max_vals = [1.4, 1.2, 0.7, 0.6]  # Sets the limits of the planner accel, PID may exceed
+      a_cruise_max_bp = [0., 10., 25., 40.]
+    else:
+      a_cruise_max_vals = [2.0, 1.2, 0.7, 0.6]  # Sets the limits of the planner accel, PID may exceed
+      a_cruise_max_bp = [0., 10., 25., 40.]
+    return interp(v_ego, a_cruise_max_bp, a_cruise_max_vals)
+  else:
+    return interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
 
 
 def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
@@ -90,7 +100,7 @@ class Planner:
     self.cruise_source, a_min_sol, v_cruise_sol = self.cruise_solutions(not reset_state, self.v_desired_filter.x,
                                                                         self.a_desired, v_cruise, sm)
 
-    accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
+    accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego, self.CP)]
     accel_limits_turns = limit_accel_in_turns(v_ego, sm['carState'].steeringAngleDeg, accel_limits, self.CP)
     if force_slow_decel:
       # if required so, force a smooth deceleration
