@@ -46,8 +46,9 @@ def manager_init() -> None:
     ("IsLdwEnabled", "1"),
     ("IsMetric", "1"),
     ("EndToEndToggle", "1"),
-    ("LQR", "0"),
     ("TurnVisionControl", "1"),
+    ("EnableTorqueController", "1"),
+    ("LiveTorque", "1"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))

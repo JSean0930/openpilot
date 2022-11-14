@@ -14,7 +14,6 @@ class CarController:
     self.hud_count = 0
     self.car_fingerprint = CP.carFingerprint
     self.gone_fast_yet = False
-    self.steer_rate_limited = False
 
     self.packer = CANPacker(dbc_name)
 
@@ -41,8 +40,6 @@ class CarController:
 
     if not lkas_active:
       apply_steer = 0
-
-    self.apply_steer_last = apply_steer
 
     can_sends = []
 

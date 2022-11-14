@@ -25,6 +25,8 @@ class CarInterface(CarInterfaceBase):
     ret.carName = "volkswagen"
     ret.radarOffCan = True
 
+    ret.dashcamOnly = True
+
     if True:  # pylint: disable=using-constant-test
       # Set global MQB parameters
       ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.volkswagen)]
@@ -163,7 +165,6 @@ class CarInterface(CarInterfaceBase):
     buttonEvents = []
 
     ret = self.CS.update(self.cp, self.cp_cam, self.cp_ext, self.CP.transmissionType)
-    ret.steeringRateLimited = self.CC.steer_rate_limited if self.CC is not None else False
 
     # Check for and process state-change events (button press or release) from
     # the turn stalk switch or ACC steering wheel/control stalk buttons.

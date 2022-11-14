@@ -15,6 +15,7 @@ public:
   static std::string get_os_version() { return "openpilot for PC"; }
   static bool PC() { return true; }
   static bool TICI() { return util::getenv("TICI", 0) == 1; }
+  static bool AGNOS() { return util::getenv("TICI", 0) == 1; }
 };
 #define Hardware HardwarePC
 #endif

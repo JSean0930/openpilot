@@ -12,6 +12,8 @@ class CarInterface(CarInterfaceBase):
     ret.carName = "chrysler"
     ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.chrysler)]
 
+    ret.dashcamOnly = True
+
     # Speed conversion:              20, 45 mph
     ret.wheelbase = 3.089  # in meters for Pacifica Hybrid 2017
     ret.steerRatio = 16.2  # Pacifica Hybrid 2017
@@ -48,8 +50,6 @@ class CarInterface(CarInterfaceBase):
   # returns a car.CarState
   def _update(self, c):
     ret = self.CS.update(self.cp, self.cp_cam)
-
-    ret.steeringRateLimited = self.CC.steer_rate_limited if self.CC is not None else False
 
     # events
     events = self.create_common_events(ret, extra_gears=[car.CarState.GearShifter.low])

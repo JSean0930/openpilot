@@ -16,6 +16,7 @@ VisualAlert = car.CarControl.HUDControl.VisualAlert
 
 STEER_FAULT_MAX_RATE = 100
 STEER_FAULT_MAX_FRAMES = 19
+
 GearShifter = car.CarState.GearShifter
 UNLOCK_CMD = b'\x40\x05\x30\x11\x00\x40\x00\x00'
 LOCK_CMD = b'\x40\x05\x30\x11\x00\x80\x00\x00'
@@ -30,7 +31,6 @@ class CarController:
     self.alert_active = False
     self.last_standstill = False
     self.standstill_req = False
-    self.steer_rate_limited = False
     self.last_off_frame = 0
     self.permit_braking = True
     self.rate_limit_counter = 0
@@ -73,7 +73,6 @@ class CarController:
     # steer torque
     new_steer = int(round(actuators.steer * CarControllerParams.STEER_MAX))
     apply_steer = apply_toyota_steer_torque_limits(new_steer, self.last_steer, CS.out.steeringTorqueEps, self.torque_rate_limits)
-    self.steer_rate_limited = new_steer != apply_steer
 
     # EPS_STATUS->LKA_STATE either goes to 21 or 25 on rising edge of a steering fault and
     # the value seems to describe how many frames the steering rate was above 100 deg/s, so
@@ -133,6 +132,7 @@ class CarController:
     # sending it at 100Hz seem to allow a higher rate limit, as the rate limit seems imposed
     # on consecutive messages
     can_sends.append(create_steer_command(self.packer, apply_steer, apply_steer_req, self.frame))
+
     if self.frame % 2 == 0 and self.CP.carFingerprint in TSS2_CAR:
       can_sends.append(create_lta_steer_command(self.packer, 0, 0, self.frame // 2))
 
@@ -144,8 +144,6 @@ class CarController:
     # record frames
     if not CC.enabled:
       self.last_off_frame = self.frame
-    if CS.out.gasPressed:
-      self.last_gas_press_frame = self.frame
 
     # Handle permit braking logic
     if (actuators.accel > 0.35) or not CC.enabled or (0.5 / DT_CTRL > (self.frame - self.last_off_frame) and not lead_vehicle_stopped):
@@ -155,7 +153,7 @@ class CarController:
 
     # we can spam can to cancel the system even if we are using lat only control
     if (self.frame % 3 == 0 and self.CP.openpilotLongitudinalControl) or pcm_cancel_cmd:
-      lead = hud_control.leadVisible or (CS.out.vEgo < 12. and (not CS.out.standstill or CC.enabled))  # at low speed we always assume the lead is present so ACC can be engaged
+      lead = hud_control.leadVisible or CS.out.vEgo < 12.  # at low speed we always assume the lead is present so ACC can be engaged
 
       # Lexus IS uses a different cancellation message
       if pcm_cancel_cmd and self.CP.carFingerprint in (CAR.LEXUS_IS, CAR.LEXUS_RC):
@@ -172,28 +170,29 @@ class CarController:
       can_sends.append(create_gas_interceptor_command(self.packer, interceptor_gas_cmd, self.frame // 2))
       self.gas = interceptor_gas_cmd
 
-    # ui mesg is at 1Hz but we send asap if:
-    # - there is something to display
-    # - there is something to stop displaying
-    fcw_alert = hud_control.visualAlert == VisualAlert.fcw
-    steer_alert = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw)
+    if self.CP.carFingerprint != CAR.PRIUS_V:
+      # ui mesg is at 1Hz but we send asap if:
+      # - there is something to display
+      # - there is something to stop displaying
+      fcw_alert = hud_control.visualAlert == VisualAlert.fcw
+      steer_alert = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw)
 
-    send_ui = False
-    if ((fcw_alert or steer_alert) and not self.alert_active) or \
-       (not (fcw_alert or steer_alert) and self.alert_active):
-      send_ui = True
-      self.alert_active = not self.alert_active
-    elif pcm_cancel_cmd:
-      # forcing the pcm to disengage causes a bad fault sound so play a good sound instead
-      send_ui = True
+      send_ui = False
+      if ((fcw_alert or steer_alert) and not self.alert_active) or \
+         (not (fcw_alert or steer_alert) and self.alert_active):
+        send_ui = True
+        self.alert_active = not self.alert_active
+      elif pcm_cancel_cmd:
+        # forcing the pcm to disengage causes a bad fault sound so play a good sound instead
+        send_ui = True
 
-    if (self.frame % 100 == 0 or send_ui) and (self.CP.carFingerprint != CAR.PRIUS_V):
-      can_sends.append(create_ui_command(self.packer, steer_alert, pcm_cancel_cmd, hud_control.leftLaneVisible,
-                                         hud_control.rightLaneVisible, hud_control.leftLaneDepart,
-                                         hud_control.rightLaneDepart, CC.enabled))
+      if self.frame % 100 == 0 or send_ui:
+        can_sends.append(create_ui_command(self.packer, steer_alert, pcm_cancel_cmd, hud_control.leftLaneVisible,
+                                           hud_control.rightLaneVisible, hud_control.leftLaneDepart,
+                                           hud_control.rightLaneDepart, CC.enabled))
 
-    if (self.frame % 100 == 0 or send_ui) and self.CP.enableDsu:
-      can_sends.append(create_fcw_command(self.packer, fcw_alert))
+      if (self.frame % 100 == 0 or send_ui) and self.CP.enableDsu:
+        can_sends.append(create_fcw_command(self.packer, fcw_alert))
 
     # *** static msgs ***
     for addr, cars, bus, fr_step, vl in STATIC_DSU_MSGS:

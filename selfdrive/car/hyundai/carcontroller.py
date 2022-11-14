@@ -43,7 +43,6 @@ class CarController:
 
     self.apply_steer_last = 0
     self.car_fingerprint = CP.carFingerprint
-    self.steer_rate_limited = False
     self.last_resume_frame = 0
     self.accel = 0
 
@@ -55,7 +54,6 @@ class CarController:
     # Steering Torque
     new_steer = int(round(actuators.steer * self.params.STEER_MAX))
     apply_steer = apply_std_steer_torque_limits(new_steer, self.apply_steer_last, CS.out.steeringTorque, self.params)
-    self.steer_rate_limited = new_steer != apply_steer
 
     if not CC.latActive:
       apply_steer = 0

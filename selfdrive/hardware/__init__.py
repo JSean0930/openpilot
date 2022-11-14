@@ -8,6 +8,7 @@ from selfdrive.hardware.pc.hardware import Pc
 
 EON = os.path.isfile('/EON')
 TICI = os.path.isfile('/TICI')
+AGNOS = os.path.isfile('/AGNOS')
 PC = not (EON or TICI)
 
 

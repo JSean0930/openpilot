@@ -20,7 +20,7 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = [get_safety_config(car.CarParams.SafetyModel.subaru)]
       ret.enableBsm = 0x228 in fingerprint[0]
 
-    ret.dashcamOnly = candidate in PREGLOBAL_CARS
+    ret.dashcamOnly = True
 
     ret.steerLimitTimer = 0.4
 
@@ -109,8 +109,6 @@ class CarInterface(CarInterfaceBase):
   def _update(self, c):
 
     ret = self.CS.update(self.cp, self.cp_cam)
-
-    ret.steeringRateLimited = self.CC.steer_rate_limited if self.CC is not None else False
 
     ret.events = self.create_common_events(ret).to_msg()
 

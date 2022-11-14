@@ -9,6 +9,13 @@ source "$BASEDIR/launch_env.sh"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 function two_init {
+
+  dt=$(date +%s)
+
+  if [ $dt -le 1658278800 ]; then
+    date -s 'Wednesday, July 20, 2022 9:00:00 AM GMT+08:00' >/dev/null 2>&1
+  fi
+
   mount -o remount,rw /system
   if [ ! -f /ONEPLUS ] && ! $(grep -q "letv" /proc/cmdline); then
     sed -i -e 's#/dev/input/event1#/dev/input/event2#g' ~/.bash_profile
@@ -57,6 +64,10 @@ function two_init {
 
   # +50mW offroad, +500mW onroad for 30% more RAM bandwidth
   echo "performance" > /sys/class/devfreq/soc:qcom,cpubw/governor
+  # available freq:
+  # 192000000 307200000 384000000 441600000 537600000 614400000 691200000
+  # 768000000 844800000 902400000 979200000 "1056000000" 1132800000
+  # 1190400000 1286400000 1363200000 1440000000 1516800000 1593600000
   echo 1056000 > /sys/class/devfreq/soc:qcom,m4m/max_freq
   echo "performance" > /sys/class/devfreq/soc:qcom,m4m/governor
 
@@ -105,8 +116,60 @@ function two_init {
   # wifi scan
   wpa_cli IFNAME=wlan0 SCAN
 
+  # install missing libs
+  LIB_PATH="/data/openpilot/selfdrive/hardware/eon/libs"
+  PY_LIB_DEST="/system/comma/usr/lib/python3.8/site-packages"
+  mount -o remount,rw /system
+  # mapd
+  if [ ! -f "/system/comma/usr/lib/libgfortran.so.5.0.0" ]; then
+    echo "Installing libgfortran..."
+    tar -zxvf "$LIB_PATH/libgfortran.tar.gz" -C /system/comma/usr/lib/
+  fi
+  # mapd
+  MODULE="opspline"
+  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
+    echo "Installing $MODULE..."
+    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
+  fi
+  MODULE="overpy"
+  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
+    echo "Installing $MODULE..."
+    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
+  fi
+  # laika
+  MODULE="hatanaka"
+  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
+    echo "Installing $MODULE..."
+    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
+  fi
+  if [ ! -f "$PY_LIB_DEST/ncompress.cpython-38.so" ]; then
+    echo "Installing ncompress.cpython-38.so..."
+    cp -f "$LIB_PATH/ncompress.cpython-38.so" "$PY_LIB_DEST/"
+  fi
+  MODULE="importlib_resources"
+  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
+    echo "Installing $MODULE..."
+    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
+  fi
+  if [ ! -f "$PY_LIB_DEST/zipp.py" ]; then
+    echo "Installing zipp.py..."
+    cp -f "$LIB_PATH/zipp.py" "$PY_LIB_DEST/"
+  fi
+  # updated
+  MODULE="markdown_it"
+  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
+    echo "Installing $MODULE..."
+    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
+  fi
+  MODULE="mdurl"
+  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
+    echo "Installing $MODULE..."
+    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
+  fi
+  mount -o remount,r /system
+
   # Check for NEOS update
-  if [ -f /LEECO ] && [ $(< /VERSION) != "$REQUIRED_NEOS_VERSION" ]; then
+  if [ -f /LEECO ] && [ $(< /VERSION) != "$NEOS_VERSION" ]; then
     echo "Installing NEOS update"
     NEOS_PY="$DIR/selfdrive/hardware/eon/neos.py"
     MANIFEST="$DIR/selfdrive/hardware/eon/neos.json"
@@ -125,9 +188,14 @@ function two_init {
       echo "restart" > /sys/kernel/debug/msm_subsys/slpi &&
       sleep 5  # Give Android sensor subsystem a moment to recover
   fi
+
+  # make sure we have the latest os version number.
+  mount -o remount,rw /system
+  echo -n "$NEOS_VERSION" > /VERSION
+  mount -o remount,r /system
 }
 
-function tici_init {
+function agnos_init {
   # wait longer for weston to come up
   if [ -f "$BASEDIR/prebuilt" ]; then
     sleep 3
@@ -167,10 +235,10 @@ function launch {
   #    that completed successfully and synced to disk.
 
   if [ -f "${BASEDIR}/.overlay_init" ]; then
-    find ${BASEDIR}/.git -newer ${BASEDIR}/.overlay_init | grep -q '.' 2> /dev/null
-    if [ $? -eq 0 ]; then
-      echo "${BASEDIR} has been modified, skipping overlay update installation"
-    else
+#    find ${BASEDIR}/.git -newer ${BASEDIR}/.overlay_init | grep -q '.' 2> /dev/null
+#    if [ $? -eq 0 ]; then
+#      echo "${BASEDIR} has been modified, skipping overlay update installation"
+#    else
       if [ -f "${STAGING_ROOT}/finalized/.overlay_consistent" ]; then
         if [ ! -d /data/safe_staging/old_openpilot ]; then
           echo "Valid overlay update found, installing"
@@ -181,7 +249,7 @@ function launch {
           cd $BASEDIR
 
           echo "Restarting launch script ${LAUNCHER_LOCATION}"
-          unset REQUIRED_NEOS_VERSION
+          unset NEOS_VERSION
           unset AGNOS_VERSION
           exec "${LAUNCHER_LOCATION}"
         else
@@ -189,7 +257,7 @@ function launch {
           # TODO: restore backup? This means the updater didn't start after swapping
         fi
       fi
-    fi
+#    fi
   fi
 
   # handle pythonpath
@@ -206,14 +274,8 @@ function launch {
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1000 > /tmp/launch_log
 
-  if [ -f "$BASEDIR/prebuilt" ]; then
-    python /data/openpilot/common/spinner.py &
-  fi
-
-  python ./selfdrive/car/hyundai/values.py > /data/params/d/HyundaiCars
-  python ./selfdrive/car/honda/values.py > /data/params/d/HondaCars
+  # This fork only supports Toyota vehicles
   python ./selfdrive/car/toyota/values.py > /data/params/d/ToyotaCars
-  python ./selfdrive/car/subaru/values.py > /data/params/d/SubaruCars
 
   python ./force_car_recognition.py
 

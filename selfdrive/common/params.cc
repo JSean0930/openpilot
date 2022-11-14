@@ -139,7 +139,8 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"LastUpdateException", CLEAR_ON_MANAGER_START},
     {"LastUpdateTime", PERSISTENT},
     {"LiveParameters", PERSISTENT},
-    {"LQR", PERSISTENT},
+    {"LiveTorqueCarParams", PERSISTENT},
+    {"LiveTorqueParameters", PERSISTENT | DONT_LOG},
     {"NavDestination", CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_OFF},
     {"NavSettingTime24h", PERSISTENT},
     {"NavdRender", PERSISTENT},
@@ -186,6 +187,8 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"Offroad_UpdateFailed", CLEAR_ON_MANAGER_START},
     {"toyotaautolock", PERSISTENT},
     {"toyotaautounlock", PERSISTENT},
+    {"EnableTorqueController", PERSISTENT},
+    {"LiveTorque", PERSISTENT},
     {"dp_jetson", PERSISTENT},
 };
 

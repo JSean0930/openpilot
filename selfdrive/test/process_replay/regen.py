@@ -262,11 +262,11 @@ def regen_segment(lr, frs=None, outdir=FAKEDATA):
   return seg_path
 
 
-def regen_and_save(route, sidx, upload=False, use_route_meta=False):
+def regen_and_save(route, sidx, upload=False, use_route_meta=True):
   if use_route_meta:
-    r = Route(args.route)
-    lr = LogReader(r.log_paths()[args.seg])
-    fr = FrameReader(r.camera_paths()[args.seg])
+    r = Route(route)
+    lr = LogReader(r.log_paths()[sidx])
+    fr = FrameReader(r.camera_paths()[sidx])
   else:
     lr = LogReader(f"cd:/{route.replace('|', '/')}/{sidx}/rlog")
     fr = FrameReader(f"cd:/{route.replace('|', '/')}/{sidx}/fcamera.hevc")

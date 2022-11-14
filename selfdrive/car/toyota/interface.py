@@ -4,14 +4,12 @@ from common.numpy_fast import interp
 from common.conversions import Conversions as CV
 from common.params import Params
 from panda import Panda
-from selfdrive.controls.lib.latcontrol_torque import set_torque_tune
 from selfdrive.car.toyota.tunes import LatTunes, LongTunes, set_long_tune, set_lat_tune
 from selfdrive.car.toyota.values import Ecu, CAR, ToyotaFlags, TSS2_CAR, RADAR_ACC_CAR, NO_DSU_CAR, MIN_ACC_SPEED, EPS_SCALE, EV_HYBRID_CAR, CarControllerParams
 from selfdrive.car import STD_CARGO_KG, scale_rot_inertia, scale_tire_stiffness, gen_empty_fingerprint, get_safety_config
 from selfdrive.car.interfaces import CarInterfaceBase
 
 EventName = car.CarEvent.EventName
-
 
 class CarInterface(CarInterfaceBase):
   def __init__(self, CP, CarController, CarState):
@@ -46,12 +44,8 @@ class CarInterface(CarInterfaceBase):
     ret.stoppingControl = False  # Toyota starts braking more when it thinks you want to stop
 
     stop_and_go = False
-    torque_params = CarInterfaceBase.get_torque_params(candidate)
     steering_angle_deadzone_deg = 0.0
-    set_torque_tune(ret.lateralTuning, torque_params['LAT_ACCEL_FACTOR'], torque_params['FRICTION'], steering_angle_deadzone_deg)
-
-    params = Params()
-    LQR = params.get_bool("LQR")
+    CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning, steering_angle_deadzone_deg)
 
     if candidate == CAR.PRIUS:
       stop_and_go = True
@@ -63,26 +57,16 @@ class CarInterface(CarInterfaceBase):
       for fw in car_fw:
         if fw.ecu == "eps" and not fw.fwVersion == b'8965B47060\x00\x00\x00\x00\x00\x00':
           steering_angle_deadzone_deg = 1.0
-          set_torque_tune(ret.lateralTuning, torque_params['LAT_ACCEL_FACTOR'], torque_params['FRICTION'], steering_angle_deadzone_deg)
+          CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning, steering_angle_deadzone_deg)
 
-    elif candidate == CAR.PRIUS_V and not LQR:
+    elif candidate == CAR.PRIUS_V:
       stop_and_go = True
       ret.wheelbase = 2.78
       ret.steerRatio = 18.1
       tire_stiffness_factor = 0.5533
       ret.mass = 3340. * CV.LB_TO_KG + STD_CARGO_KG
-      ret.maxLateralAccel = 2.3
-      set_lat_tune(ret.lateralTuning, LatTunes.TORQUE, MAX_LAT_ACCEL=ret.maxLateralAccel, FRICTION=0.038)
       ret.wheelSpeedFactor = 1.09
-
-    elif candidate == CAR.PRIUS_V and LQR:
-      stop_and_go = True
-      ret.wheelbase = 2.78
-      ret.steerRatio = 18.1
-      tire_stiffness_factor = 0.5533
-      ret.mass = 3340. * CV.LB_TO_KG + STD_CARGO_KG
       set_lat_tune(ret.lateralTuning, LatTunes.LQR_PV)
-      ret.wheelSpeedFactor = 1.09
 
     elif candidate in (CAR.RAV4, CAR.RAV4H):
       stop_and_go = True if (candidate in CAR.RAV4H) else False
@@ -147,13 +131,20 @@ class CarInterface(CarInterfaceBase):
       ret.steerRatio = 14.3
       tire_stiffness_factor = 0.7933
       ret.mass = 3585. * CV.LB_TO_KG + STD_CARGO_KG  # Average between ICE and Hybrid
-      set_lat_tune(ret.lateralTuning, LatTunes.PID_D)
+      ret.lateralTuning.init('pid')
+      ret.lateralTuning.pid.kiBP = [0.0]
+      ret.lateralTuning.pid.kpBP = [0.0]
+      ret.lateralTuning.pid.kpV = [0.6]
+      ret.lateralTuning.pid.kiV = [0.1]
+      ret.lateralTuning.pid.kf = 0.00007818594
 
       # 2019+ RAV4 TSS2 uses two different steering racks and specific tuning seems to be necessary.
       # See https://github.com/commaai/openpilot/pull/21429#issuecomment-873652891
       for fw in car_fw:
         if fw.ecu == "eps" and (fw.fwVersion.startswith(b'\x02') or fw.fwVersion in [b'8965B42181\x00\x00\x00\x00\x00\x00']):
-          set_lat_tune(ret.lateralTuning, LatTunes.PID_I)
+          ret.lateralTuning.pid.kpV = [0.15]
+          ret.lateralTuning.pid.kiV = [0.05]
+          ret.lateralTuning.pid.kf = 0.00004
           break
 
     elif candidate in (CAR.COROLLA_TSS2, CAR.COROLLAH_TSS2):
@@ -226,6 +217,9 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 4305. * CV.LB_TO_KG + STD_CARGO_KG
       set_lat_tune(ret.lateralTuning, LatTunes.PID_J)
 
+    if Params().get_bool("EnableTorqueController"):
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning, steering_angle_deadzone_deg)
+
     ret.centerToFront = ret.wheelbase * 0.44
 
     # TODO: get actual value, for now starting with reasonable value for
@@ -259,17 +253,10 @@ class CarInterface(CarInterfaceBase):
     # to a negative value, so it won't matter.
     ret.minEnableSpeed = -1. if (stop_and_go or ret.enableGasInterceptor) else MIN_ACC_SPEED
 
-    if ret.enableGasInterceptor:
-      set_long_tune(ret.longitudinalTuning, LongTunes.PEDAL)
-    elif candidate in TSS2_CAR:
+    if candidate in TSS2_CAR or ret.enableGasInterceptor:
       set_long_tune(ret.longitudinalTuning, LongTunes.TSS2)
-      ret.stoppingDecelRate = 0.3  # reach stopping target smoothly
-      # Improved longitudinal tune settings from sshane
-      # ret.vEgoStopping = 0.2  # car is near 0.1 to 0.2 when car starts requesting stopping accel
-      # ret.vEgoStarting = 0.2  # needs to be > or == vEgoStopping
-      # ret.stoppingDecelRate = 0.4  # reach stopping target smoothly - seems to take 0.5 seconds to go from 0 to -0.4
-      # ret.longitudinalActuatorDelayLowerBound = 0.3
-      # ret.longitudinalActuatorDelayUpperBound = 0.3
+      if candidate in TSS2_CAR:
+        ret.stoppingDecelRate = 0.3 # reach stopping target smoothly
     else:
       set_long_tune(ret.longitudinalTuning, LongTunes.TSS)
 
@@ -291,8 +278,6 @@ class CarInterface(CarInterfaceBase):
         ret.cruiseState.speed = 24 * CV.KPH_TO_MS
     else:
       self.low_cruise_speed = 0.
-
-    ret.steeringRateLimited = self.CC.steer_rate_limited if self.CC is not None else False
 
     # events
     events = self.create_common_events(ret)

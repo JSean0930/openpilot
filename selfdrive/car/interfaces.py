@@ -2,27 +2,54 @@ import yaml
 import os
 import time
 from abc import abstractmethod, ABC
-from typing import Any, Dict, Tuple, List
+from typing import Dict, Tuple, List, Callable
 
 from cereal import car
 from common.basedir import BASEDIR
 from common.conversions import Conversions as CV
 from common.kalman.simple_kalman import KF1D
+from common.numpy_fast import interp
 from common.realtime import DT_CTRL
 from selfdrive.car import gen_empty_fingerprint
-from selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX
+from selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, apply_deadzone
 from selfdrive.controls.lib.events import Events
 from selfdrive.controls.lib.vehicle_model import VehicleModel
 
 GearShifter = car.CarState.GearShifter
 EventName = car.CarEvent.EventName
+TorqueFromLateralAccelCallbackType = Callable[[float, car.CarParams.LateralTorqueTuning, float, float, bool], float]
 
 MAX_CTRL_SPEED = (V_CRUISE_MAX + 4) * CV.KPH_TO_MS
 ACCEL_MAX = 2.0
 ACCEL_MIN = -3.5
+FRICTION_THRESHOLD = 0.3
 TORQUE_PARAMS_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/params.yaml')
 TORQUE_OVERRIDE_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/override.yaml')
 TORQUE_SUBSTITUTE_PATH = os.path.join(BASEDIR, 'selfdrive/car/torque_data/substitute.yaml')
+
+
+def get_torque_params(candidate):
+  with open(TORQUE_SUBSTITUTE_PATH) as f:
+    sub = yaml.load(f, Loader=yaml.Loader)
+  if candidate in sub:
+    candidate = sub[candidate]
+
+  with open(TORQUE_PARAMS_PATH) as f:
+    params = yaml.load(f, Loader=yaml.Loader)
+  with open(TORQUE_OVERRIDE_PATH) as f:
+    override = yaml.load(f, Loader=yaml.Loader)
+
+  # Ensure no overlap
+  if sum([candidate in x for x in [sub, params, override]]) > 1:
+    raise RuntimeError(f'{candidate} is defined twice in torque config')
+
+  if candidate in override:
+    out = override[candidate]
+  elif candidate in params:
+    out = params[candidate]
+  else:
+    raise NotImplementedError(f"Did not find torque params for {candidate}")
+  return {key: out[i] for i, key in enumerate(params['legend'])}
 
 
 # generic car and radar interfaces
@@ -75,11 +102,26 @@ class CarInterfaceBase(ABC):
   def get_steer_feedforward_function(self):
     return self.get_steer_feedforward_default
 
+  @staticmethod
+  def torque_from_lateral_accel_linear(lateral_accel_value, torque_params, lateral_accel_error, lateral_accel_deadzone, friction_compensation):
+    # The default is a linear relationship between torque and lateral acceleration (accounting for road roll and steering friction)
+    friction_interp = interp(
+      apply_deadzone(lateral_accel_error, lateral_accel_deadzone),
+      [-FRICTION_THRESHOLD, FRICTION_THRESHOLD],
+      [-torque_params.friction, torque_params.friction]
+    )
+    friction = friction_interp if friction_compensation else 0.0
+    return (lateral_accel_value / torque_params.latAccelFactor) + friction
+
+  def torque_from_lateral_accel(self) -> TorqueFromLateralAccelCallbackType:
+    return self.torque_from_lateral_accel_linear
+
   # returns a set of default params to avoid repetition in car specific params
   @staticmethod
   def get_std_params(candidate, fingerprint):
     ret = car.CarParams.new_message()
     ret.carFingerprint = candidate
+    ret.maxLateralAccel = get_torque_params(candidate)['MAX_LAT_ACCEL_MEASURED']
 
     # standard ALC params
     ret.steerControlType = car.CarParams.SteerControlType.torque
@@ -109,26 +151,18 @@ class CarInterfaceBase(ABC):
     return ret
 
   @staticmethod
-  def get_torque_params(candidate, default=float('NaN')):
-    with open(TORQUE_SUBSTITUTE_PATH) as f:
-      sub = yaml.load(f, Loader=yaml.FullLoader)
-    if candidate in sub:
-      candidate = sub[candidate]
+  def configure_torque_tune(candidate, tune, steering_angle_deadzone_deg=0.0, use_steering_angle=True):
+    params = get_torque_params(candidate)
 
-    with open(TORQUE_PARAMS_PATH) as f:
-      params = yaml.load(f, Loader=yaml.FullLoader)
-    with open(TORQUE_OVERRIDE_PATH) as f:
-      params_override = yaml.load(f, Loader=yaml.FullLoader)
-
-    assert len(set(sub.keys()) & set(params.keys()) & set(params_override.keys())) == 0
-
-    if candidate in params_override:
-      out = params_override[candidate]
-    elif candidate in params:
-      out = params[candidate]
-    else:
-      raise NotImplementedError(f"Did not find torque params for {candidate}")
-    return {key:out[i] for i, key in enumerate(params['legend'])}
+    tune.init('torque')
+    tune.torque.useSteeringAngle = use_steering_angle
+    tune.torque.kp = 1.0
+    tune.torque.kf = 1.0
+    tune.torque.ki = 0.1
+    tune.torque.friction = params['FRICTION']
+    tune.torque.latAccelFactor = params['LAT_ACCEL_FACTOR']
+    tune.torque.latAccelOffset = 0.0
+    tune.torque.steeringAngleDeadzoneDeg = steering_angle_deadzone_deg
 
   @abstractmethod
   def _update(self, c: car.CarControl) -> car.CarState:
@@ -240,12 +274,12 @@ class CarStateBase(ABC):
     self.left_blinker_prev = False
     self.right_blinker_prev = False
 
-    # Q = np.matrix([[10.0, 0.0], [0.0, 100.0]])
-    # R = 1e3
+    # Q = np.matrix([[0.0, 0.0], [0.0, 100.0]])
+    # R = 0.3
     self.v_ego_kf = KF1D(x0=[[0.0], [0.0]],
                          A=[[1.0, DT_CTRL], [0.0, 1.0]],
                          C=[1.0, 0.0],
-                         K=[[0.12287673], [0.29666309]])
+                         K=[[0.17406039], [1.65925647]])
 
   def update_speed_kf(self, v_ego_raw):
     if abs(v_ego_raw - self.v_ego_kf.x[0][0]) > 2.0:  # Prevent large accelerations when car starts at non zero speed
@@ -319,31 +353,3 @@ class CarStateBase(ABC):
   @staticmethod
   def get_loopback_can_parser(CP):
     return None
-
-
-# interface-specific helpers
-
-def get_interface_attr(attr: str, combine_brands: bool = False, ignore_none: bool = False) -> Dict[str, Any]:
-  # read all the folders in selfdrive/car and return a dict where:
-  # - keys are all the car models or brand names
-  # - values are attr values from all car folders
-  result = {}
-  for car_folder in sorted([x[0] for x in os.walk(BASEDIR + '/selfdrive/car')]):
-    try:
-      brand_name = car_folder.split('/')[-1]
-      brand_values = __import__(f'selfdrive.car.{brand_name}.values', fromlist=[attr])
-      if hasattr(brand_values, attr) or not ignore_none:
-        attr_data = getattr(brand_values, attr, None)
-      else:
-        continue
-
-      if combine_brands:
-        if isinstance(attr_data, dict):
-          for f, v in attr_data.items():
-            result[f] = v
-      else:
-        result[brand_name] = attr_data
-    except (ImportError, OSError):
-      pass
-
-  return result

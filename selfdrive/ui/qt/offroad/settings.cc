@@ -538,6 +538,18 @@ TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
                                   "../assets/offroad/icon_road.png",
                                   this));
 
+  toggles.append(new ParamControl("EnableTorqueController",
+                                  "扭矩控制器橫向操控",
+                                  "使用新的扭矩控制器改進 Toyota/ Lexus 的橫向操控。(關閉此選項您的横向操控將回復為原本的PID / INDI / LQR 控制器。）",
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
+  toggles.append(new ParamControl("LiveTorque",
+                                  "自動學習扭矩參數",
+                                  "即時學習並調整您車輛的扭矩參數，而不是使用平台平均值，從而改善橫向控制。",
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
   toggles.append(new ParamControl("TurnVisionControl",
                                   "彎道減速",
                                   "使用視覺路徑預測來估算適當的速度，可自動降速以順利通過前方的轉彎。",
@@ -545,20 +557,14 @@ TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
                                   this));
 
   toggles.append(new ParamControl("toyotaautolock",
-                                  "開啟車門自動上鎖",
+                                  "車門自動上鎖",
                                   "啟用此功能後，當在車速超過 25 公里時將自動鎖上車門。僅適用於某些Toyota車款。",
                                   "../assets/offroad/icon_road.png",
                                   this));
 
   toggles.append(new ParamControl("toyotaautounlock",
-                                  "開啟車門自動解鎖",
+                                  "車門自動解鎖",
                                   "啟用此功能後，當檔位進到P檔時將自動解鎖車門。僅適用於某些Toyota車款。",
-                                  "../assets/offroad/icon_road.png",
-                                  this));
-
-  toggles.append(new ParamControl("LQR",
-                                  "啟用 LQR 控制 (PRIUS ALPHA 專用)",
-                                  "開啟 LQR 操控模式，用以取代預設的 Torque 操控模式。 (PRIUS ALPHA專用)",
                                   "../assets/offroad/icon_road.png",
                                   this));
 

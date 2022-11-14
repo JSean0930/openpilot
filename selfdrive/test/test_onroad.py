@@ -35,6 +35,7 @@ PROCS = {
   "./_dmonitoringmodeld": 10.0,
   "selfdrive.thermald.thermald": 3.87,
   "selfdrive.locationd.calibrationd": 2.0,
+  "selfdrive.locationd.torqued": 5.0,
   "./_soundd": 1.0,
   "selfdrive.monitoring.dmonitoringd": 1.90,
   "./proclogd": 1.54,
