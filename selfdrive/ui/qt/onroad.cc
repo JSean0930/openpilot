@@ -11,6 +11,7 @@
 #include "selfdrive/ui/qt/maps/map_helpers.h"
 #endif
 
+#define FONT_OPEN_SANS "Inter" //"Open Sans"
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
   main_layout->setMargin(bdr_s);
@@ -226,7 +227,19 @@ void AnnotatedCameraWidget::updateState(const UIState &s) {
   if (sm.frame % (UI_FREQ / 2) == 0) {
     setProperty("engageable", cs.getEngageable() || cs.getEnabled());
     setProperty("dmActive", sm["driverMonitoringState"].getDriverMonitoringState().getIsActiveMode());
-    setProperty("rightHandDM", sm["driverMonitoringState"].getDriverMonitoringState().getIsRHD());
+
+    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+    const auto vtcState = lp.getVisionTurnControllerState();
+    const float vtc_speed = lp.getVisionTurnSpeed() * (s.scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
+    const auto lpSoruce = lp.getLongitudinalPlanSource();
+    QColor vtc_color = tcs_colors[int(vtcState)];
+    vtc_color.setAlpha(lpSoruce == cereal::LongitudinalPlan::LongitudinalPlanSource::TURN ? 255 : 100);
+
+    setProperty("showVTC", vtcState > cereal::LongitudinalPlan::VisionTurnControllerState::DISABLED);
+    setProperty("vtcSpeed", QString::number(std::nearbyint(vtc_speed)));
+    setProperty("vtcColor", vtc_color);
+
+	setProperty("rightHandDM", sm["driverMonitoringState"].getDriverMonitoringState().getIsRHD());
   }
 }
 
@@ -379,9 +392,14 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
 
   // engage-ability icon
   if (engageable) {
-    SubMaster &sm = *(uiState()->sm);
-    drawIcon(p, rect().right() - radius / 2 - bdr_s * 2, radius / 2 + int(bdr_s * 1.5),
-             sm["controlsState"].getControlsState().getExperimentalMode() ? experimental_img : engage_img, blackColor(166), 1.0);
+    if (showVTC) {
+      drawVisionTurnControllerUI(p, rect().right() - 184 - bdr_s, int(bdr_s * 1.5), 184, vtcColor, vtcSpeed, 100);
+    } else {
+      // engage-ability icon
+      SubMaster &sm = *(uiState()->sm);
+      drawIcon(p, rect().right() - radius / 2 - bdr_s * 2, radius / 2 + int(bdr_s * 1.5),
+               sm["controlsState"].getControlsState().getExperimentalMode() ? experimental_img : engage_img, blackColor(166), 1.0);
+    }
   }
 
   // dm icon
@@ -405,6 +423,16 @@ void AnnotatedCameraWidget::drawText(QPainter &p, int x, int y, const QString &t
   p.drawText(real_rect.x(), real_rect.bottom(), text);
 }
 
+void AnnotatedCameraWidget::drawCenteredText(QPainter &p, int x, int y, const QString &text, QColor color) {
+  QFontMetrics fm(p.font());
+  QRect init_rect = fm.boundingRect(text);
+  QRect real_rect = fm.boundingRect(init_rect, 0, text);
+  real_rect.moveCenter({x, y});
+
+  p.setPen(color);
+  p.drawText(real_rect, Qt::AlignCenter, text);
+}
+
 void AnnotatedCameraWidget::drawIcon(QPainter &p, int x, int y, QPixmap &img, QBrush bg, float opacity) {
   p.setOpacity(1.0);  // bg dictates opacity of ellipse
   p.setPen(Qt::NoPen);
@@ -414,6 +442,17 @@ void AnnotatedCameraWidget::drawIcon(QPainter &p, int x, int y, QPixmap &img, QB
   p.drawPixmap(x - img.size().width() / 2, y - img.size().height() / 2, img);
 }
 
+void AnnotatedCameraWidget::drawVisionTurnControllerUI(QPainter &p, int x, int y, int size, const QColor &color,
+                                           const QString &vision_speed, int alpha) {
+  QRect rvtc(x, y, size, size);
+  p.setPen(QPen(color, 10));
+  p.setBrush(QColor(0, 0, 0, alpha));
+  p.drawRoundedRect(rvtc, 20, 20);
+  p.setPen(Qt::NoPen);
+
+  configFont(p, "Open Sans", 56, "SemiBold");
+  drawCenteredText(p, rvtc.center().x(), rvtc.center().y(), vision_speed, color);
+}
 
 void AnnotatedCameraWidget::initializeGL() {
   CameraWidget::initializeGL();
@@ -493,18 +532,22 @@ void AnnotatedCameraWidget::drawLaneLines(QPainter &painter, const UIState *s) {
   painter.restore();
 }
 
-void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::ModelDataV2::LeadDataV3::Reader &lead_data, const QPointF &vd) {
+static float global_a_rel;
+static float global_a_rel_col;
+void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::ModelDataV2::LeadDataV3::Reader &lead_data, const QPointF &vd , int num , size_t leads_num) {
   painter.save();
-
   const float speedBuff = 10.;
   const float leadBuff = 40.;
   const float d_rel = lead_data.getX()[0];
   const float v_rel = lead_data.getV()[0];
+//  const float t_rel = lead_data.getT()[0];
+//  const float y_rel = lead_data.getY()[0];
+//  const float a_rel = lead_data.getA()[0];
 
   float fillAlpha = 0;
   if (d_rel < leadBuff) {
     fillAlpha = 255 * (1.0 - (d_rel / leadBuff));
-    if (v_rel < 0) {
+    if (v_rel < 0) { //速度？如果它是負數，它會增加紅色三角形的密度。
       fillAlpha += 255 * (-1 * (v_rel / speedBuff));
     }
     fillAlpha = (int)(fmin(fillAlpha, 255));
@@ -517,16 +560,51 @@ void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::ModelDataV
   float g_xo = sz / 5;
   float g_yo = sz / 10;
 
-  QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
+  //QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
+  float homebase_h = 12;
+  QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo + homebase_h},{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo},{x - (sz * 1.35) - g_xo, y + sz + g_yo + homebase_h}, {x, y + sz + homebase_h + g_yo + 10}};
   painter.setBrush(QColor(218, 202, 37, 255));
   painter.drawPolygon(glow, std::size(glow));
 
   // chevron
-  QPointF chevron[] = {{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz}};
+  //QPointF chevron[] = {{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz}};
+  QPointF chevron[] = {{x + (sz * 1.25), y + sz + homebase_h},{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz},{x - (sz * 1.25), y + sz + homebase_h}, {x, y + sz + homebase_h - 7}};
   painter.setBrush(redColor(fillAlpha));
   painter.drawPolygon(chevron, std::size(chevron));
 
-  painter.restore();
+  if(num == 0){ //顯示到第 0 輛前車的距離
+    //float dist = d_rel; //lead_data.getT()[0];
+    QString dist = QString::number(d_rel,'f',0) + "m";
+    int str_w = 200;
+    QString kmph = QString::number(v_rel*3.6,'f',0) + "k";
+    int str_w2 = 200;
+//    dist += "<" + QString::number(rect().height()) + ">"; str_w += 500;c2 和 c3 的屏幕高度均為 1020。
+//    dist += "<" + QString::number(leads_num) + ">";
+//   int str_w = 600; //200;
+//    dist += QString::number(v_rel,'f',1) + "v";
+//    dist += QString::number(t_rel,'f',1) + "t";
+//    dist += QString::number(y_rel,'f',1) + "y";
+//    dist += QString::number(a_rel,'f',1) + "a";
+    configFont(painter, FONT_OPEN_SANS, 44, "SemiBold");
+    painter.setPen(QColor(0x0, 0x0, 0x0 , 200)); //影
+    float lock_indicator_dx = 2; //避免向下的十字準星。
+    painter.drawText(QRect(x+2+lock_indicator_dx, y-50+2, str_w, 50), Qt::AlignBottom | Qt::AlignLeft, dist);
+    painter.drawText(QRect(x+2-lock_indicator_dx-str_w2-2, y-50+2, str_w2, 50), Qt::AlignBottom | Qt::AlignRight, kmph);
+    painter.setPen(QColor(0xff, 0xff, 0xff));
+    painter.drawText(QRect(x+lock_indicator_dx, y-50, str_w, 50), Qt::AlignBottom | Qt::AlignLeft, dist);
+    if(global_a_rel >= global_a_rel_col){
+      global_a_rel_col = -0.1; //減少混亂的緩衝區。
+      painter.setPen(QColor(0, 245, 0, 255));
+    } else {
+      global_a_rel_col = 0;
+      painter.setPen(QColor(245, 0, 0, 255));
+    }
+    painter.drawText(QRect(x-lock_indicator_dx-str_w2-2, y-50, str_w2, 50), Qt::AlignBottom | Qt::AlignRight, kmph);
+    painter.setPen(Qt::NoPen);
+  }
+
+    painter.restore();
+
 }
 
 void AnnotatedCameraWidget::paintGL() {
@@ -565,6 +643,12 @@ void AnnotatedCameraWidget::paintGL() {
     wide_cam_requested = wide_cam_requested && s->scene.calibration_wide_valid;
     CameraWidget::setStreamType(wide_cam_requested ? VISION_STREAM_WIDE_ROAD : VISION_STREAM_ROAD);
 
+    // Stream_driver when reverse gear
+    bool reversing = int(sm["carState"].getCarState().getGearShifter()) == 4;
+    if(reversing) {
+      CameraWidget::setStreamType(VISION_STREAM_DRIVER);
+    }
+
     s->scene.wide_cam = CameraWidget::getStreamType() == VISION_STREAM_WIDE_ROAD;
     if (s->scene.calibration_valid) {
       auto calib = s->scene.wide_cam ? s->scene.view_from_wide_calib : s->scene.view_from_calib;
@@ -592,11 +676,12 @@ void AnnotatedCameraWidget::paintGL() {
 
     if (s->scene.longitudinal_control) {
       const auto leads = model.getLeadsV3();
+      size_t leads_num = leads.size();
       if (leads[0].getProb() > .5) {
-        drawLead(painter, leads[0], s->scene.lead_vertices[0]);
+        drawLead(painter, leads[0], s->scene.lead_vertices[0] , 0 , leads_num);
       }
       if (leads[1].getProb() > .5 && (std::abs(leads[1].getX()[0] - leads[0].getX()[0]) > 3.0)) {
-        drawLead(painter, leads[1], s->scene.lead_vertices[1]);
+        drawLead(painter, leads[1], s->scene.lead_vertices[1] , 1 , leads_num);
       }
     }
   }

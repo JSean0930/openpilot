@@ -95,13 +95,15 @@ void Sidebar::updateState(const UIState &s) {
     connectStatus = nanos_since_boot() - last_ping < 80e9 ? ItemStatus{{tr("CONNECT"), tr("ONLINE")}, good_color} : ItemStatus{{tr("CONNECT"), tr("ERROR")}, danger_color};
   }
   setProperty("connectStatus", QVariant::fromValue(connectStatus));
-
-  ItemStatus tempStatus = {{tr("TEMP"), tr("HIGH")}, danger_color};
+  int temp = (int)deviceState.getAmbientTempC();
+  QString good_disp = QString::number(temp) + "°C";
+  ItemStatus tempStatus = {{tr("TEMP"), good_disp.toUtf8().data()}, danger_color};
   auto ts = deviceState.getThermalStatus();
   if (ts == cereal::DeviceState::ThermalStatus::GREEN) {
-    tempStatus = {{tr("TEMP"), tr("GOOD")}, good_color};
+    tempStatus = {{tr("TEMP"), good_disp.toUtf8().data()}, good_color};
+    //tempStatus = {{tr("TEMP"), tr("GOOD")}, good_color};
   } else if (ts == cereal::DeviceState::ThermalStatus::YELLOW) {
-    tempStatus = {{tr("TEMP"), tr("OK")}, warning_color};
+    tempStatus = {{tr("TEMP"), good_disp.toUtf8().data()}, warning_color};
   }
   setProperty("tempStatus", QVariant::fromValue(tempStatus));
 

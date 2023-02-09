@@ -20,7 +20,7 @@ const int bdr_s = 30;
 const int header_h = 420;
 const int footer_h = 280;
 
-const int UI_FREQ = 20;   // Hz
+const int UI_FREQ = 20; // Hz
 typedef cereal::CarControl::HUDControl::AudibleAlert AudibleAlert;
 
 const mat3 DEFAULT_CALIBRATION = {{ 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0 }};
@@ -78,12 +78,24 @@ typedef enum UIStatus {
 } UIStatus;
 
 const QColor bg_colors [] = {
-  [STATUS_DISENGAGED] =  QColor(0x17, 0x33, 0x49, 0xc8),
+  [STATUS_DISENGAGED] = QColor(0x17, 0x33, 0x49, 0xc8),
   [STATUS_OVERRIDE] = QColor(0x91, 0x9b, 0x95, 0xf1),
   [STATUS_ENGAGED] = QColor(0x17, 0x86, 0x44, 0xf1),
   [STATUS_WARNING] = QColor(0xDA, 0x6F, 0x25, 0xf1),
   [STATUS_ALERT] = QColor(0xC9, 0x22, 0x31, 0xf1),
 };
+
+const QColor tcs_colors [] = {
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::DISABLED)] =  QColor(0x0, 0x0, 0x0, 0xff),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::ENTERING)] = QColor(0xC9, 0x22, 0x31, 0xf1),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::TURNING)] = QColor(0xDA, 0x6F, 0x25, 0xf1),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::LEAVING)] = QColor(0x17, 0x86, 0x44, 0xf1),
+};
+
+typedef struct {
+  QPointF v[TRAJECTORY_SIZE * 2];
+  int cnt;
+} line_vertices_data;
 
 typedef struct UIScene {
   bool calibration_valid = false;
@@ -106,6 +118,7 @@ typedef struct UIScene {
   float light_sensor;
   bool started, ignition, is_metric, map_on_left, longitudinal_control;
   uint64_t started_frame;
+  bool onroadScreenOff, E2EConditional;
 } UIScene;
 
 class UIState : public QObject {
@@ -152,7 +165,6 @@ private:
 UIState *uiState();
 
 // device management class
-
 class Device : public QObject {
   Q_OBJECT
 

@@ -37,12 +37,25 @@ def manager_init() -> None:
   params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
 
   default_params: List[Tuple[str, Union[str, bytes]]] = [
+    ("CarModel", ""),
     ("CompletedTrainingVersion", "0"),
-    ("DisengageOnAccelerator", "1"),
+    ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),
     ("HasAcceptedTerms", "0"),
+    ("IsLdwEnabled", "1"),
+    ("IsMetric", "1"),
     ("LanguageSetting", "main_en"),
+    ("NavSettingTime24h", "0"),
     ("OpenpilotEnabledToggle", "1"),
+    ("PrimeAd", "1"),
+    ("RecordFront", "0"),
+    ("TurnVisionControl", "1"),
+    ("EnableTorqueController", "1"),
+    ("LiveTorque", "1"),
+    ("e2e_link", "1"),
+    ("toyotaautolock", "1"),
+    ("toyotaautounlock", "1"),
+    ("dp_atl", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))
@@ -122,6 +135,7 @@ def manager_thread() -> None:
   params = Params()
 
   ignore: List[str] = []
+  ignore += ['uploader'] if params.get_bool('dp_atl') else []
   if params.get("DongleId", encoding='utf8') in (None, UNREGISTERED_DONGLE_ID):
     ignore += ["manage_athenad", "uploader"]
   if os.getenv("NOBOARD") is not None:

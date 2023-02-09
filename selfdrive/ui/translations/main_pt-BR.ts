@@ -285,10 +285,21 @@
     <name>ExperimentalModeButton</name>
     <message>
         <source>EXPERIMENTAL MODE ON</source>
-        <translation type="unfinished"></translation>
+        <translation>MODO EXPERIMENTAL ATIVADO</translation>
     </message>
     <message>
         <source>CHILL MODE ON</source>
+        <translation>MODO CHILL ATIVADO</translation>
+    </message>
+</context>
+<context>
+    <name>ForceCarRecognition</name>
+    <message>
+        <source>Back</source>
+        <translation type="unfinished">Voltar</translation>
+    </message>
+    <message>
+        <source>[-Not selected-]</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -555,8 +566,8 @@ trabalho definido</translation>
         <translation>dashcam</translation>
     </message>
     <message>
-        <source>openpilot</source>
-        <translation>openpilot</translation>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
         <source>%n minute(s) ago</source>
@@ -640,6 +651,10 @@ trabalho definido</translation>
     <message>
         <source>Software</source>
         <translation>Software</translation>
+    </message>
+    <message>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Navigation</source>
@@ -765,18 +780,6 @@ trabalho definido</translation>
     <message>
         <source>TEMP</source>
         <translation>TEMP</translation>
-    </message>
-    <message>
-        <source>HIGH</source>
-        <translation>ALTA</translation>
-    </message>
-    <message>
-        <source>GOOD</source>
-        <translation>BOA</translation>
-    </message>
-    <message>
-        <source>OK</source>
-        <translation>OK</translation>
     </message>
     <message>
         <source>VEHICLE</source>
@@ -948,6 +951,113 @@ trabalho definido</translation>
     </message>
 </context>
 <context>
+    <name>TimpilotPanel</name>
+    <message>
+        <source>Select Car</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Select your car</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Quiet Drive</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>TOP will display alerts but only play the most important warning sounds. This feature can be toggled while the car is on.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Driving Screen Off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Turn off the device screen to protect the OLED panel after driving starts. It automatically brightens or turns on when a touch or event occurs.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lateral Controls Always On</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lateral control will always be on and will not be interrupted by braking.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Stop And Go</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enabled the Stop And Go feature and get auto hold.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable vision based turn control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Use vision path predictions to estimate the appropriate speed to drive through turns ahead.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable Door Auto Lock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enabled this to lock doors when drive above 25 km/h. Only work on some Toyota vehicles.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable Door Auto Unlock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enabled this to unlock doors when shift to gear P. Only work on some Toyota vehicles.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Upload Raw Logs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Upload full logs and full resolution video by default while on Wi-Fi. If not enabled, individual logs can be marked for upload at useradmin.comma.ai.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable LiveTorque</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Learn torque parameters live for each car as opposed to using platform average values, which improves lateral control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lat: Use Torque Controller</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Experimental: use the new torque controller, please turn this off if you experience ping-pongs.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>e2e Long Function Link ECO Button</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The e2e long function switch is linked with the ECO button. Only work on some Toyota vehicles.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dynamic End-to-end Long</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Automatically Turn On and Off End-to-end longitudinal (Extremely alpha), this will ignore the stock end-to-end settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>TogglesPanel</name>
     <message>
         <source>Enable openpilot</source>
@@ -1019,7 +1129,7 @@ trabalho definido</translation>
     </message>
     <message>
         <source>On this car, openpilot defaults to the car&apos;s built-in ACC instead of openpilot&apos;s longitudinal control. Enable this to switch to openpilot longitudinal control. Enabling Experimental mode is recommended when using experimental openpilot longitudinal control.</source>
-        <translation type="unfinished"></translation>
+        <translation>Neste carro o penpilot por padrão utiliza o ACC nativo do veículo ao invés de controlar longitudinalmente. Ative isto para mudar para o controle longitudinal do openpilot. Ativar o Modo Experimental é recomendado quando em uso do controle longitudinal experimental do openpilot.</translation>
     </message>
     <message>
         <source>    openpilot defaults to driving in &lt;b&gt;chill mode&lt;/b&gt;.    Experimental mode enables &lt;b&gt;alpha-level features&lt;/b&gt; that aren&apos;t ready for chill mode.     Experimental features are listed below:     &lt;br&gt;     &lt;h4&gt;🌮 End-to-End Longitudinal Control 🌮&lt;/h4&gt;     Let the driving model control the gas and brakes. openpilot will drive as it thinks a human would, including stopping for red lights and stop signs.     Since the driving model decides the speed to drive, the set speed will only act as an upper bound. This is an alpha quality feature; mistakes should be expected.     &lt;br&gt;     &lt;h4&gt;New Driving Visualization&lt;/h4&gt;     The driving visualization will transition to the road-facing wide-angle camera at low speeds to better show some turns. The Experimental mode logo will also be shown in the top right corner.    </source>

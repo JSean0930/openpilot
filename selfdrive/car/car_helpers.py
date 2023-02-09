@@ -176,6 +176,10 @@ def fingerprint(logcan, sendcan, num_pandas):
 def get_car(logcan, sendcan, num_pandas=1):
   candidate, fingerprints, vin, car_fw, source, exact_match = fingerprint(logcan, sendcan, num_pandas)
 
+  if Params().get("CarModel") is not None:
+    car_model = Params().get("CarModel")
+    candidate = car_model.decode("utf-8")
+
   if candidate is None:
     cloudlog.warning("car doesn't match any fingerprints: %r", fingerprints)
     candidate = "mock"

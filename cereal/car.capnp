@@ -115,6 +115,7 @@ struct CarEvent @0x9b1657f34caf3ad3 {
     canBusMissing @111;
     controlsdLagging @112;
     resumeBlocked @113;
+    followDistanceAdjustmentDisabled @116;
 
     radarCanErrorDEPRECATED @15;
     communityFeatureDisallowedDEPRECATED @62;
@@ -214,6 +215,9 @@ struct CarState {
 
   fuelGauge @41 :Float32; # battery or fuel tank level from 0.0 to 1.0
   charging @43 :Bool;
+
+  # TOP
+  distanceLines @46 :UInt8; # KRKeegan toyota distance lines
 
   struct WheelSpeeds {
     # optional wheel speeds
@@ -368,6 +372,7 @@ struct CarControl {
     leftLaneVisible @7: Bool;
     rightLaneDepart @8: Bool;
     leftLaneDepart @9: Bool;
+    leadVelocity @10: Float32;
 
     enum VisualAlert {
       # these are the choices from the Honda
@@ -477,6 +482,7 @@ struct CarParams {
   radarTimeStep @45: Float32 = 0.05;  # time delta between radar updates, 20Hz is very standard
   fingerprintSource @49: FingerprintSource;
   networkLocation @50 :NetworkLocation;  # Where Panda/C2 is integrated into the car's CAN network
+  smartDsu @72: Bool;  # true if sDSU is detected
 
   wheelSpeedFactor @63 :Float32; # Multiplier on wheels speeds to computer actual speeds
 
@@ -517,6 +523,8 @@ struct CarParams {
     kiBP @2 :List(Float32);
     kiV @3 :List(Float32);
     kf @6 :Float32;
+    kdBP @7 :List(Float32);
+    kdV @8 :List(Float32);
     deadzoneBP @4 :List(Float32);
     deadzoneV @5 :List(Float32);
   }

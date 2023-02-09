@@ -1,12 +1,15 @@
+import copy
+
 from cereal import car
 from common.conversions import Conversions as CV
 from common.numpy_fast import mean
 from common.filter_simple import FirstOrderFilter
+from common.params import Params
 from common.realtime import DT_CTRL
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
 from selfdrive.car.interfaces import CarStateBase
-from selfdrive.car.toyota.values import ToyotaFlags, DBC, STEER_THRESHOLD, NO_STOP_TIMER_CAR, TSS2_CAR, RADAR_ACC_CAR, EPS_SCALE, UNSUPPORTED_DSU_CAR
+from selfdrive.car.toyota.values import ToyotaFlags, CAR, DBC, STEER_THRESHOLD, EV_HYBRID_CAR, NO_STOP_TIMER_CAR, TSS2_CAR, RADAR_ACC_CAR, EPS_SCALE, UNSUPPORTED_DSU_CAR
 
 
 class CarState(CarStateBase):
@@ -26,6 +29,16 @@ class CarState(CarStateBase):
 
     self.low_speed_lockout = False
     self.acc_type = 1
+    self.params = Params()
+
+    # KRKeegan - Add support for toyota distance button
+    self.distance_btn = 0
+    self.e2e_link = Params().get_bool('e2e_link')
+    self.ispressed_prev = None
+    self.ispressed_init = 0
+    self.e2e_init = 0
+    self.topsng = Params().get_bool('topsng')
+    self.lkas_hud = {}
 
   def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
@@ -96,7 +109,7 @@ class CarState(CarStateBase):
       cluster_set_speed = cp.vl["PCM_CRUISE_ALT"]["UI_SET_SPEED"]
     else:
       ret.cruiseState.available = cp.vl["PCM_CRUISE_2"]["MAIN_ON"] != 0
-      ret.cruiseState.speed = cp.vl["PCM_CRUISE_2"]["SET_SPEED"] * CV.KPH_TO_MS
+      ret.cruiseState.speed = cp.vl["PCM_CRUISE_2"]["SET_SPEED"] * CV.KPH_TO_MS * self.CP.wheelSpeedFactor
       cluster_set_speed = cp.vl["PCM_CRUISE_SM"]["UI_SET_SPEED"]
 
     # UI_SET_SPEED is always non-zero when main is on, hide until first enable
@@ -105,11 +118,28 @@ class CarState(CarStateBase):
       conversion_factor = CV.KPH_TO_MS if is_metric else CV.MPH_TO_MS
       ret.cruiseState.speedCluster = cluster_set_speed * conversion_factor
 
+    self.allow_distance_adjustment = False if Params().get_bool('ExperimentalMode') else True
     cp_acc = cp_cam if self.CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR) else cp
 
     if self.CP.carFingerprint in (TSS2_CAR | RADAR_ACC_CAR):
       self.acc_type = cp_acc.vl["ACC_CONTROL"]["ACC_TYPE"]
       ret.stockFcw = bool(cp_acc.vl["ACC_HUD"]["FCW"])
+
+    if self.CP.carFingerprint in UNSUPPORTED_DSU_CAR:
+      ret.distanceLines = 2
+    # elif not self.allow_distance_adjustment:
+      # ret.distanceLines = 2
+    else:
+      ret.distanceLines = cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"]
+      # KRKeegan - Add support for toyota distance button & Cydia2020 mod e2e logic
+    if self.CP.carFingerprint in RADAR_ACC_CAR:
+      self.distance_btn = 2 if (cp.vl["ACC_CONTROL"]["DISTANCE"] == 1 and not self.allow_distance_adjustment) else 1 if (cp.vl["ACC_CONTROL"]["DISTANCE"] == 1 and self.allow_distance_adjustment) else 0
+    elif self.CP.carFingerprint in TSS2_CAR:
+      self.distance_btn = 2 if (cp_cam.vl["ACC_CONTROL"]["DISTANCE"] == 1 and not self.allow_distance_adjustment) else 1 if (cp_cam.vl["ACC_CONTROL"]["DISTANCE"] == 1 and self.allow_distance_adjustment) else 0
+    elif self.CP.smartDsu:
+      self.distance_btn = 2 if (cp.vl["SDSU"]["FD_BUTTON"] == 1  and not self.allow_distance_adjustment) else 1 if (cp.vl["SDSU"]["FD_BUTTON"] == 1 and self.allow_distance_adjustment) else 0
+    else:
+      self.distance_btn = 0
 
     # some TSS2 cars have low speed lockout permanently set, so ignore on those cars
     # these cars are identified by an ACC_TYPE value of 2.
@@ -120,14 +150,31 @@ class CarState(CarStateBase):
       self.low_speed_lockout = cp.vl["PCM_CRUISE_2"]["LOW_SPEED_LOCKOUT"] == 2
 
     self.pcm_acc_status = cp.vl["PCM_CRUISE"]["CRUISE_STATE"]
-    if self.CP.carFingerprint in NO_STOP_TIMER_CAR or self.CP.enableGasInterceptor:
+    if self.topsng and self.CP.carFingerprint in EV_HYBRID_CAR and self.CP.smartDsu:
       # ignore standstill in hybrid vehicles, since pcm allows to restart without
       # receiving any special command. Also if interceptor is detected
       ret.cruiseState.standstill = False
-    else:
+    elif not self.topsng and self.CP.carFingerprint not in (NO_STOP_TIMER_CAR - TSS2_CAR):
+      # ignore standstill state in certain vehicles, since pcm allows to restart with just an acceleration request
       ret.cruiseState.standstill = self.pcm_acc_status == 7
     ret.cruiseState.enabled = bool(cp.vl["PCM_CRUISE"]["CRUISE_ACTIVE"])
     ret.cruiseState.nonAdaptive = cp.vl["PCM_CRUISE"]["CRUISE_STATE"] in (1, 2, 3, 4, 5, 6)
+
+    if self.e2e_link:
+      self.ispressed = cp.vl["GEAR_PACKET"]['ECON_ON']
+      self.ispressed_init += int(self.ispressed)
+      self.e2e_init += int(self.params.get_bool("ExperimentalMode"))
+      self.status_check = int(self.ispressed_init + self.e2e_init)
+      if (self.status_check == 1 or self.status_check >= 4) and self.ispressed != self.ispressed_prev:
+        self.e2eLongButton = not self.params.get_bool("ExperimentalMode")
+        self.params.put_bool('ExperimentalMode', self.e2eLongButton)
+        if self.params.get_bool("ExperimentalMode"):
+          self.params.put_bool('TurnVisionControl', 0)
+        else:
+          self.params.put_bool('TurnVisionControl', 1)
+      self.ispressed_prev = self.ispressed
+      self.ispressed_init = 2
+      self.e2e_init = 2
 
     ret.genericToggle = bool(cp.vl["LIGHT_STALK"]["AUTO_HIGH_BEAM"])
     ret.espDisabled = cp.vl["ESP_CONTROL"]["TC_DISABLED"] != 0
@@ -138,6 +185,9 @@ class CarState(CarStateBase):
     if self.CP.enableBsm:
       ret.leftBlindspot = (cp.vl["BSM"]["L_ADJACENT"] == 1) or (cp.vl["BSM"]["L_APPROACHING"] == 1)
       ret.rightBlindspot = (cp.vl["BSM"]["R_ADJACENT"] == 1) or (cp.vl["BSM"]["R_APPROACHING"] == 1)
+
+    if self.CP.carFingerprint != CAR.PRIUS_V:
+      self.lkas_hud = copy.copy(cp_cam.vl["LKAS_HUD"])
 
     return ret
 
@@ -174,6 +224,8 @@ class CarState(CarStateBase):
       ("TURN_SIGNALS", "BLINKERS_STATE"),
       ("LKA_STATE", "EPS_STATUS"),
       ("AUTO_HIGH_BEAM", "LIGHT_STALK"),
+      ("ECON_ON", "GEAR_PACKET"),
+      ("DISTANCE_LINES", "PCM_CRUISE_SM"),
     ]
 
     checks = [
@@ -198,6 +250,9 @@ class CarState(CarStateBase):
     else:
       signals.append(("GAS_PEDAL", "GAS_PEDAL"))
       checks.append(("GAS_PEDAL", 33))
+
+    if CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR):
+      signals.append(("ECON_ON", "GEAR_PACKET"))
 
     if CP.carFingerprint in UNSUPPORTED_DSU_CAR:
       signals.append(("MAIN_ON", "DSU_CRUISE"))
@@ -226,15 +281,26 @@ class CarState(CarStateBase):
       ]
       checks.append(("BSM", 1))
 
+    # KRKeegan - Add support for toyota distance button
+    if CP.smartDsu:
+      signals.append(("FD_BUTTON", "SDSU"))
+      checks.append(("SDSU", 0))
+
     if CP.carFingerprint in RADAR_ACC_CAR:
       signals += [
         ("ACC_TYPE", "ACC_CONTROL"),
+        ("DISTANCE", "ACC_CONTROL"),
         ("FCW", "ACC_HUD"),
       ]
       checks += [
         ("ACC_CONTROL", 33),
         ("ACC_HUD", 1),
       ]
+
+    # KRKeegan - Add support for toyota distance button
+    if CP.carFingerprint in TSS2_CAR:
+      signals.append(("DISTANCE_LINES", "PCM_CRUISE_SM"))
+      checks.append(("PCM_CRUISE_SM", 0))
 
     if CP.carFingerprint not in (TSS2_CAR - RADAR_ACC_CAR) and not CP.enableDsu:
       signals += [
@@ -252,17 +318,33 @@ class CarState(CarStateBase):
     signals = []
     checks = []
 
+    if CP.carFingerprint != CAR.PRIUS_V:
+      signals += [
+        ("LANE_SWAY_FLD", "LKAS_HUD"),
+        ("LANE_SWAY_BUZZER", "LKAS_HUD"),
+        ("LANE_SWAY_WARNING", "LKAS_HUD"),
+        ("LANE_SWAY_SENSITIVITY", "LKAS_HUD"),
+        ("LANE_SWAY_TOGGLE", "LKAS_HUD"),
+      ]
+      checks += [
+        ("LKAS_HUD", 1),
+      ]
+
     if CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR):
       signals += [
         ("PRECOLLISION_ACTIVE", "PRE_COLLISION"),
         ("FORCE", "PRE_COLLISION"),
         ("ACC_TYPE", "ACC_CONTROL"),
         ("FCW", "ACC_HUD"),
+        ("DISTANCE", "ACC_CONTROL"),
       ]
       checks += [
         ("PRE_COLLISION", 33),
         ("ACC_CONTROL", 33),
         ("ACC_HUD", 1),
       ]
+
+      # KRKeegan - Add support for toyota distance button
+      signals.append(("DISTANCE", "ACC_CONTROL", 0))
 
     return CANParser(DBC[CP.carFingerprint]["pt"], signals, checks, 2)

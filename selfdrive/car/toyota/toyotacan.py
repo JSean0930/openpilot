@@ -27,17 +27,18 @@ def create_lta_steer_command(packer, steer, steer_req, raw_cnt):
   return packer.make_can_msg("STEERING_LTA", 0, values)
 
 
-def create_accel_command(packer, accel, pcm_cancel, standstill_req, lead, acc_type):
+def create_accel_command(packer, accel, pcm_cancel, standstill_req, lead, acc_type, distance, permit_braking, lead_vehicle_stopped):
   # TODO: find the exact canceling bit that does not create a chime
   values = {
     "ACCEL_CMD": accel,
     "ACC_TYPE": acc_type,
-    "DISTANCE": 0,
+    "DISTANCE": distance,
     "MINI_CAR": lead,
-    "PERMIT_BRAKING": 1,
+    "PERMIT_BRAKING": permit_braking,
     "RELEASE_STANDSTILL": not standstill_req,
     "CANCEL_REQ": pcm_cancel,
-    "ALLOW_LONG_PRESS": 1,
+    "ALLOW_LONG_PRESS": 2,
+    "LEAD_STANDSTILL": lead_vehicle_stopped,
   }
   return packer.make_can_msg("ACC_CONTROL", 0, values)
 
@@ -66,13 +67,13 @@ def create_fcw_command(packer, fcw):
   return packer.make_can_msg("ACC_HUD", 0, values)
 
 
-def create_ui_command(packer, steer, chime, left_line, right_line, left_lane_depart, right_lane_depart, enabled):
+def create_ui_command(packer, steer, chime, left_line, right_line, left_lane_depart, right_lane_depart, enabled, stock_lkas_hud):
   values = {
     "TWO_BEEPS": chime,
-    "LDA_ALERT": steer,
+    "LDA_ALERT": 0,
     "RIGHT_LINE": 3 if right_lane_depart else 1 if right_line else 2,
     "LEFT_LINE": 3 if left_lane_depart else 1 if left_line else 2,
-    "BARRIERS" : 1 if enabled else 0,
+    "BARRIERS": 1 if enabled else 0,
 
     # static signals
     "SET_ME_X02": 2,
@@ -96,4 +97,9 @@ def create_ui_command(packer, steer, chime, left_line, right_line, left_lane_dep
     "ADJUSTING_CAMERA": 0,
     "LDW_EXIST": 1,
   }
+
+  # lane sway functionality
+  # not all cars have LKAS_HUD ¡X update with camera values if available
+  values.update(stock_lkas_hud)
+
   return packer.make_can_msg("LKAS_HUD", 0, values)

@@ -11,7 +11,7 @@ from common.kalman.simple_kalman import KF1D
 from common.numpy_fast import interp
 from common.realtime import DT_CTRL
 from selfdrive.car import apply_hysteresis, gen_empty_fingerprint
-from selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, apply_deadzone
+from selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, apply_center_deadzone
 from selfdrive.controls.lib.events import Events
 from selfdrive.controls.lib.vehicle_model import VehicleModel
 
@@ -109,7 +109,7 @@ class CarInterfaceBase(ABC):
   def torque_from_lateral_accel_linear(lateral_accel_value, torque_params, lateral_accel_error, lateral_accel_deadzone, friction_compensation):
     # The default is a linear relationship between torque and lateral acceleration (accounting for road roll and steering friction)
     friction_interp = interp(
-      apply_deadzone(lateral_accel_error, lateral_accel_deadzone),
+      apply_center_deadzone(lateral_accel_error, lateral_accel_deadzone),
       [-FRICTION_THRESHOLD, FRICTION_THRESHOLD],
       [-torque_params.friction, torque_params.friction]
     )
@@ -150,6 +150,8 @@ class CarInterfaceBase(ABC):
     ret.longitudinalTuning.kpV = [1.]
     ret.longitudinalTuning.kiBP = [0.]
     ret.longitudinalTuning.kiV = [1.]
+    ret.longitudinalTuning.kdBP = [0.]
+    ret.longitudinalTuning.kdV = [0.]
     # TODO estimate car specific lag, use .15s for now
     ret.longitudinalActuatorDelayLowerBound = 0.15
     ret.longitudinalActuatorDelayUpperBound = 0.15
@@ -222,8 +224,8 @@ class CarInterfaceBase(ABC):
     if cs_out.gearShifter != GearShifter.drive and (extra_gears is None or
        cs_out.gearShifter not in extra_gears):
       events.add(EventName.wrongGear)
-    if cs_out.gearShifter == GearShifter.reverse:
-      events.add(EventName.reverseGear)
+    #  if cs_out.gearShifter == GearShifter.reverse:
+    #    events.add(EventName.reverseGear)
     if not cs_out.cruiseState.available:
       events.add(EventName.wrongCarMode)
     if cs_out.espDisabled:

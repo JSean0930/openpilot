@@ -23,6 +23,7 @@ from selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from selfdrive.controls.lib.latcontrol_indi import LatControlINDI
 from selfdrive.controls.lib.latcontrol_angle import LatControlAngle
 from selfdrive.controls.lib.latcontrol_torque import LatControlTorque
+from selfdrive.controls.lib.latcontrol_lqr import LatControlLQR
 from selfdrive.controls.lib.events import Events, ET
 from selfdrive.controls.lib.alertmanager import AlertManager, set_offroad_alert
 from selfdrive.controls.lib.vehicle_model import VehicleModel
@@ -114,11 +115,16 @@ class Controls:
     if self.CP.dashcamOnly and self.params.get_bool("DashcamOverride"):
       self.CP.dashcamOnly = False
 
+    self.dp_atl = self.params.get_bool('dp_atl')
+    if self.dp_atl:
+      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALKA
+
     # read params
     self.is_metric = self.params.get_bool("IsMetric")
     self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     passive = self.params.get_bool("Passive") or not openpilot_enabled_toggle
+    self.live_torque = self.params.get_bool("LiveTorque")
 
     # detect sound card presence and ensure successful init
     sounds_available = HARDWARE.get_sound_card_online()
@@ -162,6 +168,8 @@ class Controls:
       self.LaC = LatControlPID(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'indi':
       self.LaC = LatControlINDI(self.CP, self.CI)
+    elif self.CP.lateralTuning.which() == 'lqr':
+      self.LaC = LatControlLQR(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI)
 
@@ -571,7 +579,7 @@ class Controls:
     # Update Torque Params
     if self.CP.lateralTuning.which() == 'torque':
       torque_params = self.sm['liveTorqueParameters']
-      if self.sm.all_checks(['liveTorqueParameters']) and torque_params.useParams:
+      if self.sm.all_checks(['liveTorqueParameters']) and (torque_params.useParams or self.live_torque):
         self.LaC.update_live_torque_params(torque_params.latAccelFactorFiltered, torque_params.latAccelOffsetFiltered, torque_params.frictionCoefficientFiltered)
 
     lat_plan = self.sm['lateralPlan']
@@ -583,6 +591,22 @@ class Controls:
     CC.latActive = self.active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
                    CS.vEgo > self.CP.minSteerSpeed and not CS.standstill
     CC.longActive = self.active and not self.events.any(ET.OVERRIDE_LONGITUDINAL) and self.CP.openpilotLongitudinalControl
+
+    if self.dp_atl:
+      if not self.sm['liveCalibration'].calStatus == Calibration.CALIBRATED:
+        pass
+      elif not CS.cruiseState.available:
+        pass
+      elif CS.steerFaultTemporary:
+        pass
+      elif CS.steerFaultPermanent:
+        pass
+      elif CS.standstill:
+        pass
+      elif CS.gearShifter == car.CarState.GearShifter.reverse:
+        pass
+      else:
+        CC.latActive = True
 
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state
@@ -689,6 +713,7 @@ class Controls:
     hudControl.speedVisible = self.enabled
     hudControl.lanesVisible = self.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
+    hudControl.leadVelocity = self.sm['radarState'].leadOne.vLeadK if self.sm['longitudinalPlan'].hasLead else 0.0
 
     hudControl.rightLaneVisible = True
     hudControl.leftLaneVisible = True
@@ -777,7 +802,7 @@ class Controls:
     controlsState.startMonoTime = int(start_time * 1e9)
     controlsState.forceDecel = bool(force_decel)
     controlsState.canErrorCounter = self.can_rcv_timeout_counter
-    controlsState.experimentalMode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
+    controlsState.experimentalMode = (self.params.get_bool("ExperimentalMode") or self.sm['longitudinalPlan'].e2eIsBlended) and self.CP.openpilotLongitudinalControl
 
     lat_tuning = self.CP.lateralTuning.which()
     if self.joystick_mode:
@@ -788,6 +813,8 @@ class Controls:
       controlsState.lateralControlState.pidState = lac_log
     elif lat_tuning == 'torque':
       controlsState.lateralControlState.torqueState = lac_log
+    elif lat_tuning == 'lqr':
+      controlsState.lateralControlState.lqrState = lac_log
     elif lat_tuning == 'indi':
       controlsState.lateralControlState.indiState = lac_log
 

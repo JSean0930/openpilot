@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from cereal import car
+from common.numpy_fast import interp
 from common.conversions import Conversions as CV
+from common.params import Params
 from panda import Panda
 from selfdrive.car.toyota.values import Ecu, CAR, ToyotaFlags, TSS2_CAR, RADAR_ACC_CAR, NO_DSU_CAR, MIN_ACC_SPEED, EPS_SCALE, EV_HYBRID_CAR, UNSUPPORTED_DSU_CAR, CarControllerParams, NO_STOP_TIMER_CAR
 from selfdrive.car import STD_CARGO_KG, scale_rot_inertia, scale_tire_stiffness, gen_empty_fingerprint, get_safety_config
@@ -8,11 +10,22 @@ from selfdrive.car.interfaces import CarInterfaceBase
 
 EventName = car.CarEvent.EventName
 
-
 class CarInterface(CarInterfaceBase):
+  def __init__(self, CP, CarController, CarState):
+    super().__init__(CP, CarController, CarState)
+
+    # init for low speed re-write (dp)
+    self.low_cruise_speed = 0.
+
   @staticmethod
   def get_pid_accel_limits(CP, current_speed, cruise_speed):
-    return CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX
+    if CP.carFingerprint in TSS2_CAR:
+      # Allow for higher accel from PID controller at low speeds
+      return CarControllerParams.ACCEL_MIN, interp(current_speed,
+                                                   CarControllerParams.ACCEL_MAX_TSS2_BP,
+                                                   CarControllerParams.ACCEL_MAX_TSS2_VALS)
+    else:
+      return CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX
 
   @staticmethod
   def get_params(candidate, fingerprint=gen_empty_fingerprint(), car_fw=[], experimental_long=False):  # pylint: disable=dangerous-default-value
@@ -42,16 +55,17 @@ class CarInterface(CarInterfaceBase):
       # Only give steer angle deadzone to for bad angle sensor prius
       for fw in car_fw:
         if fw.ecu == "eps" and not fw.fwVersion == b'8965B47060\x00\x00\x00\x00\x00\x00':
-          steering_angle_deadzone_deg = 1.0
+          steering_angle_deadzone_deg = 0.2
+          ret.steerActuatorDelay = 0.25
           CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning, steering_angle_deadzone_deg)
 
     elif candidate == CAR.PRIUS_V:
       stop_and_go = True
       ret.wheelbase = 2.78
-      ret.steerRatio = 17.4
+      ret.steerRatio = 16.8
       tire_stiffness_factor = 0.5533
       ret.mass = 3340. * CV.LB_TO_KG + STD_CARGO_KG
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning, steering_angle_deadzone_deg)
+      ret.wheelSpeedFactor = 1.09
 
     elif candidate in (CAR.RAV4, CAR.RAV4H):
       stop_and_go = True if (candidate in CAR.RAV4H) else False
@@ -188,6 +202,9 @@ class CarInterface(CarInterfaceBase):
       tire_stiffness_factor = 0.444
       ret.mass = 4305. * CV.LB_TO_KG + STD_CARGO_KG
 
+    if Params().get_bool("EnableTorqueController"):
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning, steering_angle_deadzone_deg)
+
     ret.centerToFront = ret.wheelbase * 0.44
 
     # TODO: get actual value, for now starting with reasonable value for
@@ -201,13 +218,13 @@ class CarInterface(CarInterfaceBase):
 
     ret.enableBsm = 0x3F6 in fingerprint[0] and candidate in TSS2_CAR
     # Detect smartDSU, which intercepts ACC_CMD from the DSU allowing openpilot to send it
-    smartDsu = 0x2FF in fingerprint[0]
+    ret.smartDsu = 0x2FF in fingerprint[0]
     # In TSS2 cars the camera does long control
     found_ecus = [fw.ecu for fw in car_fw]
-    ret.enableDsu = len(found_ecus) > 0 and Ecu.dsu not in found_ecus and candidate not in (NO_DSU_CAR | UNSUPPORTED_DSU_CAR) and not smartDsu
+    ret.enableDsu = len(found_ecus) > 0 and Ecu.dsu not in found_ecus and candidate not in (NO_DSU_CAR | UNSUPPORTED_DSU_CAR) and not ret.smartDsu
     ret.enableGasInterceptor = 0x201 in fingerprint[0]
     # if the smartDSU is detected, openpilot can send ACC_CMD (and the smartDSU will block it from the DSU) or not (the DSU is "connected")
-    ret.openpilotLongitudinalControl = smartDsu or ret.enableDsu or candidate in (TSS2_CAR - RADAR_ACC_CAR)
+    ret.openpilotLongitudinalControl = ret.smartDsu or ret.enableDsu or candidate in (TSS2_CAR - RADAR_ACC_CAR)
     ret.autoResumeSng = ret.openpilotLongitudinalControl and candidate in NO_STOP_TIMER_CAR
 
     if not ret.openpilotLongitudinalControl:
@@ -223,26 +240,43 @@ class CarInterface(CarInterfaceBase):
     ret.minEnableSpeed = -1. if (stop_and_go or ret.enableGasInterceptor) else MIN_ACC_SPEED
 
     tune = ret.longitudinalTuning
-    tune.deadzoneBP = [0., 9.]
-    tune.deadzoneV = [.0, .15]
+    tune.deadzoneBP = [0., 9., 12.]
+    tune.deadzoneV = [.0, .15, 0.05]
     if candidate in TSS2_CAR or ret.enableGasInterceptor:
       tune.kpBP = [0., 5., 20.]
       tune.kpV = [1.3, 1.0, 0.7]
       tune.kiBP = [0., 5., 12., 20., 27.]
       tune.kiV = [.35, .23, .20, .17, .1]
       if candidate in TSS2_CAR:
+        ret.vEgoStopping = 0.25
+        ret.vEgoStarting = 0.25
         ret.stoppingDecelRate = 0.3  # reach stopping target smoothly
     else:
-      tune.kpBP = [0., 5., 35.]
-      tune.kiBP = [0., 35.]
-      tune.kpV = [3.6, 2.4, 1.5]
-      tune.kiV = [0.54, 0.36]
+      tune.kpBP = [0., 35.]
+      tune.kiBP = [0.]
+      tune.kdBP = [0., 16., 20., 45.]
+      tune.kpV = [1.2, 1.4]
+      tune.kiV = [.36]
+      tune.kdV = [.25, .3, .4, .7]
 
     return ret
 
   # returns a car.CarState
   def _update(self, c):
     ret = self.CS.update(self.cp, self.cp_cam)
+
+    # low speed re-write (dp)
+    self.cruise_speed_override = True # change this to False if you want to disable cruise speed override
+    if ret.cruiseState.enabled and ret.cruiseState.speed < 45 * CV.KPH_TO_MS and self.CP.openpilotLongitudinalControl:
+      if self.cruise_speed_override:
+        if self.low_cruise_speed == 0.:
+          ret.cruiseState.speed = self.low_cruise_speed = max(24 * CV.KPH_TO_MS, ret.vEgo)
+        else:
+          ret.cruiseState.speed = self.low_cruise_speed
+      else:
+        ret.cruiseState.speed = 24 * CV.KPH_TO_MS
+    else:
+      self.low_cruise_speed = 0.
 
     # events
     events = self.create_common_events(ret)
@@ -257,6 +291,10 @@ class CarInterface(CarInterfaceBase):
       if ret.vEgo < 0.001:
         # while in standstill, send a user alert
         events.add(EventName.manualRestart)
+
+    # cydia2020 - disable distance adjustment when using e2e long
+    if self.CS.distance_btn == 2:
+      events.add(car.CarEvent.EventName.followDistanceAdjustmentDisabled)
 
     ret.events = events.to_msg()
 

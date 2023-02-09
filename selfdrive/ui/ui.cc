@@ -55,9 +55,8 @@ void update_leads(UIState *s, const cereal::RadarState::Reader &radar_state, con
 }
 
 void update_line_data(const UIState *s, const cereal::ModelDataV2::XYZTData::Reader &line,
-                             float y_off, float z_off, QPolygonF *pvd, int max_idx, bool allow_invert=true) {
+                      float y_off, float z_off, QPolygonF *pvd, int max_idx, bool allow_invert=true) {
   const auto line_x = line.getX(), line_y = line.getY(), line_z = line.getZ();
-
   QPolygonF left_points, right_points;
   left_points.reserve(max_idx + 1);
   right_points.reserve(max_idx + 1);
@@ -174,6 +173,7 @@ void ui_update_params(UIState *s) {
   auto params = Params();
   s->scene.is_metric = params.getBool("IsMetric");
   s->scene.map_on_left = params.getBool("NavSettingLeftSide");
+  s->scene.onroadScreenOff = Params().getBool("OnroadScreenOff");
 }
 
 void UIState::updateStatus() {
@@ -203,6 +203,9 @@ void UIState::updateStatus() {
     emit offroadTransition(!scene.started);
   }
 
+  // Change color path "e2e_long" on fly
+  ui_update_params(uiState());
+
   // Handle prime type change
   if (prime_type != prime_type_prev) {
     prime_type_prev = prime_type;
@@ -215,7 +218,7 @@ UIState::UIState(QObject *parent) : QObject(parent) {
   sm = std::make_unique<SubMaster, const std::initializer_list<const char *>>({
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState", "roadCameraState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "liveLocationKalman",
-    "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "gnssMeasurements",
+    "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "gnssMeasurements", "longitudinalPlan",
   });
 
   Params params;
@@ -269,6 +272,9 @@ void Device::resetInteractiveTimout() {
 }
 
 void Device::updateBrightness(const UIState &s) {
+  SubMaster &sm = *(s.sm);
+
+  bool reversing = int(sm["carState"].getCarState().getGearShifter()) == 4;
   float clipped_brightness = BACKLIGHT_OFFROAD;
   if (s.scene.started) {
     clipped_brightness = s.scene.light_sensor;
@@ -287,6 +293,13 @@ void Device::updateBrightness(const UIState &s) {
   int brightness = brightness_filter.update(clipped_brightness);
   if (!awake) {
     brightness = 0;
+  } else if (s.scene.onroadScreenOff) {
+      if (s.status == STATUS_WARNING || s.status == STATUS_ALERT) {
+        // I personal feel more comfortable to keep 0.4 second screen-on after warning and alert
+        interactive_timeout = 0.4 * UI_FREQ;
+      } else if (s.scene.started && interactive_timeout == 0 && !reversing) {
+        brightness = 0;
+      }
   }
 
   if (brightness != last_brightness) {

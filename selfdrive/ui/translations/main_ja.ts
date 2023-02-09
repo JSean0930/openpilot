@@ -293,6 +293,17 @@
     </message>
 </context>
 <context>
+    <name>ForceCarRecognition</name>
+    <message>
+        <source>Back</source>
+        <translation type="unfinished">戻る</translation>
+    </message>
+    <message>
+        <source>[-Not selected-]</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>InputDialog</name>
     <message>
         <source>Cancel</source>
@@ -554,8 +565,8 @@ location set</source>
         <translation>ﾄﾞﾗｲﾌﾞﾚｺｰﾀﾞｰ</translation>
     </message>
     <message>
-        <source>openpilot</source>
-        <translation>openpilot</translation>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
         <source>%n minute(s) ago</source>
@@ -636,6 +647,10 @@ location set</source>
     <message>
         <source>Software</source>
         <translation>ｿﾌﾄｳｪｱ</translation>
+    </message>
+    <message>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Navigation</source>
@@ -761,18 +776,6 @@ location set</source>
     <message>
         <source>TEMP</source>
         <translation>温度</translation>
-    </message>
-    <message>
-        <source>HIGH</source>
-        <translation>高温</translation>
-    </message>
-    <message>
-        <source>GOOD</source>
-        <translation>最適</translation>
-    </message>
-    <message>
-        <source>OK</source>
-        <translation>OK</translation>
     </message>
     <message>
         <source>VEHICLE</source>
@@ -941,6 +944,113 @@ location set</source>
     <message>
         <source>Agree</source>
         <translation>同意</translation>
+    </message>
+</context>
+<context>
+    <name>TimpilotPanel</name>
+    <message>
+        <source>Select Car</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Select your car</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Quiet Drive</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>TOP will display alerts but only play the most important warning sounds. This feature can be toggled while the car is on.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Driving Screen Off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Turn off the device screen to protect the OLED panel after driving starts. It automatically brightens or turns on when a touch or event occurs.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lateral Controls Always On</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lateral control will always be on and will not be interrupted by braking.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Stop And Go</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enabled the Stop And Go feature and get auto hold.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable vision based turn control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Use vision path predictions to estimate the appropriate speed to drive through turns ahead.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable Door Auto Lock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enabled this to lock doors when drive above 25 km/h. Only work on some Toyota vehicles.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable Door Auto Unlock</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enabled this to unlock doors when shift to gear P. Only work on some Toyota vehicles.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Upload Raw Logs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Upload full logs and full resolution video by default while on Wi-Fi. If not enabled, individual logs can be marked for upload at useradmin.comma.ai.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable LiveTorque</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Learn torque parameters live for each car as opposed to using platform average values, which improves lateral control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lat: Use Torque Controller</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Experimental: use the new torque controller, please turn this off if you experience ping-pongs.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>e2e Long Function Link ECO Button</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The e2e long function switch is linked with the ECO button. Only work on some Toyota vehicles.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dynamic End-to-end Long</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Automatically Turn On and Off End-to-end longitudinal (Extremely alpha), this will ignore the stock end-to-end settings</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>

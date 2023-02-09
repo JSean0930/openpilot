@@ -1,4 +1,5 @@
 from cereal import car
+from common.realtime import DT_CTRL
 from common.numpy_fast import clip, interp
 from selfdrive.car import apply_toyota_steer_torque_limits, create_gas_interceptor_command, make_can_msg
 from selfdrive.car.toyota.toyotacan import create_steer_command, create_ui_command, \
@@ -7,7 +8,10 @@ from selfdrive.car.toyota.toyotacan import create_steer_command, create_ui_comma
 from selfdrive.car.toyota.values import CAR, STATIC_DSU_MSGS, NO_STOP_TIMER_CAR, TSS2_CAR, \
                                         MIN_ACC_SPEED, PEDAL_TRANSITION, CarControllerParams, \
                                         UNSUPPORTED_DSU_CAR
+from selfdrive.car.toyota.interface import CarInterface
 from opendbc.can.packer import CANPacker
+from common.params import Params
+from common.conversions import Conversions as CV
 
 VisualAlert = car.CarControl.HUDControl.VisualAlert
 
@@ -18,6 +22,10 @@ MAX_STEER_RATE_FRAMES = 18  # tx control frames needed before torque can be cut
 # EPS allows user torque above threshold for 50 frames before permanently faulting
 MAX_USER_TORQUE = 500
 
+GearShifter = car.CarState.GearShifter
+UNLOCK_CMD = b'\x40\x05\x30\x11\x00\x40\x00\x00'
+LOCK_CMD = b'\x40\x05\x30\x11\x00\x80\x00\x00'
+LOCK_AT_SPEED = 10 * CV.KPH_TO_MS
 
 class CarController:
   def __init__(self, dbc_name, CP, VM):
@@ -28,16 +36,27 @@ class CarController:
     self.alert_active = False
     self.last_standstill = False
     self.standstill_req = False
+    self.last_off_frame = 0
+    self.permit_braking = True
+    self.e2e_long = Params().get_bool("ExperimentalMode")
+    self.de2e_long = Params().get_bool("e2e_conditional")
     self.steer_rate_counter = 0
 
     self.packer = CANPacker(dbc_name)
     self.gas = 0
     self.accel = 0
 
+    self.last_gear = GearShifter.park
+    self.lock_once = False
+
   def update(self, CC, CS):
+    self.topsng = Params().get_bool('topsng')
+    self.toyotaautolock = Params().get_bool('toyotaautolock')
+    self.toyotaautounlock = Params().get_bool('toyotaautounlock')
+
     actuators = CC.actuators
     hud_control = CC.hudControl
-    pcm_cancel_cmd = CC.cruiseControl.cancel
+    pcm_cancel_cmd = CC.cruiseControl.cancel or (not CC.enabled and CS.pcm_acc_status)
     lat_active = CC.latActive and abs(CS.out.steeringTorque) < MAX_USER_TORQUE
 
     # gas and brake
@@ -56,7 +75,8 @@ class CarController:
       interceptor_gas_cmd = clip(pedal_command, 0., MAX_INTERCEPTOR_GAS)
     else:
       interceptor_gas_cmd = 0.
-    pcm_accel_cmd = clip(actuators.accel, CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX)
+    pid_accel_limits = CarInterface.get_pid_accel_limits(self.CP, CS.out.vEgo, None)  # Need to get cruise speed from somewhere
+    pcm_accel_cmd = clip(actuators.accel, pid_accel_limits[0], pid_accel_limits[1])
 
     # steer torque
     new_steer = int(round(actuators.steer * CarControllerParams.STEER_MAX))
@@ -76,22 +96,40 @@ class CarController:
       apply_steer_req = 0
       self.steer_rate_counter = 0
 
+    lead_vehicle_stopped = (hud_control.leadVelocity < 0.5 and hud_control.leadVisible) and not (self.e2e_long or self.de2e_long)
     # TODO: probably can delete this. CS.pcm_acc_status uses a different signal
     # than CS.cruiseState.enabled. confirm they're not meaningfully different
     if not CC.enabled and CS.pcm_acc_status:
       pcm_cancel_cmd = 1
 
+    # resume request
     # on entering standstill, send standstill request
-    if CS.out.standstill and not self.last_standstill and (self.CP.carFingerprint not in NO_STOP_TIMER_CAR or self.CP.enableGasInterceptor):
+    if CS.out.standstill and lead_vehicle_stopped and not self.last_standstill and (self.CP.carFingerprint not in NO_STOP_TIMER_CAR or self.CP.enableGasInterceptor):
       self.standstill_req = True
     if CS.pcm_acc_status != 8:
       # pcm entered standstill or it's disabled
       self.standstill_req = False
+    self.standstill_req = False if self.topsng else self.standstill_req
 
     self.last_steer = apply_steer
     self.last_standstill = CS.out.standstill
 
     can_sends = []
+
+    # dp - door auto lock / unlock logic
+    # thanks to AlexandreSato & cydia2020
+    # https://github.com/AlexandreSato/openpilot/blob/personal/doors.py
+    if self.toyotaautolock or self.toyotaautounlock:
+      gear = CS.out.gearShifter
+      if self.last_gear != gear and gear == GearShifter.park:
+        if self.toyotaautounlock:
+          can_sends.append(make_can_msg(0x750, UNLOCK_CMD, 0))
+        if self.toyotaautolock:
+          self.lock_once = False
+      elif self.toyotaautolock and gear == GearShifter.drive and not self.lock_once and CS.out.vEgo >= LOCK_AT_SPEED:
+        can_sends.append(make_can_msg(0x750, LOCK_CMD, 0))
+        self.lock_once = True
+      self.last_gear = gear
 
     # *** control msgs ***
     # print("steer {0} {1} {2} {3}".format(apply_steer, min_lim, max_lim, CS.steer_torque_motor)
@@ -108,18 +146,31 @@ class CarController:
     #   can_sends.append(create_steer_command(self.packer, 0, 0, self.frame // 2))
     #   can_sends.append(create_lta_steer_command(self.packer, actuators.steeringAngleDeg, apply_steer_req, self.frame // 2))
 
+    # record frames
+    if not CC.enabled:
+      self.last_off_frame = self.frame
+    if CS.out.gasPressed:
+      self.last_gas_press_frame = self.frame
+
+    # Handle permit braking logic
+    if (actuators.accel > 0.35) or not CC.enabled or (0.5 / DT_CTRL > (self.frame - self.last_off_frame) and not lead_vehicle_stopped):
+      self.permit_braking = False
+    else:
+      self.permit_braking = True
+
     # we can spam can to cancel the system even if we are using lat only control
     if (self.frame % 3 == 0 and self.CP.openpilotLongitudinalControl) or pcm_cancel_cmd:
-      lead = hud_control.leadVisible or CS.out.vEgo < 12.  # at low speed we always assume the lead is present so ACC can be engaged
+      lead = hud_control.leadVisible or CS.out.vEgo < 12. # at low speed we always assume the lead is present so ACC can be engaged
+      adjust_distance = CS.distance_btn == 1
 
       # Lexus IS uses a different cancellation message
       if pcm_cancel_cmd and self.CP.carFingerprint in UNSUPPORTED_DSU_CAR:
         can_sends.append(create_acc_cancel_command(self.packer))
       elif self.CP.openpilotLongitudinalControl:
-        can_sends.append(create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type))
+        can_sends.append(create_accel_command(self.packer, pcm_accel_cmd, pcm_cancel_cmd, self.standstill_req, lead, CS.acc_type, adjust_distance, self.permit_braking, lead_vehicle_stopped))
         self.accel = pcm_accel_cmd
       else:
-        can_sends.append(create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type))
+        can_sends.append(create_accel_command(self.packer, 0, pcm_cancel_cmd, False, lead, CS.acc_type, adjust_distance, False, False))
 
     if self.frame % 2 == 0 and self.CP.enableGasInterceptor and self.CP.openpilotLongitudinalControl:
       # send exactly zero if gas cmd is zero. Interceptor will send the max between read value and gas cmd.
@@ -143,10 +194,10 @@ class CarController:
         # forcing the pcm to disengage causes a bad fault sound so play a good sound instead
         send_ui = True
 
-      if self.frame % 100 == 0 or send_ui:
+      if self.frame % 20 == 0 or send_ui:
         can_sends.append(create_ui_command(self.packer, steer_alert, pcm_cancel_cmd, hud_control.leftLaneVisible,
                                            hud_control.rightLaneVisible, hud_control.leftLaneDepart,
-                                           hud_control.rightLaneDepart, CC.enabled))
+                                           hud_control.rightLaneDepart, CC.enabled, CS.lkas_hud))
 
       if (self.frame % 100 == 0 or send_ui) and self.CP.enableDsu:
         can_sends.append(create_fcw_command(self.packer, fcw_alert))

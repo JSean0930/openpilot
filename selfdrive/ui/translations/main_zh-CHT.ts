@@ -113,7 +113,7 @@
     </message>
     <message>
         <source>Decline, uninstall %1</source>
-        <translation>拒絕並卸載 %1</translation>
+        <translation>拒絕並解除安裝 %1</translation>
     </message>
 </context>
 <context>
@@ -132,7 +132,7 @@
     </message>
     <message>
         <source>Driver Camera</source>
-        <translation>駕駛員攝像頭</translation>
+        <translation>駕駛員監控鏡頭</translation>
     </message>
     <message>
         <source>PREVIEW</source>
@@ -285,11 +285,22 @@
     <name>ExperimentalModeButton</name>
     <message>
         <source>EXPERIMENTAL MODE ON</source>
-        <translation type="unfinished"></translation>
+        <translation>實驗模式 ON</translation>
     </message>
     <message>
         <source>CHILL MODE ON</source>
-        <translation type="unfinished"></translation>
+        <translation>輕鬆模式 ON</translation>
+    </message>
+</context>
+<context>
+    <name>ForceCarRecognition</name>
+    <message>
+        <source>Back</source>
+        <translation>回上頁</translation>
+    </message>
+    <message>
+        <source>[-Not selected-]</source>
+        <translation>[- 未選擇 -]</translation>
     </message>
 </context>
 <context>
@@ -554,8 +565,8 @@ location set</source>
         <translation>行車記錄器</translation>
     </message>
     <message>
-        <source>openpilot</source>
-        <translation>openpilot</translation>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
         <source>%n minute(s) ago</source>
@@ -636,6 +647,10 @@ location set</source>
     <message>
         <source>Software</source>
         <translation>軟體</translation>
+    </message>
+    <message>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Navigation</source>
@@ -763,18 +778,6 @@ location set</source>
         <translation>溫度</translation>
     </message>
     <message>
-        <source>HIGH</source>
-        <translation>偏高</translation>
-    </message>
-    <message>
-        <source>GOOD</source>
-        <translation>正常</translation>
-    </message>
-    <message>
-        <source>OK</source>
-        <translation>一般</translation>
-    </message>
-    <message>
         <source>VEHICLE</source>
         <translation>車輛通訊</translation>
     </message>
@@ -792,7 +795,7 @@ location set</source>
     </message>
     <message>
         <source>SEARCH</source>
-        <translation>車輛通訊</translation>
+        <translation>搜尋中</translation>
     </message>
     <message>
         <source>--</source>
@@ -859,15 +862,15 @@ location set</source>
     </message>
     <message>
         <source>UNINSTALL</source>
-        <translation>卸載</translation>
+        <translation>解除安裝</translation>
     </message>
     <message>
         <source>Uninstall %1</source>
-        <translation>卸載 %1</translation>
+        <translation>解除安裝 %1</translation>
     </message>
     <message>
         <source>Are you sure you want to uninstall?</source>
-        <translation>您確定您要卸載嗎？</translation>
+        <translation>您確定您要解除安裝嗎？</translation>
     </message>
     <message>
         <source>CHECK</source>
@@ -875,7 +878,7 @@ location set</source>
     </message>
     <message>
         <source>Uninstall</source>
-        <translation>卸載</translation>
+        <translation>解除安裝</translation>
     </message>
 </context>
 <context>
@@ -941,6 +944,113 @@ location set</source>
     <message>
         <source>Agree</source>
         <translation>接受</translation>
+    </message>
+</context>
+<context>
+    <name>TimpilotPanel</name>
+    <message>
+        <source>Select Car</source>
+        <translation>選擇車款</translation>
+    </message>
+    <message>
+        <source>Select your car</source>
+        <translation>選擇您的車款</translation>
+    </message>
+    <message>
+        <source>Quiet Drive</source>
+        <translation>安靜模式</translation>
+    </message>
+    <message>
+        <source>TOP will display alerts but only play the most important warning sounds. This feature can be toggled while the car is on.</source>
+        <translation>Openpilot 將只會針對最重要的警示發出警告聲音。可以在汽車啟動時切換此功能。</translation>
+    </message>
+    <message>
+        <source>Driving Screen Off</source>
+        <translation>上路關閉螢幕</translation>
+    </message>
+    <message>
+        <source>Turn off the device screen to protect the OLED panel after driving starts. It automatically brightens or turns on when a touch or event occurs.</source>
+        <translation>設備連線後將會關閉螢幕，用以延長 OLED 螢幕的壽命，當觸碰螢幕或有警告提示時，會重新開啟螢幕以進行操作設定及警示駕駛。可以在汽車啟動時切換此功能。</translation>
+    </message>
+    <message>
+        <source>Lateral Controls Always On</source>
+        <translation>全時車道維持</translation>
+    </message>
+    <message>
+        <source>Lateral control will always be on and will not be interrupted by braking.</source>
+        <translation>開啟此功能將會讓車道維持一直開啟，並不會被煞車給中斷。</translation>
+    </message>
+    <message>
+        <source>Stop And Go</source>
+        <translation>Stop And Go</translation>
+    </message>
+    <message>
+        <source>Enabled the Stop And Go feature and get auto hold.</source>
+        <translation>啟用Stop And Go 功能，讓車輛跟車到停並進入auto hold。</translation>
+    </message>
+    <message>
+        <source>Enable vision based turn control</source>
+        <translation>彎道減速</translation>
+    </message>
+    <message>
+        <source>Use vision path predictions to estimate the appropriate speed to drive through turns ahead.</source>
+        <translation>使用視覺路徑預測來估算適當的速度，可自動降速以順利通過前方的轉彎。</translation>
+    </message>
+    <message>
+        <source>Enable Door Auto Lock</source>
+        <translation>開啟車門自動上鎖</translation>
+    </message>
+    <message>
+        <source>Enabled this to lock doors when drive above 25 km/h. Only work on some Toyota vehicles.</source>
+        <translation>啟用此功能後，當在車速超過 25 公里時將自動鎖上車門。僅適用於某些Toyota車款。</translation>
+    </message>
+    <message>
+        <source>Enable Door Auto Unlock</source>
+        <translation>開啟車門自動解鎖</translation>
+    </message>
+    <message>
+        <source>Enabled this to unlock doors when shift to gear P. Only work on some Toyota vehicles.</source>
+        <translation>啟用此功能後，當檔位進到P檔時將自動解鎖車門。僅適用於某些Toyota車款。</translation>
+    </message>
+    <message>
+        <source>Upload Raw Logs</source>
+        <translation>上傳 Raw 記錄</translation>
+    </message>
+    <message>
+        <source>Upload full logs and full resolution video by default while on Wi-Fi. If not enabled, individual logs can be marked for upload at useradmin.comma.ai.</source>
+        <translation>當連接Wi-Fi網路時，可自動上傳完整的行車記錄檔及完整解晰度行車錄像。如果未開啟，則只會上傳個別的行車記錄到useradmin.comma.ai.</translation>
+    </message>
+    <message>
+        <source>Enable LiveTorque</source>
+        <translation>自動學習扭矩參數</translation>
+    </message>
+    <message>
+        <source>Learn torque parameters live for each car as opposed to using platform average values, which improves lateral control</source>
+        <translation>即時學習並調整您車輛的扭矩參數，而不是使用平台平均值，從而改善橫向控制。</translation>
+    </message>
+    <message>
+        <source>Lat: Use Torque Controller</source>
+        <translation>扭矩控制器橫向操控</translation>
+    </message>
+    <message>
+        <source>Experimental: use the new torque controller, please turn this off if you experience ping-pongs.</source>
+        <translation>橫向操控預設使用新的扭矩控制器，以提升橫向操控的體驗感。(若開啟後有不平穩的現象，可關閉此選項將横向操控回復為原本的PID / INDI / LQR 控制器。）</translation>
+    </message>
+    <message>
+        <source>e2e Long Function Link ECO Button</source>
+        <translation>e2e 蹤向開關與 ECO 按鍵連動</translation>
+    </message>
+    <message>
+        <source>The e2e long function switch is linked with the ECO button. Only work on some Toyota vehicles.</source>
+        <translation>端對端縱向控制開關與方向盤上的 ECO 按鍵連動。僅適用於某些Toyota車款。</translation>
+    </message>
+    <message>
+        <source>Dynamic End-to-end Long</source>
+        <translation>動態 e2e 蹤向控制</translation>
+    </message>
+    <message>
+        <source>Automatically Turn On and Off End-to-end longitudinal (Extremely alpha), this will ignore the stock end-to-end settings</source>
+        <translation>視狀況動態的開啟端對端縱向控制（實驗性功能）。</translation>
     </message>
 </context>
 <context>
@@ -1015,19 +1125,19 @@ location set</source>
     </message>
     <message>
         <source>On this car, openpilot defaults to the car&apos;s built-in ACC instead of openpilot&apos;s longitudinal control. Enable this to switch to openpilot longitudinal control. Enabling Experimental mode is recommended when using experimental openpilot longitudinal control.</source>
-        <translation type="unfinished"></translation>
+        <translation>在本車輛中，openpilot預設將使用原車內建的ACC系統，而非openpilot縱向控制。開啟此開關來啟用openpilot縱向控制，使用此選項時建議一併啟用實驗模式。</translation>
     </message>
     <message>
         <source>    openpilot defaults to driving in &lt;b&gt;chill mode&lt;/b&gt;.    Experimental mode enables &lt;b&gt;alpha-level features&lt;/b&gt; that aren&apos;t ready for chill mode.     Experimental features are listed below:     &lt;br&gt;     &lt;h4&gt;🌮 End-to-End Longitudinal Control 🌮&lt;/h4&gt;     Let the driving model control the gas and brakes. openpilot will drive as it thinks a human would, including stopping for red lights and stop signs.     Since the driving model decides the speed to drive, the set speed will only act as an upper bound. This is an alpha quality feature; mistakes should be expected.     &lt;br&gt;     &lt;h4&gt;New Driving Visualization&lt;/h4&gt;     The driving visualization will transition to the road-facing wide-angle camera at low speeds to better show some turns. The Experimental mode logo will also be shown in the top right corner.    </source>
-        <translation type="unfinished"></translation>
+        <translation>    openpilot 預設以 &lt;b&gt;輕鬆模式&lt;/b&gt; 駕駛。    實驗模式啟用了尚未準備好進入輕鬆模式的 &lt;b&gt;alpha 級功能&lt;/b&gt;。    實驗功能如下：     &lt;br&gt;     &lt;h4&gt;🌮端到端縱向控制🌮&lt;/h4&gt;     讓駕駛模型來控制油門及煞車。openpilot將會模擬人類的駕駛行為，包含在看見紅燈及停止標示時停車。由於車速將由駕駛模型決定，因此您設定的時速將成為速度上限。本功能仍在早期實驗階段，請預期模型有犯錯的可能性。     &lt;br&gt;     &lt;h4&gt;新的駕駛視覺介面&lt;/h4&gt;     低速行駛時，將會切換成路側廣角鏡頭，以完整顯示轉彎路徑，右上角將出現實驗模式圖案。    </translation>
     </message>
     <message>
         <source>Experimental mode is currently unavailable on this car, since the car&apos;s stock ACC is used for longitudinal control.</source>
-        <translation type="unfinished"></translation>
+        <translation>因車輛使用內建ACC系統，無法在本車輛上啟動實驗模式。</translation>
     </message>
     <message>
         <source>Enable experimental longitudinal control to allow experimental mode.</source>
-        <translation type="unfinished"></translation>
+        <translation>啟用實驗性縱向控制以使用實驗模式。</translation>
     </message>
 </context>
 <context>
