@@ -12,6 +12,8 @@ from selfdrive.car.interfaces import CarInterfaceBase
 EventName = car.CarEvent.EventName
 
 class CarInterface(CarInterfaceBase):
+  prev_atl = False
+
   def __init__(self, CP, CarController, CarState):
     super().__init__(CP, CarController, CarState)
 
@@ -266,6 +268,7 @@ class CarInterface(CarInterfaceBase):
   # returns a car.CarState
   def _update(self, c):
     ret = self.CS.update(self.cp, self.cp_cam)
+    self.dp_atl = Params().get_bool('dp_atl')
 
     # low speed re-write (dp)
     self.cruise_speed_override = True # change this to False if you want to disable cruise speed override
@@ -293,6 +296,13 @@ class CarInterface(CarInterfaceBase):
       if ret.vEgo < 0.001:
         # while in standstill, send a user alert
         events.add(EventName.manualRestart)
+
+    if self.dp_atl:
+      if not self.prev_atl and ret.cruiseState.available:
+        events.add(EventName.atlEngageSound)
+      elif self.prev_atl and not (ret.cruiseState.available and self.CP.openpilotLongitudinalControl):
+        events.add(EventName.atlDisengageSound)
+      self.prev_atl = ret.cruiseState.available
 
     ret.events = events.to_msg()
 

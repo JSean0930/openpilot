@@ -25,7 +25,7 @@ inline std::string log_root() {
   if (const char *env = getenv("LOG_ROOT")) {
     return env;
   }
-  if (Params().getBool("dp_jetson")) {
+  if (Params().getBool("dp_jetson") or Params().getBool("dp_atl")) {
     return "/data/media/0/fakedata";
   } else {
     return Hardware::PC() ? util::getenv("HOME") + "/.comma/media/0/realdata" : "/data/media/0/realdata";

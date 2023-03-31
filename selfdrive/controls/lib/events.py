@@ -892,4 +892,12 @@ EVENTS: Dict[int, Dict[str, Union[Alert, AlertCallbackType]]] = {
     ET.NO_ENTRY: NoEntryAlert("LKAS Disabled"),
   },
 
+
+  EventName.atlEngageSound: {
+    ET.PERMANENT: EngagementAlert(AudibleAlert.engage),
+  },
+
+  EventName.atlDisengageSound: {
+    ET.PERMANENT: EngagementAlert(AudibleAlert.disengage),
+  },
 }

@@ -532,6 +532,12 @@ TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
                                   "../assets/offroad/icon_metric.png",
                                   this));
 
+  toggles.append(new ParamControl("dp_atl",
+                                  "全時車道維持",
+                                  "開啟此功能將會讓車道維持一直開啟，並不會被煞車給中斷。",
+                                  "../assets/offroad/icon_road.png",
+                                  this));
+
   toggles.append(new ParamControl("topsng",
                                   "Stop And Go",
                                   "啟用Stop & Go 功能，讓車輛跟車到停並進入auto hold。",

@@ -190,6 +190,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"EnableTorqueController", PERSISTENT},
     {"LiveTorque", PERSISTENT},
     {"dp_jetson", PERSISTENT},
+    {"dp_atl", PERSISTENT},
 };
 
 } // namespace
