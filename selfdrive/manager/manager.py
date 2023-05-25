@@ -62,9 +62,11 @@ def manager_init() -> None:
     ("TimSignals", "1"),
     ("ReverseAccChange", "1"),
     ("dp_jetson", "0"),
+    ("DisableUpdates", "1"),
     ("dp_no_gps_ctrl", "0"),
-    ("dp_no_fan_ctrl", "0"),
+    ("dp_no_fan_ctrl", "1"),
     ("dp_mapd", "0"),
+    ("dp_logging", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))
