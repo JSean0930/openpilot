@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from cereal import car
+from common.params import Params
 from panda import Panda
 from selfdrive.car import STD_CARGO_KG, get_safety_config
 from selfdrive.car.interfaces import CarInterfaceBase
@@ -104,6 +105,9 @@ class CarInterface(CarInterfaceBase):
 
     else:
       raise ValueError(f"unknown car: {candidate}")
+
+    if Params().get_bool("EnableTorqueController"):
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     return ret
 

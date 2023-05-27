@@ -2,6 +2,7 @@
 from cereal import car
 from panda import Panda
 from common.conversions import Conversions as CV
+from common.params import Params
 from selfdrive.car.hyundai.hyundaicanfd import CanBus
 from selfdrive.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_CAR, CAMERA_SCC_CAR, CANFD_RADAR_SCC_CAR, EV_CAR, HYBRID_CAR, LEGACY_SAFETY_MODE_CAR, Buttons
 from selfdrive.car.hyundai.radar_interface import RADAR_START_ADDR
@@ -233,6 +234,9 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 2258. + STD_CARGO_KG
       ret.wheelbase = 2.95
       ret.steerRatio = 14.14
+
+    if Params().get_bool("EnableTorqueController"):
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     # *** longitudinal control ***
     if candidate in CANFD_CAR:

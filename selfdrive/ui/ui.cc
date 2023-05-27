@@ -199,6 +199,29 @@ static void update_state(UIState *s) {
   }
   if (sm.updated("carParams")) {
     scene.longitudinal_control = sm["carParams"].getCarParams().getOpenpilotLongitudinalControl();
+    if (scene.longitudinal_control) {
+      scene.adjustable_follow_distance = sm["carParams"].getCarParams().getAdjustableFollow();
+      scene.experimental_mode_via_wheel = sm["carParams"].getCarParams().getExperimentalModeViaWheel();
+    }
+  }
+  if (sm.updated("carState")) {
+    if (scene.adjustable_follow_distance && !scene.adjustable_follow_distance_car_checked) {
+      scene.adjustable_follow_distance_car = sm["carState"].getCarState().getAdjustableFollowCar();
+      scene.adjustable_follow_distance_car_checked = true;
+    }
+    if (scene.experimental_mode_via_wheel && !scene.steering_wheel_car_checked) {
+      scene.steering_wheel_car = sm["carState"].getCarState().getSteeringWheelCar();
+      scene.steering_wheel_car_checked = true;
+    }
+    if (scene.tim_signals) {
+      scene.blindspot_left = sm["carState"].getCarState().getLeftBlindspot();
+      scene.blindspot_right = sm["carState"].getCarState().getRightBlindspot();
+      scene.turn_signal_left = sm["carState"].getCarState().getLeftBlinker();
+      scene.turn_signal_right = sm["carState"].getCarState().getRightBlinker();
+    }
+  }
+  if (sm.updated("controlsState")) {
+    scene.experimental_mode = sm["controlsState"].getControlsState().getExperimentalMode();
   }
   if (sm.updated("wideRoadCameraState")) {
     float scale = (sm["wideRoadCameraState"].getWideRoadCameraState().getSensor() == cereal::FrameData::ImageSensor::AR0231) ? 6.0f : 1.0f;
@@ -211,6 +234,11 @@ void ui_update_params(UIState *s) {
   auto params = Params();
   s->scene.is_metric = params.getBool("IsMetric");
   s->scene.map_on_left = params.getBool("NavSettingLeftSide");
+  s->scene.onroadScreenOff = params.getBool("OnroadScreenOff");
+  s->scene.mute_dm = params.getBool("dp_jetson");
+  s->scene.tim_signals = params.getBool("TimSignals");
+  s->scene.experimental_mode_via_wheel = params.getBool("e2e_link");
+  s->scene.adjustable_follow_distance_profile = params.getInt("AdjustableFollowDistanceProfile");
 }
 
 void UIState::updateStatus() {
@@ -238,13 +266,17 @@ void UIState::updateStatus() {
     started_prev = scene.started;
     emit offroadTransition(!scene.started);
   }
+
+  // Change color path "e2e_long" on fly
+  ui_update_params(uiState());
 }
 
 UIState::UIState(QObject *parent) : QObject(parent) {
   sm = std::make_unique<SubMaster, const std::initializer_list<const char *>>({
     "modelV2", "controlsState", "liveCalibration", "radarState", "deviceState", "roadCameraState",
     "pandaStates", "carParams", "driverMonitoringState", "carState", "liveLocationKalman", "driverStateV2",
-    "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "uiPlan",
+    "wideRoadCameraState", "managerState", "navInstruction", "navRoute", "uiPlan", "longitudinalPlan",
+    "liveMapData",
   });
 
   Params params;
@@ -305,6 +337,9 @@ void Device::resetInteractiveTimout() {
 }
 
 void Device::updateBrightness(const UIState &s) {
+  SubMaster &sm = *(s.sm);
+
+  bool reversing = int(sm["carState"].getCarState().getGearShifter()) == 4;
   float clipped_brightness = BACKLIGHT_OFFROAD;
   if (s.scene.started) {
     clipped_brightness = s.scene.light_sensor;
@@ -323,6 +358,13 @@ void Device::updateBrightness(const UIState &s) {
   int brightness = brightness_filter.update(clipped_brightness);
   if (!awake) {
     brightness = 0;
+  } else if (s.scene.onroadScreenOff) {
+      if (s.status == STATUS_WARNING || s.status == STATUS_ALERT) {
+        // I personal feel more comfortable to keep 0.4 second screen-on after warning and alert
+        interactive_timeout = 0.4 * UI_FREQ;
+      } else if (s.scene.started && interactive_timeout == 0 && !reversing) {
+        brightness = 0;
+      }
   }
 
   if (brightness != last_brightness) {

@@ -24,24 +24,49 @@ from system.version import is_dirty, get_commit, get_version, get_origin, get_sh
                            is_tested_branch, is_release_branch
 
 
+sys.path.append(os.path.join(BASEDIR, "third_party/mapd"))
 
 def manager_init() -> None:
   # update system time from panda
   set_time(cloudlog)
 
   # save boot log
-  subprocess.call("./bootlog", cwd=os.path.join(BASEDIR, "system/loggerd"))
+  if not Params().get_bool("dp_jetson"):
+    subprocess.call("./bootlog", cwd=os.path.join(BASEDIR, "system/loggerd"))
 
   params = Params()
   params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
 
   default_params: List[Tuple[str, Union[str, bytes]]] = [
+    ("AdjustableFollowDistance", "1"),
+    ("AdjustableFollowDistanceProfile", "2"),
+    ("CarModel", ""),
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
     ("GsmMetered", "1"),
     ("HasAcceptedTerms", "0"),
+    ("IsLdwEnabled", "1"),
+    ("IsMetric", "1"),
     ("LanguageSetting", "main_en"),
+    ("NudgelessLaneChange", "0"),
+    ("NavSettingTime24h", "1"),
     ("OpenpilotEnabledToggle", "1"),
+    ("PrimeAd", "1"),
+    ("RecordFront", "0"),
+    ("TurnVisionControl", "1"),
+    ("EnableTorqueController", "1"),
+    ("LiveTorque", "1"),
+    ("e2e_link", "1"),
+    ("toyotaautolock", "1"),
+    ("toyotaautounlock", "1"),
+    ("toyota_bsm", "0"),
+    ("dynamic_lane", "0"),
+    ("dp_atl", "0"),
+    ("GpxDeleteAfterUpload", "1"),
+    ("GpxDeleteIfUploaded", "1"),
+    ("TimSignals", "1"),
+    ("ReverseAccChange", "1"),
+    ("dp_jetson", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))
@@ -127,6 +152,9 @@ def manager_thread() -> None:
   params = Params()
 
   ignore: List[str] = []
+  dp_jetson = params.get_bool('dp_jetson')
+  ignore += ['dmonitoringmodeld', 'dmonitoringd'] if dp_jetson else []
+  ignore += ['uploader'] if params.get_bool('dp_jetson') else []
   if params.get("DongleId", encoding='utf8') in (None, UNREGISTERED_DONGLE_ID):
     ignore += ["manage_athenad", "uploader"]
   if os.getenv("NOBOARD") is not None:

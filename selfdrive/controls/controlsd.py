@@ -15,7 +15,7 @@ from system.swaglog import cloudlog
 from system.version import is_release_branch, get_short_branch
 from selfdrive.boardd.boardd import can_list_to_can_capnp
 from selfdrive.car.car_helpers import get_car, get_startup_event, get_one_can
-from selfdrive.controls.lib.lateral_planner import CAMERA_OFFSET
+from selfdrive.controls.lib.lane_planner import CAMERA_OFFSET
 from selfdrive.controls.lib.drive_helpers import VCruiseHelper, get_lag_adjusted_curvature
 from selfdrive.controls.lib.latcontrol import LatControl, MIN_LATERAL_CONTROL_SPEED
 from selfdrive.controls.lib.longcontrol import LongControl
@@ -23,6 +23,7 @@ from selfdrive.controls.lib.latcontrol_pid import LatControlPID
 from selfdrive.controls.lib.latcontrol_indi import LatControlINDI
 from selfdrive.controls.lib.latcontrol_angle import LatControlAngle, STEER_ANGLE_SATURATION_THRESHOLD
 from selfdrive.controls.lib.latcontrol_torque import LatControlTorque
+from selfdrive.controls.lib.latcontrol_lqr import LatControlLQR
 from selfdrive.controls.lib.events import Events, ET
 from selfdrive.controls.lib.alertmanager import AlertManager, set_offroad_alert
 from selfdrive.controls.lib.vehicle_model import VehicleModel
@@ -35,7 +36,7 @@ LANE_DEPARTURE_THRESHOLD = 0.1
 REPLAY = "REPLAY" in os.environ
 SIMULATION = "SIMULATION" in os.environ
 NOSENSOR = "NOSENSOR" in os.environ
-IGNORE_PROCESSES = {"loggerd", "encoderd", "statsd"}
+IGNORE_PROCESSES = {"loggerd", "encoderd", "statsd", "mapd", "gpxd"}
 
 ThermalStatus = log.DeviceState.ThermalStatus
 State = log.ControlsState.OpenpilotState
@@ -61,6 +62,8 @@ class Controls:
     # Ensure the current branch is cached, otherwise the first iteration of controlsd lags
     self.branch = get_short_branch("")
 
+    self.params = Params()
+    self.dp_jetson = self.params.get_bool('dp_jetson')
     # Setup sockets
     self.pm = pm
     if self.pm is None:
@@ -68,6 +71,8 @@ class Controls:
                                      'carControl', 'carEvents', 'carParams'])
 
     self.camera_packets = ["roadCameraState", "driverCameraState", "wideRoadCameraState"]
+    if self.dp_jetson:
+      self.camera_packets = ["roadCameraState", "wideRoadCameraState"]
 
     self.can_sock = can_sock
     if can_sock is None:
@@ -76,7 +81,6 @@ class Controls:
 
     self.log_sock = messaging.sub_sock('androidLog')
 
-    self.params = Params()
     self.sm = sm
     if self.sm is None:
       ignore = ['testJoystick']
@@ -84,6 +88,8 @@ class Controls:
         ignore += ['driverCameraState', 'managerState']
       if self.params.get_bool('WideCameraOnly'):
         ignore += ['roadCameraState']
+      if self.dp_jetson:
+        ignore += ['driverCameraState', 'driverMonitoringState']
       self.sm = messaging.SubMaster(['deviceState', 'pandaStates', 'peripheralState', 'modelV2', 'liveCalibration',
                                      'driverMonitoringState', 'longitudinalPlan', 'lateralPlan', 'liveLocationKalman',
                                      'managerState', 'liveParameters', 'radarState', 'liveTorqueParameters', 'testJoystick'] + self.camera_packets,
@@ -108,11 +114,16 @@ class Controls:
     if not self.disengage_on_accelerator:
       self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.DISABLE_DISENGAGE_ON_GAS
 
+    self.dp_atl = self.params.get_bool('dp_atl')
+    if self.dp_atl:
+      self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALKA
+
     # read params
     self.is_metric = self.params.get_bool("IsMetric")
     self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     passive = self.params.get_bool("Passive") or not openpilot_enabled_toggle
+    self.live_torque = self.params.get_bool("LiveTorque")
 
     # detect sound card presence and ensure successful init
     sounds_available = HARDWARE.get_sound_card_online()
@@ -153,6 +164,8 @@ class Controls:
       self.LaC = LatControlPID(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'indi':
       self.LaC = LatControlINDI(self.CP, self.CI)
+    elif self.CP.lateralTuning.which() == 'lqr':
+      self.LaC = LatControlLQR(self.CP, self.CI)
     elif self.CP.lateralTuning.which() == 'torque':
       self.LaC = LatControlTorque(self.CP, self.CI)
 
@@ -178,6 +191,7 @@ class Controls:
     self.desired_curvature_rate = 0.0
     self.experimental_mode = False
     self.v_cruise_helper = VCruiseHelper(self.CP)
+    self.reverse_acc_change = False
 
     # TODO: no longer necessary, aside from process replay
     self.sm['liveParameters'].valid = True
@@ -249,7 +263,7 @@ class Controls:
     if CS.gasPressed:
       self.events.add(EventName.gasPressedOverride)
 
-    if not self.CP.notCar:
+    if not self.CP.notCar and not self.dp_jetson:
       self.events.add_from_msg(self.sm['driverMonitoringState'].events)
 
     # Add car events, ignore if CAN isn't valid
@@ -294,8 +308,16 @@ class Controls:
     # Handle lane change
     if self.sm['lateralPlan'].laneChangeState == LaneChangeState.preLaneChange:
       direction = self.sm['lateralPlan'].laneChangeDirection
+      #dp
+      md = self.sm['modelV2']
+      left_road_edge = -md.roadEdges[0].y[0]
+      right_road_edge = md.roadEdges[1].y[0]
       if (CS.leftBlindspot and direction == LaneChangeDirection.left) or \
          (CS.rightBlindspot and direction == LaneChangeDirection.right):
+        self.events.add(EventName.laneChangeBlocked)
+      #dp
+      elif ((left_road_edge < 2.5) and direction == LaneChangeDirection.left) or \
+         ((right_road_edge < 2.5) and direction == LaneChangeDirection.right):
         self.events.add(EventName.laneChangeBlocked)
       else:
         if direction == LaneChangeDirection.left:
@@ -467,7 +489,7 @@ class Controls:
   def state_transition(self, CS):
     """Compute conditional state transitions and execute actions on state transitions"""
 
-    self.v_cruise_helper.update_v_cruise(CS, self.enabled, self.is_metric)
+    self.v_cruise_helper.update_v_cruise(CS, self.enabled, self.is_metric, self.reverse_acc_change)
 
     # decrement the soft disable timer at every step, as it's reset on
     # entrance in SOFT_DISABLING state
@@ -562,7 +584,7 @@ class Controls:
     # Update Torque Params
     if self.CP.lateralTuning.which() == 'torque':
       torque_params = self.sm['liveTorqueParameters']
-      if self.sm.all_checks(['liveTorqueParameters']) and torque_params.useParams:
+      if self.sm.all_checks(['liveTorqueParameters']) and (torque_params.useParams or self.live_torque):
         self.LaC.update_live_torque_params(torque_params.latAccelFactorFiltered, torque_params.latAccelOffsetFiltered, torque_params.frictionCoefficientFiltered)
 
     lat_plan = self.sm['lateralPlan']
@@ -576,6 +598,18 @@ class Controls:
     CC.latActive = self.active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
                    (not standstill or self.joystick_mode)
     CC.longActive = self.enabled and not self.events.any(ET.OVERRIDE_LONGITUDINAL) and self.CP.openpilotLongitudinalControl
+
+    if not standstill and CS.cruiseState.available and self.dp_atl:
+      if self.sm['liveCalibration'].calStatus != log.LiveCalibrationData.Status.calibrated:
+        pass
+      elif CS.steerFaultTemporary:
+        pass
+      elif CS.steerFaultPermanent:
+        pass
+      elif CS.gearShifter == car.CarState.GearShifter.reverse:
+        pass
+      else:
+        CC.latActive = True
 
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state
@@ -693,6 +727,7 @@ class Controls:
     hudControl.speedVisible = self.enabled
     hudControl.lanesVisible = self.enabled
     hudControl.leadVisible = self.sm['longitudinalPlan'].hasLead
+    hudControl.leadVelocity = self.sm['radarState'].leadOne.vLeadK if self.sm['longitudinalPlan'].hasLead else 0.0
 
     hudControl.rightLaneVisible = True
     hudControl.leftLaneVisible = True
@@ -796,6 +831,8 @@ class Controls:
       controlsState.lateralControlState.pidState = lac_log
     elif lat_tuning == 'torque':
       controlsState.lateralControlState.torqueState = lac_log
+    elif lat_tuning == 'lqr':
+      controlsState.lateralControlState.lqrState = lac_log
     elif lat_tuning == 'indi':
       controlsState.lateralControlState.indiState = lac_log
 
@@ -837,6 +874,8 @@ class Controls:
 
     self.is_metric = self.params.get_bool("IsMetric")
     self.experimental_mode = self.params.get_bool("ExperimentalMode") and self.CP.openpilotLongitudinalControl
+
+    self.reverse_acc_change = self.params.get_bool("ReverseAccChange")
 
     # Sample data from sockets and get a carState
     CS = self.data_sample()

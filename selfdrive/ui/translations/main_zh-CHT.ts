@@ -293,6 +293,17 @@
     </message>
 </context>
 <context>
+    <name>ForceCarRecognition</name>
+    <message>
+        <source>Back</source>
+        <translation>回上頁</translation>
+    </message>
+    <message>
+        <source>[-Not selected-]</source>
+        <translation>[- 未選擇 -]</translation>
+    </message>
+</context>
+<context>
     <name>InputDialog</name>
     <message>
         <source>Cancel</source>
@@ -542,8 +553,8 @@ location set</source>
         <translation>行車記錄器</translation>
     </message>
     <message>
-        <source>openpilot</source>
-        <translation>openpilot</translation>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
         <source>%n minute(s) ago</source>
@@ -625,6 +636,10 @@ This may take up to a minute.</source>
     <message>
         <source>Software</source>
         <translation>軟體</translation>
+    </message>
+    <message>
+        <source>T.O.P</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Navigation</source>
@@ -748,18 +763,6 @@ This may take up to a minute.</source>
         <translation>溫度</translation>
     </message>
     <message>
-        <source>HIGH</source>
-        <translation>偏高</translation>
-    </message>
-    <message>
-        <source>GOOD</source>
-        <translation>正常</translation>
-    </message>
-    <message>
-        <source>OK</source>
-        <translation>一般</translation>
-    </message>
-    <message>
         <source>VEHICLE</source>
         <translation>車輛通訊</translation>
     </message>
@@ -777,7 +780,7 @@ This may take up to a minute.</source>
     </message>
     <message>
         <source>SEARCH</source>
-        <translation>車輛通訊</translation>
+        <translation>搜尋中</translation>
     </message>
     <message>
         <source>--</source>
@@ -926,6 +929,151 @@ This may take up to a minute.</source>
     <message>
         <source>Agree</source>
         <translation>接受</translation>
+    </message>
+</context>
+<context>
+    <name>TimpilotPanel</name>
+    <message>
+        <source>Select Car</source>
+        <translation>選擇車款</translation>
+    </message>
+    <message>
+        <source>Select your car</source>
+        <translation>選擇您的車款</translation>
+    </message>
+    <message>
+        <source>Quiet Drive</source>
+        <translation>安靜模式</translation>
+    </message>
+    <message>
+        <source>TOP will display alerts but only play the most important warning sounds. This feature can be toggled while the car is on.</source>
+        <translation>Openpilot 將只會針對最重要的警示發出警告聲音。可以在汽車啟動時切換此功能。</translation>
+    </message>
+    <message>
+        <source>Driving Screen Off</source>
+        <translation>上路關閉螢幕</translation>
+    </message>
+    <message>
+        <source>Turn off the device screen to protect the OLED panel after driving starts. It automatically brightens or turns on when a touch or event occurs.</source>
+        <translation>設備連線後將會關閉螢幕，用以延長 OLED 螢幕的壽命，當觸碰螢幕或有警告提示時，會重新開啟螢幕以進行操作設定及警示駕駛。可以在汽車啟動時切換此功能。</translation>
+    </message>
+    <message>
+        <source>Lateral Controls Always On</source>
+        <translation>全時車道維持</translation>
+    </message>
+    <message>
+        <source>Lateral control will always be on and will not be interrupted by braking.</source>
+        <translation>開啟此功能將會讓車道維持一直開啟，並不會被煞車給中斷。</translation>
+    </message>
+    <message>
+        <source>Stop And Go</source>
+        <translation>Stop And Go</translation>
+    </message>
+    <message>
+        <source>Enabled the Stop And Go feature and get auto hold.</source>
+        <translation>啟用Stop And Go 功能，讓車輛跟車到停並進入auto hold。</translation>
+    </message>
+    <message>
+        <source>Enabled Dynamic Lane</source>
+        <translation>開啟動態線道模式</translation>
+    </message>
+    <message>
+        <source>Auto switch between Lane and Landless modes, this function can improve excessive left or right deviation when cornering.</source>
+        <translation>自動切換Lane及Landless模式，此功能可以改善過彎時過度向左或向右的偏移。</translation>
+    </message>
+    <message>
+        <source>Blinker Lane Change</source>
+        <translation>開啟方向燈自動變換車道</translation>
+    </message>
+    <message>
+        <source>Change lanes without the need to nudge the steering wheel first.
+Disabled: Need to nudge the steering wheel to change lanes.
+Enabled: Nudgeless.
+Speed limit: Normal mode: above 20mph, Enabled Lateral Controls Always On: above 35mph.</source>
+        <translation>打方向燈即自動變換車道，變換車道不再需要先輕推方向盤。
+關閉選項:  需輕推方向盤啟動換道。
+開啟選項:  不需輕推方向盤即可換道。
+換道速度限制: 一般模式：時速32公里以上, 開啟全時置中功能：時速65公里以上。</translation>
+    </message>
+    <message>
+        <source>Enable vision based turn control</source>
+        <translation>彎道減速</translation>
+    </message>
+    <message>
+        <source>Use vision path predictions to estimate the appropriate speed to drive through turns ahead.</source>
+        <translation>使用視覺路徑預測來估算適當的速度，可自動降速以順利通過前方的轉彎。</translation>
+    </message>
+    <message>
+        <source>Enable Door Auto Lock</source>
+        <translation>開啟車門自動上鎖</translation>
+    </message>
+    <message>
+        <source>Enabled this to lock doors when drive above 25 km/h. Only work on some Toyota vehicles.</source>
+        <translation>啟用此功能後，當在車速超過 25 公里時將自動鎖上車門。僅適用於某些Toyota車款。</translation>
+    </message>
+    <message>
+        <source>Enable Door Auto Unlock</source>
+        <translation>開啟車門自動解鎖</translation>
+    </message>
+    <message>
+        <source>Enabled this to unlock doors when shift to gear P. Only work on some Toyota vehicles.</source>
+        <translation>啟用此功能後，當檔位進到P檔時將自動解鎖車門。僅適用於某些Toyota車款。</translation>
+    </message>
+    <message>
+        <source>Fix Toyota BSM Signal</source>
+        <translation>修正Toyota盲點偵測訊號</translation>
+    </message>
+    <message>
+        <source>Enhance BSM function for some Toyota vehicles that openpilot currently does not support.</source>
+        <translation>修正部分Toyota車款的盲點偵測訊號以開啟openpilot支援。</translation>
+    </message>
+    <message>
+        <source>ACC +/-: Long Press Reverse</source>
+        <translation>ACC +/-: 反轉長按數值</translation>
+    </message>
+    <message>
+        <source>Change the ACC +/- buttons behavior with cruise speed change in openpilot.
+Disabled (Stock):  Short=1, Long=5.
+Enabled:  Short=5, Long=1.</source>
+        <translation>在openpilot中更改ACC +/- 按鈕的行為與巡航速度變化。
+關閉選項 (原廠設定):  短按=1, 長按=5
+開啟選項:  短按=5, 長按=1。</translation>
+    </message>
+    <message>
+        <source>Enable Jetson Support</source>
+        <translation>啟用 Jetson 支援</translation>
+    </message>
+    <message>
+        <source>Enable this option if you intend to run dp on Nvidia Jetson. Reboot required.</source>
+        <translation>如果您打算在 Nvidia Jetson NX 上跑 TOP ，請開啟這個選項，但此選項可能造成駕駛監控被關閉，且需重新啟動後生效。</translation>
+    </message>
+    <message>
+        <source>Enable LiveTorque</source>
+        <translation>自動學習扭矩參數</translation>
+    </message>
+    <message>
+        <source>Learn torque parameters live for each car as opposed to using platform average values, which improves lateral control</source>
+        <translation>即時學習並調整您車輛的扭矩參數，而不是使用平台平均值，從而改善橫向控制。</translation>
+    </message>
+    <message>
+        <source>Lat: Use Torque Controller</source>
+        <translation>扭矩控制器橫向操控</translation>
+    </message>
+    <message>
+        <source>Experimental: use the new torque controller, please turn this off if you experience ping-pongs.</source>
+        <translation>橫向操控預設使用新的扭矩控制器，以提升橫向操控的體驗感。(若開啟後有不平穩的現象，可關閉此選項將横向操控回復為原本的PID / INDI / LQR 控制器。）</translation>
+    </message>
+    <message>
+        <source>Experimental Mode Via ECO Button / Screen</source>
+        <translation>以ECO鍵或輕觸螢幕快速啟動實驗模式</translation>
+    </message>
+    <message>
+        <source>Quick enable Experimental Mode (End-to-End longitudinal).
+Toyota/Lexus: Press the ECO button.
+Other makes: Double tapping the screen.</source>
+        <translation>快速啟動實驗模式(端到端蹤向控制)。
+Toyota/Lexus：按下 ECO 按鈕。
+其他車廠：輕觸螢幕兩次。</translation>
     </message>
 </context>
 <context>

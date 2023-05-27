@@ -3,6 +3,7 @@ LICENSE
 launch_env.sh
 launch_chffrplus.sh
 launch_openpilot.sh
+force_car_recognition.py
 
 Jenkinsfile
 SConstruct
@@ -143,6 +144,9 @@ selfdrive/debug/uiview.py
 selfdrive/debug/hyundai_enable_radar_points.py
 selfdrive/debug/vw_mqb_config.py
 
+selfdrive/gpxd/gpx_uploader.py
+selfdrive/gpxd/gpxd.py
+
 common/SConscript
 common/version.h
 
@@ -180,8 +184,10 @@ selfdrive/controls/lib/alerts_offroad.json
 selfdrive/controls/lib/desire_helper.py
 selfdrive/controls/lib/drive_helpers.py
 selfdrive/controls/lib/events.py
+selfdrive/controls/lib/lane_planner.py
 selfdrive/controls/lib/latcontrol_angle.py
 selfdrive/controls/lib/latcontrol_indi.py
+selfdrive/controls/lib/latcontrol_lqr.py
 selfdrive/controls/lib/latcontrol_torque.py
 selfdrive/controls/lib/latcontrol_pid.py
 selfdrive/controls/lib/latcontrol.py
@@ -191,6 +197,7 @@ selfdrive/controls/lib/longitudinal_planner.py
 selfdrive/controls/lib/pid.py
 selfdrive/controls/lib/radar_helpers.py
 selfdrive/controls/lib/vehicle_model.py
+selfdrive/controls/lib/vision_turn_controller.py
 
 selfdrive/controls/lib/lateral_mpc_lib/.gitignore
 selfdrive/controls/lib/longitudinal_mpc_lib/.gitignore
@@ -324,7 +331,7 @@ selfdrive/ui/qt/setup/*.h
 
 selfdrive/ui/installer/*.cc
 selfdrive/ui/installer/*.h
-selfdrive/ui/installer/*.cc
+selfdrive/ui/installer/*.sh
 
 system/camerad/SConscript
 system/camerad/main.cc
@@ -341,12 +348,33 @@ system/camerad/imgproc/utils.h
 
 selfdrive/manager/__init__.py
 selfdrive/manager/build.py
+selfdrive/manager/custom_dep.py
 selfdrive/manager/helpers.py
 selfdrive/manager/manager.py
 selfdrive/manager/process_config.py
 selfdrive/manager/process.py
 selfdrive/manager/test/__init__.py
 selfdrive/manager/test/test_manager.py
+
+selfdrive/mapd/config.py
+selfdrive/mapd/mapd.py
+selfdrive/mapd/lib/*.py
+selfdrive/mapd/lib/default_speeds.json
+selfdrive/mapd/lib/geo.py
+selfdrive/mapd/lib/NodesData.py
+selfdrive/mapd/lib/osm.py
+selfdrive/mapd/lib/Route.py
+selfdrive/mapd/lib/WayCollection.py
+selfdrive/mapd/lib/WayRelation.py
+selfdrive/mapd/lib/WayRelationIndex.py
+selfdrive/mapd/test/__init__.py
+selfdrive/mapd/test/mock_data.py
+selfdrive/mapd/test/mock_osm_response_01.xml
+selfdrive/mapd/test/mock_osm_response_02.xml
+selfdrive/mapd/test/test_geo.py
+selfdrive/mapd/test/test_NodesData.py
+selfdrive/mapd/test/test_WayRelation.py
+selfdrive/mapd/test/test_WayRelationIndex.py
 
 selfdrive/modeld/__init__.py
 selfdrive/modeld/SConscript
@@ -405,7 +433,7 @@ selfdrive/assets/assets.qrc
 selfdrive/assets/*.png
 selfdrive/assets/*.svg
 selfdrive/assets/body/*
-selfdrive/assets/fonts/*.ttf
+selfdrive/assets/fonts/*
 selfdrive/assets/icons/*
 selfdrive/assets/images/*
 selfdrive/assets/offroad/*
