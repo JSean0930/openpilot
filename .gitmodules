@@ -1,17 +1,15 @@
 [submodule "panda"]
   path = panda
-  url = ../../dragonpilot-community/panda.git
-  branch = legacy
+  url = ../../CT921/panda.git
 [submodule "opendbc"]
   path = opendbc
-  url = ../../dragonpilot-community/opendbc.git
-  branch = legacy
+  url = ../../CT921/opendbc.git
 [submodule "laika_repo"]
   path = laika_repo
   url = ../../commaai/laika.git
 [submodule "cereal"]
   path = cereal
-  url = ../../commaai/cereal.git
+  url = ../../CT921/cereal.git
 [submodule "rednose_repo"]
   path = rednose_repo
   url = ../../commaai/rednose.git

@@ -76,6 +76,7 @@ private:
   QStackedWidget *mainLayout;
   PrimeAdWidget *primeAd;
   PrimeUserWidget *primeUser;
+  bool isDisableAd;
 
 private slots:
   void replyFinished(const QString &response, bool success);

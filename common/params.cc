@@ -204,8 +204,30 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"Offroad_UpdateFailed", CLEAR_ON_MANAGER_START},
     {"Offroad_Recalibration", CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION},
 
+
+    {"CarModel", PERSISTENT},
+    {"LiveTorque", PERSISTENT},
+    {"LateralAllowed", CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION},
+    {"PrimeAd", PERSISTENT},
+    {"QuietDrive", PERSISTENT},
+    {"OnroadScreenOff", PERSISTENT},
+    {"topsng", PERSISTENT},
+    {"toyota_bsm", PERSISTENT},
+    {"TurnVisionControl", PERSISTENT},
+    {"toyotaautolock", PERSISTENT},
+    {"toyotaautounlock", PERSISTENT},
+    {"EnableTorqueController", PERSISTENT},
+    // {"e2e_conditional", PERSISTENT},
+    {"e2e_link", PERSISTENT},
+    {"dynamic_lane", PERSISTENT},
+    {"dp_atl", PERSISTENT},
+    {"dp_jetson", PERSISTENT},
+    {"NudgelessLaneChange", PERSISTENT},
+    {"TimSignals", PERSISTENT},
+    {"ReverseAccChange", PERSISTENT},
     {"dp_no_gps_ctrl", PERSISTENT},
     {"dp_no_fan_ctrl", PERSISTENT},
+    {"dp_mapd", PERSISTENT},
 };
 
 } // namespace

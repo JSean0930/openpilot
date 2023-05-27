@@ -34,16 +34,16 @@ procs = [
   # due to qualcomm kernel bugs SIGKILLing camerad sometimes causes page table corruption
   NativeProcess("camerad", "selfdrive/camerad", ["./camerad"], unkillable=True, callback=driverview),
   NativeProcess("clocksd", "system/clocksd", ["./clocksd"]),
-  NativeProcess("logcatd", "system/logcatd", ["./logcatd"]),
-  NativeProcess("proclogd", "system/proclogd", ["./proclogd"]),
-  PythonProcess("logmessaged", "system.logmessaged", offroad=True),
+  # NativeProcess("logcatd", "system/logcatd", ["./logcatd"]),
+  # NativeProcess("proclogd", "system/proclogd", ["./proclogd"]),
+  # PythonProcess("logmessaged", "system.logmessaged", offroad=True),
   # PythonProcess("micd", "system.micd"),
   # PythonProcess("timezoned", "system.timezoned", enabled=not PC, offroad=True),
 
   DaemonProcess("manage_athenad", "selfdrive.athena.manage_athenad", "AthenadPid"),
   NativeProcess("dmonitoringmodeld", "selfdrive/legacy_modeld", ["./dmonitoringmodeld"], enabled=(not PC or WEBCAM), callback=driverview),
   # NativeProcess("encoderd", "system/loggerd", ["./encoderd"]),
-  NativeProcess("loggerd", "selfdrive/loggerd", ["./loggerd"], onroad=False, callback=logging),
+  # NativeProcess("loggerd", "selfdrive/loggerd", ["./loggerd"], onroad=False, callback=logging),
   NativeProcess("modeld", "selfdrive/legacy_modeld", ["./modeld"]),
   # NativeProcess("mapsd", "selfdrive/navd", ["./map_renderer"], enabled=False),
   # NativeProcess("navmodeld", "selfdrive/modeld", ["./navmodeld"], enabled=False),
@@ -55,7 +55,7 @@ procs = [
   PythonProcess("calibrationd", "selfdrive.locationd.calibrationd"),
   PythonProcess("torqued", "selfdrive.locationd.torqued"),
   PythonProcess("controlsd", "selfdrive.controls.controlsd"),
-  PythonProcess("deleter", "selfdrive.loggerd.deleter", offroad=True),
+  # PythonProcess("deleter", "selfdrive.loggerd.deleter", offroad=True),
   PythonProcess("dmonitoringd", "selfdrive.legacy_monitoring.dmonitoringd", enabled=(not PC or WEBCAM), callback=driverview),
   # PythonProcess("laikad", "selfdrive.locationd.laikad"),
   # PythonProcess("rawgpsd", "system.sensord.rawgps.rawgpsd", enabled=TICI, onroad=False, callback=qcomgps),
@@ -67,14 +67,18 @@ procs = [
   PythonProcess("plannerd", "selfdrive.controls.plannerd"),
   PythonProcess("radard", "selfdrive.controls.radard"),
   PythonProcess("thermald", "selfdrive.thermald.thermald", offroad=True),
-  PythonProcess("tombstoned", "selfdrive.tombstoned", enabled=not PC, offroad=True),
+  # PythonProcess("tombstoned", "selfdrive.tombstoned", enabled=not PC, offroad=True),
   PythonProcess("updated", "selfdrive.updated", enabled=not PC, onroad=False, offroad=True),
-  PythonProcess("uploader", "selfdrive.loggerd.uploader", offroad=True),
+  # PythonProcess("uploader", "selfdrive.loggerd.uploader", offroad=True),
   # PythonProcess("statsd", "selfdrive.statsd", offroad=True),
 
+  PythonProcess("mapd", "selfdrive.mapd.mapd"),
+  PythonProcess("gpxd", "selfdrive.mapd.gpxd"),
+  PythonProcess("gpx_uploader", "selfdrive.mapd.gpx_uploader", offroad=True),
+
   # debug procs
-  NativeProcess("bridge", "cereal/messaging", ["./bridge"], onroad=False, callback=notcar),
-  PythonProcess("webjoystick", "tools.joystick.web", onroad=False, callback=notcar),
+  # NativeProcess("bridge", "cereal/messaging", ["./bridge"], onroad=False, callback=notcar),
+  # PythonProcess("webjoystick", "tools.joystick.web", onroad=False, callback=notcar),
 
   # EON only
   PythonProcess("rtshield", "selfdrive.rtshield", enabled=EON),
