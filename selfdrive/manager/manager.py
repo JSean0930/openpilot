@@ -56,7 +56,7 @@ def manager_init() -> None:
     ("e2e_link", "1"),
     ("toyotaautolock", "1"),
     ("toyotaautounlock", "1"),
-    ("toyota_bsm", "1"),
+    ("toyota_bsm", "0"),
     ("dynamic_lane", "1"),
     ("dp_atl", "0"),
     ("TimSignals", "1"),

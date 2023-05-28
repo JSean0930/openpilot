@@ -1039,15 +1039,23 @@ Speed limit: Normal mode: above 20mph, Enabled Lateral Controls Always On: above
         <translation>啟用此功能後，當檔位進到P檔時將自動解鎖車門。僅適用於某些Toyota車款。</translation>
     </message>
     <message>
+        <source>Fix Toyota BSM Signal</source>
+        <translation>修正Toyota盲點偵測訊號</translation>
+    </message>
+    <message>
+        <source>Enhance BSM function for some Toyota vehicles that openpilot currently does not support.</source>
+        <translation>修正部分Toyota車款的盲點偵測訊號以開啟openpilot支援。</translation>
+    </message>
+    <message>
         <source>ACC +/-: Long Press Reverse</source>
         <translation>ACC +/-: 反轉長按數值</translation>
     </message>
     <message>
         <source>Change the ACC +/- buttons behavior with cruise speed change in openpilot.
-Disabled (Stock):  Short=1, Long=5
+Disabled (Stock):  Short=1, Long=5.
 Enabled:  Short=5, Long=1.</source>
         <translation>在openpilot中更改ACC +/- 按鈕的行為與巡航速度變化。
-關閉選項 (原廠設定):  短按=1, 長按=5
+關閉選項 (原廠設定):  短按=1, 長按=5。
 開啟選項:  短按=5, 長按=1。</translation>
     </message>
     <message>

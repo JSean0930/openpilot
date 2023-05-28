@@ -1037,12 +1037,20 @@ Speed limit: Normal mode: above 20mph, Enabled Lateral Controls Always On: above
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Fix Toyota BSM Signal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enhance BSM function for some Toyota vehicles that openpilot currently does not support.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>ACC +/-: Long Press Reverse</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Change the ACC +/- buttons behavior with cruise speed change in openpilot.
-Disabled (Stock):  Short=1, Long=5
+Disabled (Stock):  Short=1, Long=5.
 Enabled:  Short=5, Long=1.</source>
         <translation type="unfinished"></translation>
     </message>
