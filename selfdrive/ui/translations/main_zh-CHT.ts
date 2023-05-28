@@ -1036,7 +1036,7 @@ Speed limit: Normal mode: above 20mph, Enabled Lateral Controls Always On: above
 Disabled (Stock):  Short=1, Long=5.
 Enabled:  Short=5, Long=1.</source>
         <translation>在openpilot中更改ACC +/- 按鈕的行為與巡航速度變化。
-關閉選項 (原廠設定):  短按=1, 長按=5
+關閉選項 (原廠設定):  短按=1, 長按=5。
 開啟選項:  短按=5, 長按=1。</translation>
     </message>
     <message>
