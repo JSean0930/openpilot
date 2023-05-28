@@ -362,28 +362,26 @@ void AnnotatedCameraWidget::updateState(const UIState &s) {
   // update engageability/experimental mode button
   experimental_btn->updateState(s);
 
-  // update DM icons at 2Hz
-  if (sm.frame % (UI_FREQ / 2) == 0) {
-    setProperty("dmActive", sm["driverMonitoringState"].getDriverMonitoringState().getIsActiveMode());
-
-    const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
-    const auto vtcState = lp.getVisionTurnControllerState();
-    const float vtc_speed = lp.getVisionTurnSpeed() * (s.scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
-    const auto lpSoruce = lp.getLongitudinalPlanSource();
-    QColor vtc_color = tcs_colors[int(vtcState)];
-    vtc_color.setAlpha(lpSoruce == cereal::LongitudinalPlan::LongitudinalPlanSource::TURN ? 255 : 100);
-
-    setProperty("showVTC", vtcState > cereal::LongitudinalPlan::VisionTurnControllerState::DISABLED);
-    setProperty("vtcSpeed", QString::number(std::nearbyint(vtc_speed)));
-    setProperty("vtcColor", vtc_color);
-    const auto lmd = sm["liveMapData"].getLiveMapData();
-    setProperty("roadName", QString::fromStdString(lmd.getCurrentRoadName()));
-
-    setProperty("rightHandDM", sm["driverMonitoringState"].getDriverMonitoringState().getIsRHD());
-  }
-
+  // update DM icon
+  auto dm_state = sm["driverMonitoringState"].getDriverMonitoringState();
+  setProperty("dmActive", dm_state.getIsActiveMode());
+  setProperty("rightHandDM", dm_state.getIsRHD());
   // DM icon transition
-  dm_fade_state = fmax(0.0, fmin(1.0, dm_fade_state+0.2*(0.5-(float)(dmActive))));
+  dm_fade_state = std::clamp(dm_fade_state+0.2*(0.5-dmActive), 0.0, 1.0);
+
+  const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+  const auto vtcState = lp.getVisionTurnControllerState();
+  const float vtc_speed = lp.getVisionTurnSpeed() * (s.scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
+  const auto lpSoruce = lp.getLongitudinalPlanSource();
+  QColor vtc_color = tcs_colors[int(vtcState)];
+  vtc_color.setAlpha(lpSoruce == cereal::LongitudinalPlan::LongitudinalPlanSource::TURN ? 255 : 100);
+
+  setProperty("showVTC", vtcState > cereal::LongitudinalPlan::VisionTurnControllerState::DISABLED);
+  setProperty("vtcSpeed", QString::number(std::nearbyint(vtc_speed)));
+  setProperty("vtcColor", vtc_color);
+  const auto lmd = sm["liveMapData"].getLiveMapData();
+  setProperty("roadName", QString::fromStdString(lmd.getCurrentRoadName()));
+
   setProperty("adjustableFollowDistance", s.scene.adjustable_follow_distance);
   setProperty("adjustableFollowDistanceCar", s.scene.adjustable_follow_distance_car);
   setProperty("adjustableFollowDistanceProfile", s.scene.adjustable_follow_distance_profile);
