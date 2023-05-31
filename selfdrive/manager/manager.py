@@ -63,7 +63,7 @@ def manager_init() -> None:
     ("ReverseAccChange", "1"),
     ("dp_jetson", "0"),
     ("dp_no_gps_ctrl", "0"),
-    ("dp_no_fan_ctrl", "1"),
+    ("dp_no_fan_ctrl", "0"),
     ("dp_mapd", "1"),
   ]
   if not PC:
