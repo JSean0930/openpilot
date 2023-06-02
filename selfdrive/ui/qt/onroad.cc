@@ -274,12 +274,13 @@ void ExperimentalButton::paintEvent(QPaintEvent *event) {
 AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget* parent) : fps_filter(UI_FREQ, 3, 1. / UI_FREQ), CameraWidget("camerad", type, true, parent) {
   pm = std::make_unique<PubMaster, const std::initializer_list<const char *>>({"uiDebug"});
 
-  QVBoxLayout *main_layout  = new QVBoxLayout(this);
+  QVBoxLayout *main_layout = new QVBoxLayout(this);
   main_layout->setMargin(bdr_s);
   main_layout->setSpacing(0);
 
   experimental_btn = new ExperimentalButton(this);
   main_layout->addWidget(experimental_btn, 0, Qt::AlignTop | Qt::AlignRight);
+  main_layout->setContentsMargins(0, 60, 0, 0);
   map_img = loadPixmap("../assets/img_world_icon.png", {subsign_img_size, subsign_img_size});
   dm_img = loadPixmap("../assets/img_driver_face.png", {img_size + 5, img_size + 5});
   // Following distance profiles
@@ -420,7 +421,7 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   int top_radius = 32;
   int bottom_radius = has_eu_speed_limit ? 100 : 32;
 
-  QRect set_speed_rect(60 + default_rect_width / 2 - rect_width / 2, 45, rect_width, rect_height);
+  QRect set_speed_rect(60 + default_rect_width / 2 - rect_width / 2, roadName.isEmpty() ? 45 : 70, rect_width, rect_height);
   p.setPen(QPen(whiteColor(75), 6));
   p.setBrush(blackColor(166));
   drawRoundedRect(p, set_speed_rect, top_radius, top_radius, bottom_radius, bottom_radius);
@@ -551,7 +552,7 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   // Bottom bar road name
   if (!roadName.isEmpty()) {
     const int h = 60;
-    QRect bar_rc(rect().left(), rect().bottom() - h, rect().width(), h);
+    QRect bar_rc(rect().left(), rect().top(), rect().width(), h);
     p.setBrush(QColor(0, 0, 0, 100));
     p.drawRect(bar_rc);
     configFont(p, "Open Sans", 50, "Bold");
