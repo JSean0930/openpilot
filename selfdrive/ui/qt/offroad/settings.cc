@@ -570,7 +570,7 @@ TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
 
   toggles.append(new ParamControl("ReverseAccChange",
                                   tr("ACC +/-: Long Press Reverse"),
-                                  tr("Change the ACC +/- buttons behavior with cruise speed change in openpilot.\nDisabled (Stock):  Short=1, Long=5.\nEnabled:  Short=5, Long=1."),
+                                  tr("Change the ACC +/- buttons behavior with cruise speed change in openpilot.\nDisabled (Stock): Short = 1, Long = 5.\nEnabled: Short and Long = 5."),
                                   "../assets/offroad/icon_acc_change.png",
                                   this));
 

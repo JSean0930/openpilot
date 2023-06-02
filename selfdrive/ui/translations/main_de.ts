@@ -1056,8 +1056,8 @@ Other makes: Double tapping the screen.</source>
     </message>
     <message>
         <source>Change the ACC +/- buttons behavior with cruise speed change in openpilot.
-Disabled (Stock):  Short=1, Long=5.
-Enabled:  Short=5, Long=1.</source>
+Disabled (Stock): Short = 1, Long = 5.
+Enabled: Short and Long = 5.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

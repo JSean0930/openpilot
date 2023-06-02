@@ -1296,7 +1296,7 @@ void AnnotatedCameraWidget::drawTimSignals(QPainter &p) {
     const auto drawSignal = [&](const bool signalActivated, const int xPosition, const int flip, const int blindspot) {
       if (signalActivated) {
         // Get the appropriate image from the signalImgVector
-        const QPixmap& signal = signalImgVector[(!blindspot ? animationFrameIndex : totalFrames) + blindspot * totalFrames].transformed(QTransform().scale(flip ? -1 : 1, 1));
+        QPixmap signal = signalImgVector[(!blindspot ? animationFrameIndex : totalFrames) + blindspot * totalFrames].transformed(QTransform().scale(flip ? -1 : 1, 1));
         // Draw the image
         p.drawPixmap(xPosition, baseYPosition, signalWidth, signalHeight, signal);
       }
