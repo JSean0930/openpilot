@@ -347,7 +347,6 @@ system/camerad/imgproc/utils.h
 
 selfdrive/manager/__init__.py
 selfdrive/manager/build.py
-selfdrive/manager/custom_dep.py
 selfdrive/manager/helpers.py
 selfdrive/manager/manager.py
 selfdrive/manager/process_config.py
@@ -355,25 +354,7 @@ selfdrive/manager/process.py
 selfdrive/manager/test/__init__.py
 selfdrive/manager/test/test_manager.py
 
-selfdrive/mapd/config.py
 selfdrive/mapd/mapd.py
-selfdrive/mapd/lib/*.py
-selfdrive/mapd/lib/default_speeds.json
-selfdrive/mapd/lib/geo.py
-selfdrive/mapd/lib/NodesData.py
-selfdrive/mapd/lib/osm.py
-selfdrive/mapd/lib/Route.py
-selfdrive/mapd/lib/WayCollection.py
-selfdrive/mapd/lib/WayRelation.py
-selfdrive/mapd/lib/WayRelationIndex.py
-selfdrive/mapd/test/__init__.py
-selfdrive/mapd/test/mock_data.py
-selfdrive/mapd/test/mock_osm_response_01.xml
-selfdrive/mapd/test/mock_osm_response_02.xml
-selfdrive/mapd/test/test_geo.py
-selfdrive/mapd/test/test_NodesData.py
-selfdrive/mapd/test/test_WayRelation.py
-selfdrive/mapd/test/test_WayRelationIndex.py
 
 selfdrive/modeld/__init__.py
 selfdrive/modeld/SConscript

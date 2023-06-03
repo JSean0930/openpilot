@@ -207,8 +207,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"AdjustableFollowDistance", PERSISTENT},
     {"AdjustableFollowDistanceProfile", PERSISTENT},
     {"CarModel", PERSISTENT},
-    {"GpxDeleteAfterUpload", PERSISTENT},
-    {"GpxDeleteIfUploaded", PERSISTENT},
 
     {"LiveTorque", PERSISTENT},
     {"LateralAllowed", CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION},

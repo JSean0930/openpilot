@@ -25,12 +25,29 @@ function agnos_init {
     $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
   fi
 
+  # install missing libs
+  LIB_PATH="/data/openpilot/selfdrive/mapd/assets"
+  PY_LIB_DEST="/lib/python3.8/site-packages"
+  sudo mount -o rw,remount /
+  # mapd
+  MODULE="opspline"
+  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
+    echo "Installing $MODULE..."
+    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
+  fi
+  MODULE="overpy"
+  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
+    echo "Installing $MODULE..."
+    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
+  fi
+  sudo mount -o ro,remount /
+
   # mapd osm server
   MODULE="osm-3s_v0.7.56"
-  if [ ! -d /data/osm/ ]; then
+  if [ ! -d /data/media/0/osm/ ]; then
     sudo mount -o rw,remount /
-    sudo tar -vxf "/data/openpilot/selfdrive/mapd/assets/$MODULE.tar.xz" -C /data/
-    sudo mv "/data/$MODULE" /data/osm
+    sudo tar -vxf "/data/openpilot/selfdrive/mapd/assets/$MODULE.tar.xz" -C /data/media/0/
+    sudo mv "/data/media/0/$MODULE" /data/media/0/osm
     sudo mount -o ro,remount /
   fi
 }
@@ -96,8 +113,7 @@ function launch {
 
   # start manager
   cd selfdrive/manager
-  chmod 777 custom_dep.py
-  ./custom_dep.py && ./build.py && ./manager.py
+  ./build.py && ./manager.py
 
   # if broken, keep on screen error
   while true; do sleep 1; done
