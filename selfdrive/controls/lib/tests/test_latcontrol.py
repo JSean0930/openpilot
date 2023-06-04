@@ -13,12 +13,11 @@ from selfdrive.controls.lib.latcontrol_torque import LatControlTorque
 from selfdrive.controls.lib.latcontrol_indi import LatControlINDI
 from selfdrive.controls.lib.latcontrol_angle import LatControlAngle
 from selfdrive.controls.lib.vehicle_model import VehicleModel
-from selfdrive.controls.lib.latcontrol_lqr import LatControlLQR
 
 
 class TestLatControl(unittest.TestCase):
 
-  @parameterized.expand([(HONDA.CIVIC, LatControlPID), (TOYOTA.RAV4, LatControlTorque), (TOYOTA.RAV4, LatControlLQR), (TOYOTA.PRIUS, LatControlINDI), (NISSAN.LEAF, LatControlAngle)])
+  @parameterized.expand([(HONDA.CIVIC, LatControlPID), (TOYOTA.RAV4, LatControlTorque), (TOYOTA.PRIUS, LatControlINDI), (NISSAN.LEAF, LatControlAngle)])
   def test_saturation(self, car_name, controller):
     CarInterface, CarController, CarState = interfaces[car_name]
     CP = CarInterface.get_non_essential_params(car_name)

@@ -240,6 +240,7 @@ AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget* par
 
   experimental_btn = new ExperimentalButton(this);
   main_layout->addWidget(experimental_btn, 0, Qt::AlignTop | Qt::AlignRight);
+  main_layout->setContentsMargins(0, 60, 0, 0);
   map_img = loadPixmap("../assets/img_world_icon.png", {subsign_img_size, subsign_img_size});
   #ifdef QCOM
   dm_img = loadPixmap("../assets/img_driver_face_qcom.png", {img_size + 5, img_size + 5});
@@ -381,7 +382,7 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   int top_radius = 32;
   int bottom_radius = has_eu_speed_limit ? 100 : 32;
 
-  QRect set_speed_rect(60 + default_rect_width / 2 - rect_width / 2, 45, rect_width, rect_height);
+  QRect set_speed_rect(60 + default_rect_width / 2 - rect_width / 2, roadName.isEmpty() ? 45 : 70, rect_width, rect_height);
   p.setPen(QPen(whiteColor(75), 6));
   p.setBrush(blackColor(166));
   drawRoundedRect(p, set_speed_rect, top_radius, top_radius, bottom_radius, bottom_radius);
@@ -511,7 +512,7 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   // Bottom bar road name
   if (!roadName.isEmpty()) {
     const int h = 60;
-    QRect bar_rc(0, rect().bottom() - h, rect().width(), h);
+    QRect bar_rc(rect().left(), rect().top(), rect().width(), h);
     p.setBrush(QColor(0, 0, 0, 100));
     p.drawRect(bar_rc);
     configFont(p, "Open Sans", 50, "Bold");
@@ -972,7 +973,7 @@ void AnnotatedCameraWidget::drawTimSignals(QPainter &p) {
     const auto drawSignal = [&](const bool signalActivated, const int xPosition, const int flip, const int blindspot) {
       if (signalActivated) {
         // Get the appropriate image from the signalImgVector
-        const QPixmap& signal = signalImgVector[(!blindspot ? animationFrameIndex : totalFrames) + blindspot * totalFrames].transformed(QTransform().scale(flip ? -1 : 1, 1));
+        QPixmap signal = signalImgVector[(!blindspot ? animationFrameIndex : totalFrames) + blindspot * totalFrames].transformed(QTransform().scale(flip ? -1 : 1, 1));
         // Draw the image
         p.drawPixmap(xPosition, baseYPosition, signalWidth, signalHeight, signal);
       }

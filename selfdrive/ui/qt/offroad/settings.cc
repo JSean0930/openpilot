@@ -627,8 +627,14 @@ TimpilotPanel::TimpilotPanel(QWidget* parent) : QWidget(parent) {
 
   toggles.append(new ParamControl("ReverseAccChange",
                                   tr("ACC +/-: Long Press Reverse"),
-                                  tr("Change the ACC +/- buttons behavior with cruise speed change in openpilot.\nDisabled (Stock):  Short=1, Long=5.\nEnabled:  Short=5, Long=1."),
+                                  tr("Change the ACC +/- buttons behavior with cruise speed change in openpilot.\nDisabled (Stock): Short = 1, Long = 5.\nEnabled: Short and Long = 5."),
                                   "../assets/offroad/icon_acc_change.png",
+                                  this));
+
+  toggles.append(new ParamControl("dp_mapd",
+                                  tr("Display Road Names Above The Screen"),
+                                  tr("Display the name of the road you are currently driving on the top of the screen. (Internet connection is required, please close this option if there is a control lagging warning.)"),
+                                  "../assets/offroad/icon_road.png",
                                   this));
 
   toggles.append(new ParamControl("dp_jetson",
