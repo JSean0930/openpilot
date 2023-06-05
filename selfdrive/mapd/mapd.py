@@ -1,164 +1,69 @@
 #!/usr/bin/env python3
-#pylint: skip-file
-# The MIT License
-#
-# Copyright (c) 2019-, Rick Lan, dragonpilot community, and a number of other of contributors.
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
-
+import threading
+from traceback import print_exception
+import numpy as np
+from time import strftime, gmtime
 import cereal.messaging as messaging
-from common.realtime import Ratekeeper, set_core_affinity, set_realtime_priority, sec_since_boot
+from common.realtime import Ratekeeper
+from selfdrive.mapd.lib.osm import OSM
+from selfdrive.mapd.lib.geo import distance_to_points
+from selfdrive.mapd.lib.WayCollection import WayCollection
+from selfdrive.mapd.config import QUERY_RADIUS, MIN_DISTANCE_FOR_NEW_QUERY, FULL_STOP_MAX_SPEED
+from system.swaglog import cloudlog
 from common.params import Params
 import json
-from cereal import log
-import overpy
-import os
-import subprocess
-
-OSM_QUERY = ["/data/media/0/osm/bin/osm3s_query", "--db-dir=/data/media/0/osm/db/"]
-
-OSM_ONLINE_QUERY_THRESHOLD = 5 # secs
-OSM_LOCAL_QUERY_THRESHOLD = 3 # times
-
-class OSM():
-  def __init__(self, last_gps_pos):
-    self._api = overpy.Overpass()
-
-    self._local_osm_query_fail_count = 0
-    self._last_gps_pos = last_gps_pos
-    self._fetch_time_prev = 0.
-    self._way_tags = []
-
-    self.way_id = 0
-    self.road_name = None
-    self.speed_limit = 0
-
-    if os.path.isdir("/data/media/0/osm/bin/") and os.path.isdir("/data/media/0/osm/db/"):
-      self.local_osm_enabled = True
-      print("Local OSM installed")
-    else:
-      self.local_osm_enabled = False
-    print("Local OSM enabled = %s" % self.local_osm_enabled)
-
-  def process_res(self, res):
-    if len(res) > 0:
-      self._way_tags = res[0].tags
-      self.way_id = res[0].id
 
 
-  def fetch_tags_around_location(self, latitude, longitude):
-    if len(self._way_tags) > 0 and len(self._last_gps_pos) > 0 and self._last_gps_pos["latitude"] == latitude and self._last_gps_pos["longitude"] == longitude:
-      return self._way_tags
-    q = f"""
-    way(around:10, {latitude}, {longitude})
-          [highway]
-          [highway~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential)$"];
-    (
-        way._["name"];
-        way._["maxspeed"];
-        (._;>;);
-    );
-    out tags;
-    """
-    if self.local_osm_enabled:
-      try:
-        completion = subprocess.run(OSM_QUERY + [f"--request={q}"], check=True, capture_output=True)
-        res = self._api.parse_xml(completion.stdout).ways
-        self.process_res(res)
-      except Exception as e:
-        self._local_osm_query_fail_count += 1
-        e = e
-        pass
+_DEBUG = False
+_CLOUDLOG_DEBUG = True
 
-    # use remote OSM when local osm is not enabled or failed too many times
-    if not self.local_osm_enabled or self._local_osm_query_fail_count >= OSM_LOCAL_QUERY_THRESHOLD:
-      fetch_time = sec_since_boot()
-      if fetch_time - self._fetch_time_prev < OSM_ONLINE_QUERY_THRESHOLD:
-        return
-      try:
-        res = self._api.query(q).ways
-        self.process_res(res)
-        self._local_osm_query_fail_count = 0
-      except Exception as e:
-        print(f'Exception while querying OSM:\n{e}')
-      self._fetch_time_prev = fetch_time
 
-    self._process_tags()
+def _debug(msg, log_to_cloud=True):
+  if _CLOUDLOG_DEBUG and log_to_cloud:
+    cloudlog.debug(msg)
+  if _DEBUG:
+    print(msg)
 
-  def _process_tags(self):
-    if len(self._way_tags) > 0:
-      for tag in self._way_tags:
-        if tag.startswith("name"):
-          self.road_name = self._way_tags[tag]
-        elif tag.startswith("maxspeed"):
-          self.speed_limit = self._way_tags[tag]
+
+def excepthook(args):
+  _debug(f'MapD: Threading exception:\n{args}')
+  print_exception(args.exc_type, args.exc_value, args.exc_traceback)
+
+
+threading.excepthook = excepthook
+
 
 class MapD():
-  def __init__(self, position_service):
+  def __init__(self):
     last_gps_params = Params().get('LastGPSPosition')
     self.last_gps_pos = json.loads(last_gps_params) if last_gps_params is not None else []
+
     self.osm = OSM(self.last_gps_pos)
+    self.way_collection = None
+    self.route = None
+    self.last_gps_fix_timestamp = 0
+    self.last_gps = None
+    self.location_deg = None  # The current location in degrees.
+    self.location_rad = None  # The current location in radians as a Numpy array.
+    self.bearing_rad = None
+    self.location_stdev = None  # The current location accuracy in mts. 1 standard devitation.
+    self.gps_speed = 0.
+    self.last_fetch_location = None
+    self.last_route_update_fix_timestamp = 0
+    self.last_publish_fix_timestamp = 0
+    self._op_enabled = False
+    self._disengaging = False
+    self._query_thread = None
+    self._lock = threading.RLock()
 
-    self.position_service = position_service
-    self._pause_query = False
-    self._longitude = None
-    self._latitude = None
-
-    self._way_id_prev = 0
-    self._road_name_prev = None
-    self._same_road_count = 0
-
-  def apply_last_gps_pos(self):
-    # use last gps position before first fixed
-    if self.last_gps_pos is not None and len(self.last_gps_pos) > 0:
-      self._latitude = self.last_gps_pos["latitude"]
-      self._longitude = self.last_gps_pos["longitude"]
-      # print("MAPD: Use GPS pos: %s, %s (LastGPSPosition)" % (self._latitude, self._longitude))
-
-  def update_car_state(self, sm):
-    sock = 'carState'
+  def udpate_state(self, sm):
+    sock = 'controlsState'
     if not sm.updated[sock] or not sm.valid[sock]:
       return
 
-    car_state = sm[sock]
-    self._pause_query = car_state.vEgo <= 2.78 # 10km/h
-
-  def update_position(self, sm):
-    if self.position_service == "liveLocationKalman":
-      self.update_locationd(sm)
-    else:
-      self.update_gps(sm)
-
-  def update_locationd(self, sm):
-    sock = 'liveLocationKalman'
-    if not sm.updated[sock] or not sm.valid[sock]:
-      return
-
-    location = sm[sock]
-    location_valid = (location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid
-
-    if not location_valid:
-      return
-
-    self._latitude = location.positionGeodetic.value[0]
-    self._longitude = location.positionGeodetic.value[1]
-    # print("MAPD: Use GPS pos: %s, %s (locationd)" % (self._latitude, self._longitude))
+    controls_state = sm[sock]
+    self._disengaging = not controls_state.enabled and self._op_enabled
+    self._op_enabled = controls_state.enabled
 
   def update_gps(self, sm):
     sock = 'gpsLocationExternal'
@@ -172,57 +77,191 @@ class MapD():
     if log.flags % 2 == 0:
       return
 
-    self._latitude = log.latitude
-    self._longitude = log.longitude
-    # print("MAPD: Use GPS pos to: %s, %s (gpsLocationExternal)" % (self._latitude, self._longitude))
+    self.last_gps_fix_timestamp = log.unixTimestampMillis  # Unix TS. Milliseconds since January 1, 1970.
+    self.location_rad = np.radians(np.array([log.latitude, log.longitude], dtype=float))
+    self.location_deg = (log.latitude, log.longitude)
+    self.bearing_rad = np.radians(log.bearingDeg, dtype=float)
+    self.gps_speed = log.speed
+    self.location_stdev = log.accuracy  # log accuracies are presumably 1 standard deviation.
 
-  def fetch_osm_data(self):
-    if self._pause_query:
-      return
-    self.osm.fetch_tags_around_location(self._latitude, self._longitude)
+    _debug('Mapd: ********* Got GPS fix'
+           + f'Pos: {self.location_deg} +/- {self.location_stdev * 2.} mts.\n'
+           + f'Bearing: {log.bearingDeg} +/- {log.bearingAccuracyDeg * 2.} deg.\n'
+           + f'timestamp: {strftime("%d-%m-%y %H:%M:%S", gmtime(self.last_gps_fix_timestamp * 1e-3))}'
+           + '*******', log_to_cloud=False)
 
-  def publish(self, pm):
-    if self._pause_query:
+  def _query_osm_not_blocking(self):
+    def query(osm, location_deg, location_rad, radius):
+      _debug(f'Mapd: Start query for OSM map data at {location_deg}')
+      lat, lon = location_deg
+      ways = osm.fetch_road_ways_around_location(lat, lon, radius)
+      _debug(f'Mapd: Query to OSM finished with {len(ways)} ways')
+
+      # Only issue an update if we received some ways. Otherwise it is most likely a connectivity issue.
+      # Will retry on next loop.
+      if len(ways) > 0:
+        new_way_collection = WayCollection(ways, location_rad)
+
+        # Use the lock to update the way_collection as it might be being used to update the route.
+        _debug('Mapd: Locking to write results from osm.', log_to_cloud=False)
+        with self._lock:
+          self.way_collection = new_way_collection
+          self.last_fetch_location = location_rad
+          _debug(f'Mapd: Updated map data @ {location_deg} - got {len(ways)} ways')
+
+        _debug('Mapd: Releasing Lock to write results from osm', log_to_cloud=False)
+
+    # Ignore if we have a query thread already running.
+    if self._query_thread is not None and self._query_thread.is_alive():
       return
+
+    self._query_thread = threading.Thread(target=query, args=(self.osm, self.location_deg, self.location_rad,
+                                                              QUERY_RADIUS))
+    self._query_thread.start()
+
+  def updated_osm_data(self):
+    if self.route is not None:
+      distance_to_end = self.route.distance_to_end
+      if distance_to_end is not None and distance_to_end >= MIN_DISTANCE_FOR_NEW_QUERY:
+        # do not query as long as we have a route with enough distance ahead.
+        return
+
+    if self.location_rad is None:
+      return
+
+    if self.last_fetch_location is not None:
+      distance_since_last = distance_to_points(self.last_fetch_location, np.array([self.location_rad]))[0]
+      if distance_since_last < QUERY_RADIUS - MIN_DISTANCE_FOR_NEW_QUERY:
+        # do not query if are still not close to the border of previous query area
+        return
+
+    self._query_osm_not_blocking()
+
+  def update_route(self):
+    def update_proc():
+      # Ensure we clear the route on op disengage, this way we can correct possible incorrect map data due
+      # to wrongly locating or picking up the wrong route.
+      if self._disengaging:
+        self.route = None
+        _debug('Mapd *****: Clearing Route as system is disengaging. ********')
+
+      if self.way_collection is None or self.location_rad is None or self.bearing_rad is None:
+        _debug('Mapd *****: Can not update route. Missing WayCollection, location or bearing ********')
+        return
+
+      if self.route is not None and self.last_route_update_fix_timestamp == self.last_gps_fix_timestamp:
+        _debug('Mapd *****: Skipping route update. No new fix since last update ********')
+        return
+
+      self.last_route_update_fix_timestamp = self.last_gps_fix_timestamp
+
+      # Create the route if not existent or if it was generated by an older way collection
+      if self.route is None or self.route.way_collection_id != self.way_collection.id:
+        self.route = self.way_collection.get_route(self.location_rad, self.bearing_rad, self.location_stdev)
+        _debug(f'Mapd *****: Route created: \n{self.route}\n********')
+        return
+
+      # Do not attempt to update the route if the car is going close to a full stop, as the bearing can start
+      # jumping and creating unnecessary losing of the route. Since the route update timestamp has been updated
+      # a new liveMapData message will be published with the current values (which is desirable)
+      if self.gps_speed < FULL_STOP_MAX_SPEED:
+        _debug('Mapd *****: Route Not updated as car has Stopped ********')
+        return
+
+      self.route.update(self.location_rad, self.bearing_rad, self.location_stdev)
+      if self.route.located:
+        _debug(f'Mapd *****: Route updated: \n{self.route}\n********')
+        return
+
+      # if an old route did not mange to locate, attempt to regenerate form way collection.
+      self.route = self.way_collection.get_route(self.location_rad, self.bearing_rad, self.location_stdev)
+      _debug(f'Mapd *****: Failed to update location in route. Regenerated with route: \n{self.route}\n********')
+
+    # We use the lock when updating the route, as it reads `way_collection` which can ben updated by
+    # a new query result from the _query_thread.
+    _debug('Mapd: Locking to update route.', log_to_cloud=False)
+    with self._lock:
+      update_proc()
+
+    _debug('Mapd: Releasing Lock to update route', log_to_cloud=False)
+
+  def publish(self, pm, sm):
+    # Ensure we have a route currently located
+    if self.route is None or not self.route.located:
+      _debug('Mapd: Skipping liveMapData message as there is no route or is not located.')
+      return
+
+    # Ensure we have a route update since last publish
+    if self.last_publish_fix_timestamp == self.last_route_update_fix_timestamp:
+      _debug('Mapd: Skipping liveMapData since there is no new gps fix.')
+      return
+
+    self.last_publish_fix_timestamp = self.last_route_update_fix_timestamp
+
+    speed_limit = self.route.current_speed_limit
+    next_speed_limit_section = self.route.next_speed_limit_section
+    # turn_speed_limit_section = self.route.current_curvature_speed_limit_section
+    # horizon_mts = self.gps_speed * LOOK_AHEAD_HORIZON_TIME
+    # next_turn_speed_limit_sections = self.route.next_curvature_speed_limit_sections(horizon_mts)
+    current_road_name = self.route.current_road_name
+
     map_data_msg = messaging.new_message('liveMapData')
-    map_data_msg.liveMapData.currentRoadName = "" if self.osm.road_name is None else self.osm.road_name
+    map_data_msg.valid = sm.all_alive(service_list=['gpsLocationExternal']) and \
+                         sm.all_valid(service_list=['gpsLocationExternal'])
 
-    if (self.osm.road_name is not None and self.osm.road_name == self._road_name_prev) or self.osm.way_id == self._way_id_prev:
-      self._same_road_count += 1
-    else:
-      self._same_road_count = 0
-    self._road_name_prev = self.osm.road_name
-    self._way_id_prev = self.osm.way_id
-    map_data_msg.liveMapData.speedLimitValid = self._same_road_count > 3 and self.osm.speed_limit > 0
+    map_data_msg.liveMapData.lastGpsTimestamp = self.last_gps.unixTimestampMillis
+    map_data_msg.liveMapData.lastGpsLatitude = float(self.last_gps.latitude)
+    map_data_msg.liveMapData.lastGpsLongitude = float(self.last_gps.longitude)
+    map_data_msg.liveMapData.lastGpsSpeed = float(self.last_gps.speed)
+    map_data_msg.liveMapData.lastGpsBearingDeg = float(self.last_gps.bearingDeg)
+    map_data_msg.liveMapData.lastGpsAccuracy = float(self.last_gps.accuracy)
+    map_data_msg.liveMapData.lastGpsBearingAccuracyDeg = float(self.last_gps.bearingAccuracyDeg)
 
-    map_data_msg.liveMapData.speedLimit = self.osm.speed_limit
+    map_data_msg.liveMapData.speedLimitValid = bool(speed_limit is not None)
+    map_data_msg.liveMapData.speedLimit = float(speed_limit if speed_limit is not None else 0.0)
+    map_data_msg.liveMapData.speedLimitAheadValid = bool(next_speed_limit_section is not None)
+    map_data_msg.liveMapData.speedLimitAhead = float(next_speed_limit_section.value
+                                                     if next_speed_limit_section is not None else 0.0)
+    map_data_msg.liveMapData.speedLimitAheadDistance = float(next_speed_limit_section.start
+                                                             if next_speed_limit_section is not None else 0.0)
+
+    # map_data_msg.liveMapData.turnSpeedLimitValid = bool(turn_speed_limit_section is not None)
+    # map_data_msg.liveMapData.turnSpeedLimit = float(turn_speed_limit_section.value
+    #                                                 if turn_speed_limit_section is not None else 0.0)
+    # map_data_msg.liveMapData.turnSpeedLimitSign = int(turn_speed_limit_section.curv_sign
+    #                                                   if turn_speed_limit_section is not None else 0)
+    # map_data_msg.liveMapData.turnSpeedLimitEndDistance = float(turn_speed_limit_section.end
+    #                                                            if turn_speed_limit_section is not None else 0.0)
+    # map_data_msg.liveMapData.turnSpeedLimitsAhead = [float(s.value) for s in next_turn_speed_limit_sections]
+    # map_data_msg.liveMapData.turnSpeedLimitsAheadDistances = [float(s.start) for s in next_turn_speed_limit_sections]
+    # map_data_msg.liveMapData.turnSpeedLimitsAheadSigns = [float(s.curv_sign) for s in next_turn_speed_limit_sections]
+
+    map_data_msg.liveMapData.currentRoadName = str(current_road_name if current_road_name is not None else "")
 
     pm.send('liveMapData', map_data_msg)
-    # print(f'MAPD *****: Publish: \n{map_data_msg}\n********')
+    _debug(f'Mapd *****: Publish: \n{map_data_msg}\n********', log_to_cloud=False)
+
 
 # provides live map data information
 def mapd_thread(sm=None, pm=None):
-  use_locationd = False
-  position_service = "liveLocationKalman" if use_locationd else "gpsLocationExternal"
+  mapd = MapD()
+  rk = Ratekeeper(1., print_delay_threshold=None)  # Keeps rate at 1 hz
 
-  set_core_affinity([1,])
-  set_realtime_priority(1)
-  mapd = MapD(position_service)
-  rk = Ratekeeper(0.5, print_delay_threshold=None)  # Keeps rate at 0.5 hz
-
+  # *** setup messaging
   if sm is None:
-    sm = messaging.SubMaster(["carState", position_service])
+    sm = messaging.SubMaster(['gpsLocationExternal', 'controlsState'])
   if pm is None:
     pm = messaging.PubMaster(['liveMapData'])
 
-  mapd.apply_last_gps_pos()
   while True:
     sm.update()
-    mapd.update_car_state(sm)
-    mapd.update_position(sm)
-    mapd.fetch_osm_data()
-    mapd.publish(pm)
+    mapd.udpate_state(sm)
+    mapd.update_gps(sm)
+    mapd.updated_osm_data()
+    mapd.update_route()
+    mapd.publish(pm, sm)
     rk.keep_time()
+
 
 def main(sm=None, pm=None):
   mapd_thread(sm, pm)

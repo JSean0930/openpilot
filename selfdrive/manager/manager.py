@@ -64,6 +64,8 @@ def manager_init() -> None:
     ("toyota_bsm", "0"),
     ("dynamic_lane", "0"),
     ("dp_atl", "0"),
+    ("GpxDeleteAfterUpload", "1"),
+    ("GpxDeleteIfUploaded", "1"),
     ("TimSignals", "1"),
     ("ReverseAccChange", "1"),
     ("dp_jetson", "0"),

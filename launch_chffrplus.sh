@@ -27,7 +27,7 @@ function agnos_init {
 
   # install missing libs
   LIB_PATH="/data/openpilot/selfdrive/mapd/assets"
-  PY_LIB_DEST="/lib/python3.8/site-packages"
+  PY_LIB_DEST="/data/openpilot/third_party/mapd"
   sudo mount -o rw,remount /
   # mapd
   MODULE="opspline"
@@ -113,7 +113,7 @@ function launch {
 
   # start manager
   cd selfdrive/manager
-  chmod 777 custom_dep.py
+  chmod 775 custom_dep.py
   ./custom_dep.py && ./build.py && ./manager.py
 
   # if broken, keep on screen error

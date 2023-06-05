@@ -55,12 +55,12 @@ def _debug(msg):
 
 class GpxUploader():
   def __init__(self):
-    self._delete_after_upload = True #not Params().get_bool('dp_gpxd')
-    self._car_model = "Unknown Vehicle"
+    self.param_s = Params()
 
-  def _identify_vehicle(self):
+    self._delete_after_upload = self.param_s.get_bool('GpxDeleteAfterUpload')
+    self._car_model = "Unknown Model"
     # read model from LiveParameters
-    params = Params().get("LiveParameters")
+    params = self.param_s.get("LiveParameters")
     if params is not None:
       params = json.loads(params)
       self._car_model = params.get('carFingerprint', self._car_model)
@@ -113,10 +113,6 @@ class GpxUploader():
       return False
 
   def run(self):
-    # give it few seconds before we start running the process
-    # only identify vehicle once
-    time.sleep(10)
-    self._identify_vehicle()
     while True:
       is_offroad = Params().get_bool("IsOffroad")
       files = self._get_files_to_be_uploaded()
@@ -138,7 +134,9 @@ class GpxUploader():
             else:
               _debug("run - set_is_uploaded")
               self._set_is_uploaded(file)
-      time.sleep(60)
+      # sleep for 300 secs if offroad
+      # otherwise sleep 60 secs
+      time.sleep(180 if is_offroad else 60)
 
 def gpx_uploader_thread():
   gpx_uploader = GpxUploader()
