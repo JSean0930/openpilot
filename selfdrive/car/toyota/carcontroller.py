@@ -220,8 +220,6 @@ class CarController:
     # record frames
     if not CC.enabled:
       self.last_off_frame = self.frame
-    if CS.out.gasPressed:
-      self.last_gas_press_frame = self.frame
 
     # cydia2020 - PERMIT_BRAKING commands the PCM to allow openpilot to engage the friction brakes
     # and engine brake on your vehicle, it does not affect regen braking as far as I can tell
