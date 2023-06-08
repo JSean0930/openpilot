@@ -25,23 +25,6 @@ function agnos_init {
     $DIR/system/hardware/tici/updater $AGNOS_PY $MANIFEST
   fi
 
-  # install missing libs
-  LIB_PATH="/data/openpilot/selfdrive/mapd/assets"
-  PY_LIB_DEST="/data/openpilot/third_party/mapd"
-  sudo mount -o rw,remount /
-  # mapd
-  MODULE="opspline"
-  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
-    echo "Installing $MODULE..."
-    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
-  fi
-  MODULE="overpy"
-  if [ ! -d "$PY_LIB_DEST/$MODULE" ]; then
-    echo "Installing $MODULE..."
-    tar -zxvf "$LIB_PATH/$MODULE.tar.gz" -C "$PY_LIB_DEST/"
-  fi
-  sudo mount -o ro,remount /
-
   # mapd osm server
   MODULE="osm-3s_v0.7.56"
   if [ ! -d /data/media/0/osm/ ]; then
