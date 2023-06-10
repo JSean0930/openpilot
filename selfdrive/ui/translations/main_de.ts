@@ -528,10 +528,6 @@ location set</source>
         <source>comma prime</source>
         <translation>comma prime</translation>
     </message>
-    <message>
-        <source>CONNECT.COMMA.AI</source>
-        <translation>CONNECT.COMMA.AI</translation>
-    </message>
 </context>
 <context>
     <name>QObject</name>
@@ -864,6 +860,26 @@ This may take up to a minute.</source>
     <message>
         <source>Uninstall</source>
         <translation>Deinstallieren</translation>
+    </message>
+    <message>
+        <source>failed to check for update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>up to date, last checked %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DOWNLOAD</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>update available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>never</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -1215,6 +1231,29 @@ Enabled: Short and Long = 5.</source>
     <message>
         <source>Update failed</source>
         <translation>Aktualisierung fehlgeschlagen</translation>
+    </message>
+</context>
+<context>
+    <name>WiFiPromptWidget</name>
+    <message>
+        <source>Setup Wi-Fi</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Connect to Wi-Fi to upload driving data and help improve openpilot</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Open Settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Uploading training data</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Your data is used to train driving models and help improve openpilot</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>

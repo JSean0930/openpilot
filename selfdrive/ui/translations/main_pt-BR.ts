@@ -285,11 +285,11 @@
     <name>ExperimentalModeButton</name>
     <message>
         <source>EXPERIMENTAL MODE ON</source>
-        <translation>MODO EXPERIMENTAL ATIVADO</translation>
+        <translation>MODO EXPERIMENTAL ON</translation>
     </message>
     <message>
         <source>CHILL MODE ON</source>
-        <translation>MODO CHILL ATIVADO</translation>
+        <translation>MODO CHILL ON</translation>
     </message>
 </context>
 <context>
@@ -529,10 +529,6 @@ trabalho definido</translation>
     <message>
         <source>comma prime</source>
         <translation>comma prime</translation>
-    </message>
-    <message>
-        <source>CONNECT.COMMA.AI</source>
-        <translation>CONNECT.COMMA.AI</translation>
     </message>
 </context>
 <context>
@@ -865,6 +861,26 @@ Isso pode levar até um minuto.</translation>
     <message>
         <source>Uninstall</source>
         <translation>Desinstalar</translation>
+    </message>
+    <message>
+        <source>failed to check for update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>up to date, last checked %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>DOWNLOAD</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>update available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>never</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -1214,6 +1230,30 @@ Other makes: Double tapping the screen.</source>
     <message>
         <source>Update failed</source>
         <translation>Falha na atualização</translation>
+    </message>
+</context>
+<context>
+    <name>WiFiPromptWidget</name>
+    <message>
+        <source>Setup Wi-Fi</source>
+        <translation>Configurar
+Wi-Fi</translation>
+    </message>
+    <message>
+        <source>Connect to Wi-Fi to upload driving data and help improve openpilot</source>
+        <translation>Conecte se ao Wi-Fi para upload de dados de condução e ajudar a melhorar o openpilot</translation>
+    </message>
+    <message>
+        <source>Open Settings</source>
+        <translation>Abrir Configurações</translation>
+    </message>
+    <message>
+        <source>Uploading training data</source>
+        <translation>Subindo dados para treinamento</translation>
+    </message>
+    <message>
+        <source>Your data is used to train driving models and help improve openpilot</source>
+        <translation>Seus dados são utilizados para treinar modelos de direção e ajudar a melhorar o openpilot</translation>
     </message>
 </context>
 <context>
