@@ -1108,7 +1108,6 @@ void AnnotatedCameraWidget::paintGL() {
   const double start_draw_t = millis_since_boot();
   const cereal::ModelDataV2::Reader &model = sm["modelV2"].getModelV2();
   const cereal::RadarState::Reader &radar_state = sm["radarState"].getRadarState();
-  bool reversing = int(sm["carState"].getCarState().getGearShifter()) == 4;
 
   // draw camera frame
   {
@@ -1142,11 +1141,6 @@ void AnnotatedCameraWidget::paintGL() {
     }
     CameraWidget::setStreamType(wide_cam_requested ? VISION_STREAM_WIDE_ROAD : VISION_STREAM_ROAD);
 
-    // Stream_driver when reverse gear
-    if(reversing) {
-      CameraWidget::setStreamType(VISION_STREAM_DRIVER);
-    }
-
     s->scene.wide_cam = CameraWidget::getStreamType() == VISION_STREAM_WIDE_ROAD;
     if (s->scene.calibration_valid) {
       auto calib = s->scene.wide_cam ? s->scene.view_from_wide_calib : s->scene.view_from_calib;
@@ -1162,7 +1156,7 @@ void AnnotatedCameraWidget::paintGL() {
   painter.setRenderHint(QPainter::Antialiasing);
   painter.setPen(Qt::NoPen);
 
-  if (s->worldObjectsVisible() && !reversing) {
+  if (s->worldObjectsVisible()) {
     if (sm.rcv_frame("modelV2") > s->scene.started_frame) {
       update_model(s, sm["modelV2"].getModelV2(), sm["uiPlan"].getUiPlan());
       if (sm.rcv_frame("radarState") > s->scene.started_frame) {

@@ -62,30 +62,16 @@ const char frame_fragment_shader[] =
 #endif
 
 mat4 get_driver_view_transform(int screen_width, int screen_height, int stream_width, int stream_height) {
-  UIState *s = uiState();
-  SubMaster &sm = *(s->sm);
-  bool reversing = int(sm["carState"].getCarState().getGearShifter()) == 4;
-
   const float driver_view_ratio = 2.0;
   const float yscale = stream_height * driver_view_ratio / stream_width;
   const float xscale = yscale*screen_height/screen_width*stream_width/stream_height;
-  if(reversing) {
-    mat4 transform = (mat4){{
-    -xscale,  0.0, 0.0, 0.0,
-    0.0,  yscale, 0.0, 0.0,
-    0.0,  0.0, 1.0, 0.0,
-    0.0,  0.0, 0.0, 1.0,
-    }};
-    return transform;
-  } else {
-    mat4 transform = (mat4){{
+  mat4 transform = (mat4){{
     xscale,  0.0, 0.0, 0.0,
     0.0,  yscale, 0.0, 0.0,
     0.0,  0.0, 1.0, 0.0,
     0.0,  0.0, 0.0, 1.0,
-    }};
-    return transform;
-  }
+  }};
+  return transform;
 }
 
 mat4 get_fit_view_transform(float widget_aspect_ratio, float frame_aspect_ratio) {

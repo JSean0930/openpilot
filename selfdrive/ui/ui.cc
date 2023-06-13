@@ -337,9 +337,6 @@ void Device::resetInteractiveTimout() {
 }
 
 void Device::updateBrightness(const UIState &s) {
-  SubMaster &sm = *(s.sm);
-
-  bool reversing = int(sm["carState"].getCarState().getGearShifter()) == 4;
   float clipped_brightness = BACKLIGHT_OFFROAD;
   if (s.scene.started) {
     clipped_brightness = s.scene.light_sensor;
@@ -362,7 +359,7 @@ void Device::updateBrightness(const UIState &s) {
       if (s.status == STATUS_WARNING || s.status == STATUS_ALERT) {
         // I personal feel more comfortable to keep 0.4 second screen-on after warning and alert
         interactive_timeout = 0.4 * UI_FREQ;
-      } else if (s.scene.started && interactive_timeout == 0 && !reversing) {
+      } else if (s.scene.started && interactive_timeout == 0) {
         brightness = 0;
       }
   }
