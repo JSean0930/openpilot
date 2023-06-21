@@ -85,6 +85,9 @@ typedef enum UIStatus {
   STATUS_ENGAGED,
   STATUS_WARNING,
   STATUS_ALERT,
+  // dpatl {{
+  STATUS_LAT_ALLOWED,
+  // }} dpatl
 } UIStatus;
 
 const QColor bg_colors [] = {
@@ -93,7 +96,22 @@ const QColor bg_colors [] = {
   [STATUS_ENGAGED] = QColor(0x17, 0x86, 0x44, 0xf1),
   [STATUS_WARNING] = QColor(0xDA, 0x6F, 0x25, 0xf1),
   [STATUS_ALERT] = QColor(0xC9, 0x22, 0x31, 0xf1),
+  // dpatl {{
+  [STATUS_LAT_ALLOWED] = QColor(0x6f, 0xc0, 0xc9, 0xf1),
+  // }} dpatl
 };
+
+const QColor tcs_colors [] = {
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::DISABLED)] =  QColor(0x0, 0x0, 0x0, 0xff),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::ENTERING)] = QColor(0xC9, 0x22, 0x31, 0xf1),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::TURNING)] = QColor(0xDA, 0x6F, 0x25, 0xf1),
+  [int(cereal::LongitudinalPlan::VisionTurnControllerState::LEAVING)] = QColor(0x17, 0x86, 0x44, 0xf1),
+};
+
+typedef struct {
+  QPointF v[TRAJECTORY_SIZE * 2];
+  int cnt;
+} line_vertices_data;
 
 typedef struct UIScene {
   bool calibration_valid = false;
@@ -123,6 +141,21 @@ typedef struct UIScene {
   float light_sensor;
   bool started, ignition, is_metric, map_on_left, longitudinal_control;
   uint64_t started_frame;
+  bool onroadScreenOff;
+  bool adjustable_follow_distance;
+  bool adjustable_follow_distance_car;
+  bool adjustable_follow_distance_car_checked;
+  bool experimental_mode;
+  bool experimental_mode_via_wheel;
+  bool tim_signals;
+  bool mute_dm;
+  bool steering_wheel_car;
+  bool steering_wheel_car_checked;
+  int adjustable_follow_distance_profile;
+  int blindspot_left;
+  int blindspot_right;
+  int turn_signal_left;
+  int turn_signal_right;
 } UIScene;
 
 class UIState : public QObject {

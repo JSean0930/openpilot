@@ -24,27 +24,6 @@ class CarInterface(CarInterfaceBase):
   def get_pid_accel_limits(CP, current_speed, cruise_speed):
     return CarControllerParams.ACCEL_MIN, CarControllerParams.ACCEL_MAX
 
-  # Determined by iteratively plotting and minimizing error for f(angle, speed) = steer.
-  @staticmethod
-  def get_steer_feedforward_volt(desired_angle, v_ego):
-    desired_angle *= 0.02904609
-    sigmoid = desired_angle / (1 + fabs(desired_angle))
-    return 0.10006696 * sigmoid * (v_ego + 3.12485927)
-
-  @staticmethod
-  def get_steer_feedforward_acadia(desired_angle, v_ego):
-    desired_angle *= 0.09760208
-    sigmoid = desired_angle / (1 + fabs(desired_angle))
-    return 0.04689655 * sigmoid * (v_ego + 10.028217)
-
-  def get_steer_feedforward_function(self):
-    if self.CP.carFingerprint == CAR.VOLT:
-      return self.get_steer_feedforward_volt
-    elif self.CP.carFingerprint == CAR.ACADIA:
-      return self.get_steer_feedforward_acadia
-    else:
-      return CarInterfaceBase.get_steer_feedforward_default
-
   @staticmethod
   def torque_from_lateral_accel_bolt(lateral_accel_value: float, torque_params: car.CarParams.LateralTorqueTuning,
                                      lateral_accel_error: float, lateral_accel_deadzone: float, friction_compensation: bool) -> float:
@@ -137,18 +116,20 @@ class CarInterface(CarInterfaceBase):
     ret.longitudinalActuatorDelayUpperBound = 0.5  # large delay to initially start braking
 
     if candidate == CAR.VOLT:
+      ret.minEnableSpeed = -1
       ret.mass = 1607. + STD_CARGO_KG
       ret.wheelbase = 2.69
       ret.steerRatio = 17.7  # Stock 15.7, LiveParameters
       tire_stiffness_factor = 0.469  # Stock Michelin Energy Saver A/S, LiveParameters
       ret.centerToFront = ret.wheelbase * 0.45  # Volt Gen 1, TODO corner weigh
 
-      ret.lateralTuning.pid.kpBP = [0., 40.]
-      ret.lateralTuning.pid.kpV = [0., 0.17]
-      ret.lateralTuning.pid.kiBP = [0.]
-      ret.lateralTuning.pid.kiV = [0.]
-      ret.lateralTuning.pid.kf = 1.  # get_steer_feedforward_volt()
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       ret.steerActuatorDelay = 0.2
+      
+      ret.longitudinalTuning.kpBP = [5., 15., 35.]
+      ret.longitudinalTuning.kpV = [0.75, .9, 0.8]
+      ret.longitudinalTuning.kiBP = [5., 15., 35.]
+      ret.longitudinalTuning.kiV = [0.08, 0.13, 0.13]
 
     elif candidate == CAR.MALIBU:
       ret.mass = 1496. + STD_CARGO_KG
@@ -169,7 +150,7 @@ class CarInterface(CarInterfaceBase):
       ret.wheelbase = 2.86
       ret.steerRatio = 14.4  # end to end is 13.46
       ret.centerToFront = ret.wheelbase * 0.4
-      ret.lateralTuning.pid.kf = 1.  # get_steer_feedforward_acadia()
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.BUICK_LACROSSE:
       ret.mass = 1712. + STD_CARGO_KG

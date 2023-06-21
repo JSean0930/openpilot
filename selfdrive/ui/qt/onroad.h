@@ -56,10 +56,25 @@ class AnnotatedCameraWidget : public CameraWidget {
   Q_PROPERTY(bool has_us_speed_limit MEMBER has_us_speed_limit);
   Q_PROPERTY(bool is_metric MEMBER is_metric);
 
+  Q_PROPERTY(bool engageable MEMBER engageable);
   Q_PROPERTY(bool dmActive MEMBER dmActive);
   Q_PROPERTY(bool hideDM MEMBER hideDM);
   Q_PROPERTY(bool rightHandDM MEMBER rightHandDM);
   Q_PROPERTY(int status MEMBER status);
+
+  Q_PROPERTY(bool adjustableFollowDistance MEMBER adjustableFollowDistance);
+  Q_PROPERTY(bool adjustableFollowDistanceCar MEMBER adjustableFollowDistanceCar);
+  Q_PROPERTY(bool blindspotLeft MEMBER blindspotLeft);
+  Q_PROPERTY(bool blindspotRight MEMBER blindspotRight);
+  Q_PROPERTY(bool showVTC MEMBER showVTC);
+  Q_PROPERTY(bool timSignals MEMBER timSignals);
+  Q_PROPERTY(bool muteDM MEMBER muteDM);
+  Q_PROPERTY(bool turnSignalLeft MEMBER turnSignalLeft);
+  Q_PROPERTY(bool turnSignalRight MEMBER turnSignalRight);
+  Q_PROPERTY(QString vtcSpeed MEMBER vtcSpeed);
+  Q_PROPERTY(QColor vtcColor MEMBER vtcColor);
+  Q_PROPERTY(QString roadName MEMBER roadName);
+  Q_PROPERTY(int adjustableFollowDistanceProfile MEMBER adjustableFollowDistanceProfile);
 
 public:
   explicit AnnotatedCameraWidget(VisionStreamType type, QWidget* parent = 0);
@@ -68,15 +83,29 @@ public:
 private:
   void drawIcon(QPainter &p, int x, int y, QPixmap &img, QBrush bg, float opacity);
   void drawText(QPainter &p, int x, int y, const QString &text, int alpha = 255);
+  void drawAdjustableFollowDistance(QPainter &p);
+  void drawTimSignals(QPainter &p);
+  void drawCenteredText(QPainter &p, int x, int y, const QString &text, QColor color);
+  void drawVisionTurnControllerUI(QPainter &p, int x, int y, int size, const QColor &color, const QString &speed, 
+                                  int alpha);
 
   ExperimentalButton *experimental_btn;
   QPixmap dm_img;
+  QPixmap map_img;
   float speed;
+  const int subsign_img_size = 35;
   QString speedUnit;
   float setSpeed;
   float speedLimit;
   bool is_cruise_set = false;
   bool is_metric = false;
+  bool engageable = false;
+  int status = STATUS_DISENGAGED;
+  std::unique_ptr<PubMaster> pm;
+
+  int skip_frame_count = 0;
+  bool wide_cam_requested = false;
+
   bool dmActive = false;
   bool hideDM = false;
   bool rightHandDM = false;
@@ -84,11 +113,25 @@ private:
   bool has_us_speed_limit = false;
   bool has_eu_speed_limit = false;
   bool v_ego_cluster_seen = false;
-  int status = STATUS_DISENGAGED;
-  std::unique_ptr<PubMaster> pm;
+  bool adjustableFollowDistance;
+  bool adjustableFollowDistanceCar;
+  bool blindspotLeft;
+  bool blindspotRight;
+  bool timSignals;
+  bool muteDM;
+  bool turnSignalLeft;
+  bool turnSignalRight;
+  int adjustableFollowDistanceProfile;
+  int animationFrameIndex;
+  QVector<std::pair<QPixmap, QString>> profile_data;
+  static constexpr int totalFrames = 8;
+  std::vector<QPixmap> signalImgVector;
 
-  int skip_frame_count = 0;
-  bool wide_cam_requested = false;
+  bool showVTC = false;
+  QString vtcSpeed;
+  QColor vtcColor;
+  QString roadName;
+
 
 protected:
   void paintGL() override;
@@ -96,8 +139,9 @@ protected:
   void showEvent(QShowEvent *event) override;
   void updateFrameMat() override;
   void drawLaneLines(QPainter &painter, const UIState *s);
-  void drawLead(QPainter &painter, const cereal::RadarState::LeadData::Reader &lead_data, const QPointF &vd);
+  void drawLead(QPainter &painter, const cereal::RadarState::LeadData::Reader &lead_data, const QPointF &vd , int num);
   void drawHud(QPainter &p);
+  void drawLockon(QPainter &painter, const cereal::ModelDataV2::LeadDataV3::Reader &lead_data, const QPointF &vd , int num  /*不使用, size_t leads_num , const cereal::RadarState::LeadData::Reader &lead0, const cereal::RadarState::LeadData::Reader &lead1 */);
   void drawDriverState(QPainter &painter, const UIState *s);
   inline QColor redColor(int alpha = 255) { return QColor(201, 34, 49, alpha); }
   inline QColor whiteColor(int alpha = 255) { return QColor(255, 255, 255, alpha); }

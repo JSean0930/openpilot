@@ -56,7 +56,9 @@ class LongControl:
     self.long_control_state = LongCtrlState.off  # initialized to off
     self.pid = PIDController((CP.longitudinalTuning.kpBP, CP.longitudinalTuning.kpV),
                              (CP.longitudinalTuning.kiBP, CP.longitudinalTuning.kiV),
-                             k_f=CP.longitudinalTuning.kf, rate=1 / DT_CTRL)
+                             k_f=CP.longitudinalTuning.kf,
+                             k_d = (CP.longitudinalTuning.kdBP, CP.longitudinalTuning.kdV),
+                             rate=1 / DT_CTRL)
     self.v_pid = 0.0
     self.last_output_accel = 0.0
 
@@ -65,7 +67,7 @@ class LongControl:
     self.pid.reset()
     self.v_pid = v_pid
 
-  def update(self, active, CS, long_plan, accel_limits, t_since_plan):
+  def update(self, active, CS, long_plan, accel_limits, t_since_plan, experimental_mode=False):
     """Update longitudinal control. This updates the state machine and runs a PID loop"""
     # Interp control trajectory
     speeds = long_plan.speeds
@@ -118,7 +120,10 @@ class LongControl:
       # Freeze the integrator so we don't accelerate to compensate, and don't allow positive acceleration
       # TODO too complex, needs to be simplified and tested on toyotas
       prevent_overshoot = not self.CP.stoppingControl and CS.vEgo < 1.5 and v_target_1sec < 0.7 and v_target_1sec < self.v_pid
-      deadzone = interp(CS.vEgo, self.CP.longitudinalTuning.deadzoneBP, self.CP.longitudinalTuning.deadzoneV)
+      deadzoneV = list(self.CP.longitudinalTuning.deadzoneV)
+      if experimental_mode:
+        deadzoneV = [v + 0.6 for v in deadzoneV]
+      deadzone = interp(CS.vEgo, self.CP.longitudinalTuning.deadzoneBP, deadzoneV)
       freeze_integrator = prevent_overshoot
 
       error = self.v_pid - CS.vEgo
