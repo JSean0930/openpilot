@@ -1,8 +1,11 @@
 #include "selfdrive/ui/qt/onroad.h"
 
+#include <chrono>
 #include <cmath>
 
 #include <QDebug>
+#include <QElapsedTimer>
+#include <QTimer>
 
 #include "common/timing.h"
 #include "selfdrive/ui/qt/util.h"
@@ -11,6 +14,7 @@
 #include "selfdrive/ui/qt/maps/map_helpers.h"
 #endif
 
+#define FONT_OPEN_SANS "Inter" //"Open Sans"
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
   main_layout->setMargin(bdr_s);
@@ -52,6 +56,12 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
 
 void OnroadWindow::updateState(const UIState &s) {
   QColor bgColor = bg_colors[s.status];
+  // dpatl {{
+  if(s.status == STATUS_DISENGAGED && Params().getBool("LateralAllowed")){
+      bgColor = bg_colors[STATUS_LAT_ALLOWED];
+  }
+  // }} dpatl
+
   Alert alert = Alert::get(*(s.sm), s.scene.started_frame);
   if (s.sm->updated("controlsState") || !alert.equal({})) {
     if (alert.type == "controlsUnresponsive") {
@@ -82,8 +92,48 @@ void OnroadWindow::mousePressEvent(QMouseEvent* e) {
     bool sidebarVisible = geometry().x() > 0;
     map->setVisible(!sidebarVisible && !map->isVisible());
   }
+  const auto &scene = uiState()->scene;
+  static auto params = Params();
+  static bool propagateEvent = true;
+  static bool recentlyTapped = false;
+  const bool isAdjustableFollow = scene.adjustable_follow_distance && !scene.adjustable_follow_distance_car;
+  const bool isExperimentalModewheel = scene.experimental_mode_via_wheel && !scene.steering_wheel_car;
+  const int x_offset = scene.mute_dm ? 50 : 250;
+  const SubMaster &sm = *uiState()->sm;
+  static bool rightHandDM = false;
+
+  // Update at 2Hz
+  if (sm.frame % (UI_FREQ / 2) == 0) {
+    rightHandDM = sm["driverMonitoringState"].getDriverMonitoringState().getIsRHD();
+  }
+
+  // Adjustable follow distance button
+  int x = rightHandDM ? rect().right() - (btn_size - 24) / 2 - (bdr_s * 2) - x_offset : (btn_size - 24) / 2 + (bdr_s * 2) + x_offset;
+  const int y = rect().bottom() - footer_h / 2;
+  QPoint adjustableFollowDistanceCenter(x, y);
+  // Give the button a 25% offset so it doesn't need to be clicked on perfectly
+  constexpr int adjustableFollowDistanceRadius = btn_size * 1.25;
+  bool isAdjustableFollowDistanceClicked = (e->pos() - adjustableFollowDistanceCenter).manhattanLength() <= adjustableFollowDistanceRadius;
+
+  // Check if the button was clicked and if adjustableFollowDistances is toggled on
+  if (isAdjustableFollowDistanceClicked && isAdjustableFollow) {
+    params.putInt("AdjustableFollowDistanceProfile", (scene.adjustable_follow_distance_profile % 3) + 1);
+    propagateEvent = false;
+  // If the click wasn't on the button for adjustableFollowDistances, change the value of "ExperimentalMode" and "ExperimentalModeOverride"
+  } else if (recentlyTapped && isExperimentalModewheel) {
+    bool experimentalMode = params.getBool("ExperimentalMode");
+    params.putBool("ExperimentalMode", !experimentalMode);
+    recentlyTapped = false;
+    propagateEvent = true;
+  } else {
+    recentlyTapped = true;
+    propagateEvent = true;
+  }
+
   // propagation event to parent(HomeWindow)
-  QWidget::mousePressEvent(e);
+  if (propagateEvent) {
+    QWidget::mousePressEvent(e);
+  }
 }
 
 void OnroadWindow::offroadTransition(bool offroad) {
@@ -224,16 +274,47 @@ void ExperimentalButton::paintEvent(QPaintEvent *event) {
 AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget* parent) : fps_filter(UI_FREQ, 3, 1. / UI_FREQ), CameraWidget("camerad", type, true, parent) {
   pm = std::make_unique<PubMaster, const std::initializer_list<const char *>>({"uiDebug"});
 
-  QVBoxLayout *main_layout  = new QVBoxLayout(this);
+  QVBoxLayout *main_layout = new QVBoxLayout(this);
   main_layout->setMargin(bdr_s);
   main_layout->setSpacing(0);
 
   experimental_btn = new ExperimentalButton(this);
   main_layout->addWidget(experimental_btn, 0, Qt::AlignTop | Qt::AlignRight);
-
+  main_layout->setContentsMargins(0, 60, 0, 0);
+  map_img = loadPixmap("../assets/img_world_icon.png", {subsign_img_size, subsign_img_size});
   dm_img = loadPixmap("../assets/img_driver_face.png", {img_size + 5, img_size + 5});
+  // Following distance profiles
+  profile_data = {
+    {QPixmap("../assets/aggressive.png"), "Aggressive"},
+    {QPixmap("../assets/standard.png"), "Standard"},
+    {QPixmap("../assets/relaxed.png"), "Relaxed"}
+  };
+
+  // Turn signal images
+  const QStringList imagePaths = {
+    "../assets/images/tim_turn_signal_1.png",
+    "../assets/images/tim_turn_signal_2.png",
+    "../assets/images/tim_turn_signal_3.png",
+    "../assets/images/tim_turn_signal_4.png"
+  };
+  signalImgVector.reserve(2*imagePaths.size()+1);
+  for (int i = 0; i < 2; ++i) {
+    for (const QString& path : imagePaths) {
+      signalImgVector.push_back(QPixmap(path));
+    }
+  }
+  // Add the blindspot signal image to the vector
+  signalImgVector.push_back(QPixmap("../assets/images/tim_turn_signal_1_red.png"));
+  // Initialize the timer for the turn signal animation
+  auto animationTimer = new QTimer(this);
+  connect(animationTimer, &QTimer::timeout, this, [this] {
+    animationFrameIndex = (animationFrameIndex + 1) % totalFrames;
+    update();
+  });
+  animationTimer->start(totalFrames * 11); // 11 * totalFrames (88) milliseconds per frame
 }
 
+static float vc_speed;
 void AnnotatedCameraWidget::updateState(const UIState &s) {
   const int SET_SPEED_NA = 255;
   const SubMaster &sm = *(s.sm);
@@ -260,6 +341,7 @@ void AnnotatedCameraWidget::updateState(const UIState &s) {
     v_ego_cluster_seen = true;
   }
   float cur_speed = cs_alive ? std::max<float>(0.0, v_ego) : 0.0;
+  vc_speed = v_ego;
   cur_speed *= s.scene.is_metric ? MS_TO_KPH : MS_TO_MPH;
 
   auto speed_limit_sign = sm["navInstruction"].getNavInstruction().getSpeedLimitSign();
@@ -287,6 +369,30 @@ void AnnotatedCameraWidget::updateState(const UIState &s) {
   setProperty("rightHandDM", dm_state.getIsRHD());
   // DM icon transition
   dm_fade_state = std::clamp(dm_fade_state+0.2*(0.5-dmActive), 0.0, 1.0);
+
+  const auto lp = sm["longitudinalPlan"].getLongitudinalPlan();
+  const auto vtcState = lp.getVisionTurnControllerState();
+  const float vtc_speed = lp.getVisionTurnSpeed() * (s.scene.is_metric ? MS_TO_KPH : MS_TO_MPH);
+  const auto lpSoruce = lp.getLongitudinalPlanSource();
+  QColor vtc_color = tcs_colors[int(vtcState)];
+  vtc_color.setAlpha(lpSoruce == cereal::LongitudinalPlan::LongitudinalPlanSource::TURN ? 255 : 100);
+
+  setProperty("showVTC", vtcState > cereal::LongitudinalPlan::VisionTurnControllerState::DISABLED);
+  setProperty("vtcSpeed", QString::number(std::nearbyint(vtc_speed)));
+  setProperty("vtcColor", vtc_color);
+  const auto lmd = sm["liveMapData"].getLiveMapData();
+  setProperty("roadName", QString::fromStdString(lmd.getCurrentRoadName()));
+
+  setProperty("adjustableFollowDistance", s.scene.adjustable_follow_distance);
+  setProperty("adjustableFollowDistanceCar", s.scene.adjustable_follow_distance_car);
+  setProperty("adjustableFollowDistanceProfile", s.scene.adjustable_follow_distance_profile);
+  setProperty("blindspotLeft", s.scene.blindspot_left);
+  setProperty("blindspotRight", s.scene.blindspot_right);
+  setProperty("experimentalMode", s.scene.experimental_mode);
+  setProperty("timSignals", s.scene.tim_signals);
+  setProperty("muteDM", s.scene.mute_dm);
+  setProperty("turnSignalLeft", s.scene.turn_signal_left);
+  setProperty("turnSignalRight", s.scene.turn_signal_right);
 }
 
 void AnnotatedCameraWidget::drawHud(QPainter &p) {
@@ -315,7 +421,7 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   int top_radius = 32;
   int bottom_radius = has_eu_speed_limit ? 100 : 32;
 
-  QRect set_speed_rect(60 + default_rect_width / 2 - rect_width / 2, 45, rect_width, rect_height);
+  QRect set_speed_rect(60 + default_rect_width / 2 - rect_width / 2, roadName.isEmpty() ? 45 : 70, rect_width, rect_height);
   p.setPen(QPen(whiteColor(75), 6));
   p.setBrush(blackColor(166));
   drawRoundedRect(p, set_speed_rect, top_radius, top_radius, bottom_radius, bottom_radius);
@@ -436,7 +542,33 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   configFont(p, "Inter", 66, "Regular");
   drawText(p, rect().center().x(), 290, speedUnit, 200);
 
+  // engage-ability icon
+  if (engageable) {
+    if (showVTC) {
+      drawVisionTurnControllerUI(p, rect().right() - 184 - bdr_s, int(bdr_s * 1.5), 184, vtcColor, vtcSpeed, 100);
+    }
+  }
+
+  // Bottom bar road name
+  if (!roadName.isEmpty()) {
+    const int h = 60;
+    QRect bar_rc(rect().left(), rect().top(), rect().width(), h);
+    p.setBrush(QColor(0, 0, 0, 100));
+    p.drawRect(bar_rc);
+    configFont(p, "Open Sans", 50, "Bold");
+    drawCenteredText(p, bar_rc.center().x(), bar_rc.center().y(), roadName, QColor(255, 255, 255, 200));
+  }
   p.restore();
+
+  // Adjustable following distance button
+  if (adjustableFollowDistance && !adjustableFollowDistanceCar && (!timSignals || (timSignals && !turnSignalLeft && !turnSignalRight))) {
+    drawAdjustableFollowDistance(p);
+  }
+
+  // Animated turn signals
+  if (timSignals && (turnSignalLeft || turnSignalRight)) {
+    drawTimSignals(p);
+  }
 }
 
 
@@ -451,6 +583,16 @@ void AnnotatedCameraWidget::drawText(QPainter &p, int x, int y, const QString &t
   p.drawText(real_rect.x(), real_rect.bottom(), text);
 }
 
+void AnnotatedCameraWidget::drawCenteredText(QPainter &p, int x, int y, const QString &text, QColor color) {
+  QFontMetrics fm(p.font());
+  QRect init_rect = fm.boundingRect(text);
+  QRect real_rect = fm.boundingRect(init_rect, 0, text);
+  real_rect.moveCenter({x, y});
+
+  p.setPen(color);
+  p.drawText(real_rect, Qt::AlignCenter, text);
+}
+
 void AnnotatedCameraWidget::drawIcon(QPainter &p, int x, int y, QPixmap &img, QBrush bg, float opacity) {
   p.setOpacity(1.0);  // bg dictates opacity of ellipse
   p.setPen(Qt::NoPen);
@@ -461,6 +603,17 @@ void AnnotatedCameraWidget::drawIcon(QPainter &p, int x, int y, QPixmap &img, QB
   p.setOpacity(1.0);
 }
 
+void AnnotatedCameraWidget::drawVisionTurnControllerUI(QPainter &p, int x, int y, int size, const QColor &color,
+                                           const QString &vision_speed, int alpha) {
+  QRect rvtc(x, y, size, size);
+  p.setPen(QPen(color, 10));
+  p.setBrush(QColor(0, 0, 0, alpha));
+  p.drawRoundedRect(rvtc, 20, 20);
+  p.setPen(Qt::NoPen);
+
+  configFont(p, "Open Sans", 56, "SemiBold");
+  drawCenteredText(p, rvtc.center().x(), rvtc.center().y(), vision_speed, color);
+}
 
 void AnnotatedCameraWidget::initializeGL() {
   CameraWidget::initializeGL();
@@ -590,18 +743,24 @@ void AnnotatedCameraWidget::drawDriverState(QPainter &painter, const UIState *s)
   painter.restore();
 }
 
-void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::RadarState::LeadData::Reader &lead_data, const QPointF &vd) {
+static float global_a_rel;
+static float global_a_rel_col;
+void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::RadarState::LeadData::Reader &lead_data, const QPointF &vd , int num /*不使用, size_t leads_num*/) {
   painter.save();
-
   const float speedBuff = 10.;
   const float leadBuff = 40.;
+//  const float d_rel = lead_data.getX()[0];
+//  const float v_rel = lead_data.getV()[0];
   const float d_rel = lead_data.getDRel();
-  const float v_rel = lead_data.getVRel();
+  const float v_rel = lead_data.getVRel(); //這就像相對速度。
+//  const float t_rel = lead_data.getT()[0];
+//  const float y_rel = lead_data.getY()[0];
+//  const float a_rel = lead_data.getA()[0];
 
   float fillAlpha = 0;
   if (d_rel < leadBuff) {
     fillAlpha = 255 * (1.0 - (d_rel / leadBuff));
-    if (v_rel < 0) {
+    if (v_rel < 0) { //速度？如果它是負數，它會增加紅色三角形的密度。
       fillAlpha += 255 * (-1 * (v_rel / speedBuff));
     }
     fillAlpha = (int)(fmin(fillAlpha, 255));
@@ -614,16 +773,333 @@ void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::RadarState
   float g_xo = sz / 5;
   float g_yo = sz / 10;
 
-  QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
-  painter.setBrush(QColor(218, 202, 37, 255));
+  //QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
+  float homebase_h = 12;
+  QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo + homebase_h},{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo},{x - (sz * 1.35) - g_xo, y + sz + g_yo + homebase_h}, {x, y + sz + homebase_h + g_yo + 10}};
+  painter.setBrush(QColor(218, 202, 37, 210));
   painter.drawPolygon(glow, std::size(glow));
 
   // chevron
-  QPointF chevron[] = {{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz}};
+  //QPointF chevron[] = {{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz}};
+  QPointF chevron[] = {{x + (sz * 1.25), y + sz + homebase_h},{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz},{x - (sz * 1.25), y + sz + homebase_h}, {x, y + sz + homebase_h - 7}};
   painter.setBrush(redColor(fillAlpha));
   painter.drawPolygon(chevron, std::size(chevron));
 
+  if(num == 0){ //顯示到第 0 輛前車的距離
+    //float dist = d_rel; //lead_data.getT()[0];
+    QString dist = QString::number(d_rel,'f',0) + "m";
+    int str_w = 200;
+    QString kmph = QString::number((v_rel + vc_speed)*3.6,'f',0) + "k";
+    int str_w2 = 200;
+//    dist += "<" + QString::number(rect().height()) + ">"; str_w += 500;c2 和 c3 的屏幕高度均為 1020。
+//    dist += "<" + QString::number(leads_num) + ">";
+//   int str_w = 600; //200;
+//    dist += QString::number(v_rel,'f',1) + "v";
+//    dist += QString::number(t_rel,'f',1) + "t";
+//    dist += QString::number(y_rel,'f',1) + "y";
+//    dist += QString::number(a_rel,'f',1) + "a";
+    configFont(painter, FONT_OPEN_SANS, 44, "SemiBold");
+    painter.setPen(QColor(0x0, 0x0, 0x0 , 200)); //影
+    float lock_indicator_dx = 2; //避免向下的十字準星。
+    painter.drawText(QRect(x+2+lock_indicator_dx, y-50+2, str_w, 50), Qt::AlignBottom | Qt::AlignLeft, dist);
+    painter.drawText(QRect(x+2-lock_indicator_dx-str_w2-2, y-50+2, str_w2, 50), Qt::AlignBottom | Qt::AlignRight, kmph);
+    painter.setPen(QColor(0xff, 0xff, 0xff));
+    painter.drawText(QRect(x+lock_indicator_dx, y-50, str_w, 50), Qt::AlignBottom | Qt::AlignLeft, dist);
+    if(global_a_rel >= global_a_rel_col){
+      global_a_rel_col = -0.1; //減少混亂的緩衝區。
+      painter.setPen(QColor(0.09*255, 0.945*255, 0.26*255, 255));
+    } else {
+      global_a_rel_col = 0;
+      painter.setPen(QColor(245, 0, 0, 255));
+    }
+    painter.drawText(QRect(x-lock_indicator_dx-str_w2-2, y-50, str_w2, 50), Qt::AlignBottom | Qt::AlignRight, kmph);
+    painter.setPen(Qt::NoPen);
+  }
+
   painter.restore();
+}
+
+// Ichirio Stuff
+struct LeadcarLockon {
+  float x,y,d,a,lxt,lxf,lockOK;
+};
+#define LeadcarLockon_MAX 5
+LeadcarLockon leadcar_lockon[LeadcarLockon_MAX]; //這個數組編號 0 稱為推理框架 1。
+
+void AnnotatedCameraWidget::drawLockon(QPainter &painter, const cereal::ModelDataV2::LeadDataV3::Reader &lead_data, const QPointF &vd , int num  /*不使用 , size_t leads_num , const cereal::RadarState::LeadData::Reader &lead0, const cereal::RadarState::LeadData::Reader &lead1 */) {
+  //const float speedBuff = 10.;
+  //const float leadBuff = 40.;
+  const float d_rel = lead_data.getX()[0];
+  //const float d_rel = lead_data.getDRel();
+  //const float v_rel = lead_data.getV()[0];
+  //const float t_rel = lead_data.getT()[0];
+  //const float y_rel = lead_data.getY()[0];
+  float a_rel = lead_data.getA()[0];
+  //float a_rel = lead_data.getARel(); //是？
+  global_a_rel = a_rel;
+
+  float sz = std::clamp((25 * 30) / (d_rel / 3 + 30), 15.0f, 30.0f) * 2.35;
+  float x = std::clamp((float)vd.x(), 0.f, width() - sz / 2);
+  //float y = std::fmin(height() /*- sz * .6*/, (float)vd.y());
+  float y = (float)vd.y();
+
+  //float g_xo = sz / 5;
+  //float g_yo = sz / 10;
+
+  //QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
+
+  painter.setCompositionMode(QPainter::CompositionMode_Plus);
+  //p.setPen(QColor(0, 255, 0, 255));
+
+  float prob_alpha = lead_data.getProb(); //getModelProb();
+  if(prob_alpha < 0){
+    prob_alpha = 0;
+  } else if(prob_alpha > 1.0){
+    prob_alpha = 1.0;
+  }
+  prob_alpha *= 245;
+
+  painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), 2));
+  painter.setBrush(QColor(0, 0, 0, 0));
+  float ww = 300 , hh = 300;
+  if(Hardware::TICI()){
+    ww *= 1.25; hh *= 1.25;
+  }
+  float d = d_rel; //距離反映在鎖定目標的大小上。
+  if(d < 1){
+    d = 1;
+  }
+
+  //緩衝運動。
+  leadcar_lockon[num].x = leadcar_lockon[num].x + (x - leadcar_lockon[num].x) / 6;
+  leadcar_lockon[num].y = leadcar_lockon[num].y + (y - leadcar_lockon[num].y) / 6;
+  leadcar_lockon[num].d = leadcar_lockon[num].d + (d - leadcar_lockon[num].d) / 6;
+  x = leadcar_lockon[num].x;
+  y = leadcar_lockon[num].y;
+  d = leadcar_lockon[num].d;
+  if(d < 1){
+    d = 1;
+  }
+
+  leadcar_lockon[num].a = leadcar_lockon[num].a + (a_rel - leadcar_lockon[num].a) / 10;
+  a_rel = leadcar_lockon[num].a;
+
+  float dh = 50;
+  if(uiState()->scene.wide_cam == false) { //反映 dh 中的深度值。
+    float dd = d;
+    dd -= 25; //dd=0〜75
+    dd /= (75.0/2); //dd=0〜2
+    dd += 1; //dd=1〜3
+    if(dd < 1)dd = 1;
+    dh /= dd;
+  } else { //使用廣角鏡頭改變邏輯。實時變化。
+    ww *= 0.5; hh *= 0.5;
+    dh = 100;
+    float dd = d;
+    dd -= 5; //dd=0〜95
+    dd /= (95.0/10); //dd=0〜10
+    dd += 1; //dd=1〜11
+    if(dd < 1)dd = 1;
+    dh /= dd*dd;
+  }
+
+  ww = ww * 2 * 5 / d;
+  hh = hh * 2 * 5 / d;
+  y = std::fmin(height() /*- sz * .6*/, y - dh) + dh;
+  QRect r = QRect(x - ww/2, y /*- g_yo*/ - hh - dh, ww, hh);
+
+#if 0
+  float y0 = lead0.getY()[0];
+  float y1 = lead1.getY()[0];
+#else
+  //是嗎？它是水平的。 getY 似乎不起作用。
+  float y0 = leadcar_lockon[0].x * leadcar_lockon[0].d; //如果發生這種情況，請從屏幕坐標倒數。
+  float y1 = leadcar_lockon[1].x * leadcar_lockon[1].d;
+#endif
+
+  configFont(painter, FONT_OPEN_SANS, 38, "SemiBold");
+  if(num == 0 /* && uiState()->scene.mLockOnButton */){
+    //推理第一
+    painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), 2));
+    painter.drawRect(r);
+
+    //painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), 2));
+    if(leadcar_lockon[0].x > leadcar_lockon[1].x - 20){
+      leadcar_lockon[num].lxt = leadcar_lockon[num].lxt + (r.right() - leadcar_lockon[num].lxt) / 20;
+      leadcar_lockon[num].lxf = leadcar_lockon[num].lxf + (width() - leadcar_lockon[num].lxf) / 20;
+      //painter.drawLine(r.right(),r.top() , width() , 0);
+    } else {
+      leadcar_lockon[num].lxt = leadcar_lockon[num].lxt + (r.left() - leadcar_lockon[num].lxt) / 20;
+      leadcar_lockon[num].lxf = leadcar_lockon[num].lxf + (0 - leadcar_lockon[num].lxf) / 20;
+      //painter.drawLine(r.left(),r.top() , 0 , 0);
+    }
+    painter.drawText(r, Qt::AlignTop | Qt::AlignLeft, " " + QString::number(num+1));
+
+    //painter.setPen(QPen(QColor(245, 245, 0, prob_alpha), 2));
+    float lxt = leadcar_lockon[num].lxt;
+    if(lxt < r.left()){
+      lxt = r.left();
+    } else if(lxt > r.right()){
+      lxt = r.right();
+    }
+    painter.drawLine(lxt,r.top() , leadcar_lockon[num].lxf , 0);
+    if(ww >= 40){
+      //painter.drawText(r, Qt::AlignTop | Qt::AlignRight, QString::number((int)(lead_data.getProb()*100)) + "％");
+
+      //將num==0 的lock-on 右端約20 個點設置為a_rel 數值表。
+      painter.setPen(Qt::NoPen);
+      float wwa = ww * 0.15;
+      if(wwa > 40){
+        wwa = 40;
+      } else if(wwa < 10){
+        wwa = 10;
+      }
+      if(wwa > ww){
+        wwa = ww;
+      }
+
+      float hha = 0;
+      if(a_rel > 0){
+        hha = 1 - 0.1 / a_rel;
+        painter.setBrush(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha*0.9));
+
+        if(hha < 0){
+          hha = 0;
+        }
+        hha = hha * hh;
+#if 0
+        QRect ra = QRect(x - ww/2 + (ww - wwa), y /*- g_yo*/ - hh - dh + (hh-hha), wwa, hha);
+        painter.drawRect(ra);
+#else //對角切米
+        QPointF meter[] = {{(float)x + ww/2 - wwa/2 - wwa/2 * hha / hh , (float)y /*- g_yo*/ - hh - dh + (hh-hha)},{(float)x + ww/2 , (float)y /*- g_yo*/ - hh - dh + (hh-hha)}, {(float)x + ww/2 , (float)y /*- g_yo*/ - hh - dh + hh}, {(float)x + ww/2 - wwa/2 , (float)y /*- g_yo*/ - hh - dh + hh}};
+        painter.drawPolygon(meter, std::size(meter));
+#endif
+      }
+      if(a_rel < 0){
+        hha = 1 + 0.1 / a_rel;
+        painter.setBrush(QColor(245, 0, 0, prob_alpha));
+        //減速度從上到下變化。
+        if(hha < 0){
+          hha = 0;
+        }
+        hha = hha * hh;
+#if 0
+        QRect ra = QRect(x - ww/2 + (ww - wwa), y /*- g_yo*/ - hh - dh , wwa, hha);
+        painter.drawRect(ra);
+#else //對角切米
+        QPointF meter[] = {{(float)x + ww/2 - wwa/2 , (float)y /*- g_yo*/ - hh - dh},{(float)x + ww/2 , (float)y /*- g_yo*/ - hh - dh}, {(float)x + ww/2 , (float)y /*- g_yo*/ - hh - dh + hha}, {(float)x + ww/2 - wwa/2 - wwa/2 * hha / hh, (float)y /*- g_yo*/ - hh - dh + hha}};
+        painter.drawPolygon(meter, std::size(meter));
+#endif
+      }
+    }
+
+    if(//lead0.getX()[0] > lead1.getX()[0] //lead1 在 lead0 後面
+        //y0 > y1 //lead1 在 lead0 的左邊
+        std::abs(y0 - y1) <= 300 //向側面大移動 → 反向
+        // ||另外v_rel和a_rel在前面顯示突然減速（我試過在num==0顯示）
+        //&& lead1.getX()[0] < 10 //前方10m以內的lead1
+    ){
+      leadcar_lockon[num].lockOK = leadcar_lockon[num].lockOK + (40 - leadcar_lockon[num].lockOK) / 5;
+      //float td = 40;
+    } else {
+      leadcar_lockon[num].lockOK = leadcar_lockon[num].lockOK + (0 - leadcar_lockon[num].lockOK) / 5;
+    }
+    float td = leadcar_lockon[num].lockOK;
+    //d: 從 10 到 100->1 到 3
+    if(td >= 3){
+      float dd = leadcar_lockon[num].d;
+      if(dd < 10){
+        dd = 10;
+      }
+      dd -= 10; //dd=0〜90
+      dd /= (90.0/2); //dd=0〜2
+      dd += 1; //dd=1〜3
+      td /= dd;
+
+      float tlw = 8;
+      float tlw_2 = tlw / 2;
+      painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), tlw));
+      painter.drawLine(r.center().x() , r.top()-tlw_2 , r.center().x() , r.top() - td);
+      painter.drawLine(r.left()-tlw_2 , r.center().y() , r.left() - td , r.center().y());
+      painter.drawLine(r.right()+tlw_2 , r.center().y() , r.right() + td , r.center().y());
+      painter.drawLine(r.center().x() , r.bottom()+tlw_2 , r.center().x() , r.bottom() + td);
+    }
+
+  } else if(/* uiState()->scene.mLockOnButton */ true){
+    if(num == 1){
+      //推理二
+      //我想認出一輛擋路的右前方行駛的摩托車。
+      if(//lead0.getX()[0] > lead1.getX()[0] //lead1 在 lead0 後面
+        //y0 > y1 //lead1 在 lead0 的左邊
+        std::abs(y0 - y1) > 300 //側身移動
+        // ||另外v_rel和a_rel在前面顯示突然減速（我試過在num==0顯示）
+        //&& lead1.getX()[0] < 10 //前方10m以內lead1
+      ){
+        //painter.setPen(QPen(QColor(245, 0, 0, prob_alpha), 4));
+        //painter.drawEllipse(r); //畫一條邊
+        //painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), 1)); //稍後寫信重置顏色。 -> 我不介意文字是紅色的
+
+        //不要畫圓（因為沒有意義），把整個框都畫成紅色。很容易認識到推理 1 包含推理和其他內容。
+        painter.setPen(QPen(QColor(245, 0, 0, prob_alpha), 2));
+      } else {
+        painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), 2));
+      }
+
+      if(leadcar_lockon[0].x > leadcar_lockon[1].x - 20){ //允許輕微倒置
+        leadcar_lockon[num].lxt = leadcar_lockon[num].lxt + (r.left() - leadcar_lockon[num].lxt) / 20;
+        leadcar_lockon[num].lxf = leadcar_lockon[num].lxf + (0 - leadcar_lockon[num].lxf) / 20;
+        //painter.drawLine(r.left(),r.top() , 0 , 0);
+      } else {
+        leadcar_lockon[num].lxt = leadcar_lockon[num].lxt + (r.right() - leadcar_lockon[num].lxt) / 20;
+        leadcar_lockon[num].lxf = leadcar_lockon[num].lxf + (width() - leadcar_lockon[num].lxf) / 20;
+        //painter.drawLine(r.right(),r.top() , width() , 0);
+      }
+      float lxt = leadcar_lockon[num].lxt;
+      if(lxt < r.left()){
+        lxt = r.left();
+      } else if(lxt > r.right()){
+        lxt = r.right();
+      }
+      painter.drawLine(lxt,r.top() , leadcar_lockon[num].lxf , 0);
+
+      if(ww >= 80){
+        //float dy = y0 - y1;
+        //painter.drawText(r, Qt::AlignBottom | Qt::AlignLeft, " " + QString::number(dy,'f',1) + "m");
+        //painter.drawText(r, Qt::AlignBottom | Qt::AlignLeft, " " + QString::number(dy,'f',1));
+      }
+    } else if(num == 2){
+      //推理數 3
+      //幾乎沒有。就像在 0,0 處不動一樣？
+      painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), 2));
+      //painter.drawLine(r.right(),r.center().y() , width() , height());
+    } else {
+      //推論 4 號起。
+      //不存在。
+      painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), 2));
+      //painter.drawLine(r.left(),r.center().y() , 0 , height());
+    }
+
+    painter.drawRect(r);
+
+    //painter.setPen(QPen(QColor(0.09*255, 0.945*255, 0.26*255, prob_alpha), 2));
+
+    if(ww >= 80){
+      //此處不能引用 y0 和 y1。
+      float d_lim = 12;
+      if(wide_cam_requested == false){
+        d_lim = 32; //對於長相機來說，鏡框有點大。實測
+      }
+      if(num == 0 || (num==1 && (d_rel < d_lim || std::abs(y0 - y1) > 300))){ //當num==1時，'2'的顯示與前車的速度重疊，所以刪除這個。
+        painter.drawText(r, Qt::AlignBottom | Qt::AlignLeft, " " + QString::number(num+1));
+      }
+    }
+    if(ww >= 160 /*80*/){
+      //painter.drawText(r, Qt::AlignBottom | Qt::AlignRight, QString::number((int)(lead_data.getProb()*100)) + "％");
+      //painter.drawText(r, Qt::AlignBottom | Qt::AlignRight, QString::number(a_rel,'f',1) + "a");
+    }
+  }
+  painter.setPen(Qt::NoPen);
+  painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
 }
 
 void AnnotatedCameraWidget::paintGL() {
@@ -691,19 +1167,27 @@ void AnnotatedCameraWidget::paintGL() {
     drawLaneLines(painter, s);
 
     if (s->scene.longitudinal_control) {
+      const auto leads = model.getLeadsV3();
+      size_t leads_num = leads.size();
+      for(size_t i=0; i<leads_num && i < LeadcarLockon_MAX; i++){
+        if(leads[i].getProb() > .2){ //顯示信用評級為 20% 或更高。調整中
+          drawLockon(painter, leads[i], s->scene.lead_vertices[i] , i /*, leads_num , leads[0] , leads[1]*/);
+        }
+      }
+
       auto lead_one = radar_state.getLeadOne();
       auto lead_two = radar_state.getLeadTwo();
       if (lead_one.getStatus()) {
-        drawLead(painter, lead_one, s->scene.lead_vertices[0]);
+        drawLead(painter, lead_one, s->scene.lead_vertices[0] , 0);
       }
       if (lead_two.getStatus() && (std::abs(lead_one.getDRel() - lead_two.getDRel()) > 3.0)) {
-        drawLead(painter, lead_two, s->scene.lead_vertices[1]);
+        drawLead(painter, lead_two, s->scene.lead_vertices[1] , 1);
       }
     }
   }
 
   // DMoji
-  if (!hideDM && (sm.rcv_frame("driverStateV2") > s->scene.started_frame)) {
+  if (!hideDM && (sm.rcv_frame("driverStateV2") > s->scene.started_frame) && !muteDM && (!timSignals || (timSignals && !turnSignalLeft && !turnSignalRight))) {
     update_dmonitoring(s, sm["driverStateV2"].getDriverStateV2(), dm_fade_state, rightHandDM);
     drawDriverState(painter, s);
   }
@@ -730,4 +1214,90 @@ void AnnotatedCameraWidget::showEvent(QShowEvent *event) {
 
   ui_update_params(uiState());
   prev_draw_t = millis_since_boot();
+}
+
+void AnnotatedCameraWidget::drawAdjustableFollowDistance(QPainter &p) {
+  // Declare the variables
+  static QElapsedTimer timer;
+  static bool displayText = true;
+  static int lastProfile = -1;
+  constexpr int fadeDuration = 1000; // 1 second
+  constexpr int textDuration = 3000; // 3 seconds
+  
+  // Enable Antialiasing
+  p.setRenderHint(QPainter::Antialiasing);
+
+  // Set the x and y coordinates
+  int x = rightHandDM ? rect().right() - (btn_size - 24) / 2 - (bdr_s * 2) - (muteDM ? 50 : 250) : (btn_size - 24) / 2 + (bdr_s * 2) + (muteDM ? 50 : 250);
+  const int y = rect().bottom() - footer_h / 2;
+
+  // Select the appropriate profile image/text
+  int index = qBound(0, adjustableFollowDistanceProfile - 1, 2);
+  QPixmap& profile_image = profile_data[index].first;
+  QString profile_text = profile_data[index].second;
+
+  // Set "displayText" to "true" when the user changes profiles
+  if (lastProfile != adjustableFollowDistanceProfile) {
+    displayText = true;
+    lastProfile = adjustableFollowDistanceProfile;
+    timer.restart();
+  }
+
+  // Set the text display
+  displayText = !timer.hasExpired(textDuration);
+
+  // Set the elapsed time since the profile switch
+  int elapsed = timer.elapsed();
+
+  // Calculate the opacity for the text and image based on the elapsed time
+  qreal textOpacity = qBound(0.0, (1.0 - static_cast<qreal>(elapsed - textDuration) / fadeDuration), 1.0);
+  qreal imageOpacity = qBound(0.0, (static_cast<qreal>(elapsed - textDuration) / fadeDuration), 1.0);
+
+  // Draw the profile text with the calculated opacity
+  if (textOpacity > 0.0) {
+    configFont(p, "Inter", 50, "Bold");
+    p.setPen(QColor(255, 255, 255));
+    // Calculate the center position for text
+    QFontMetrics fontMetrics(p.font());
+    int textWidth = fontMetrics.horizontalAdvance(profile_text);
+    // Apply opacity to the text
+    p.setOpacity(textOpacity);
+    p.drawText(x - textWidth / 2, y + fontMetrics.height() / 2, profile_text);
+  }
+
+  // Draw the profile image with the calculated opacity
+  if (imageOpacity > 0.0) {
+    drawIcon(p, x, y, profile_image, blackColor(0), imageOpacity);
+  }
+}
+
+void AnnotatedCameraWidget::drawTimSignals(QPainter &p) {
+  // Declare the turn signal size
+  constexpr int signalHeight = 480;
+  constexpr int signalWidth = 360;
+
+  // Calculate the vertical position for the turn signals
+  const int baseYPosition = (height() - signalHeight) / 2 + 300;
+  // Calculate the x-coordinates for the turn signals
+  int leftSignalXPosition = 75 + width() - signalWidth - 300 * (blindspotLeft ? 0 : animationFrameIndex);
+  int rightSignalXPosition = -75 + 300 * (blindspotRight ? 0 : animationFrameIndex);
+
+  // Enable Antialiasing
+  p.setRenderHint(QPainter::Antialiasing);
+
+  // Draw the turn signals
+  if (animationFrameIndex < static_cast<int>(signalImgVector.size())) {
+    const auto drawSignal = [&](const bool signalActivated, const int xPosition, const int flip, const int blindspot) {
+      if (signalActivated) {
+        // Get the appropriate image from the signalImgVector
+        QPixmap signal = signalImgVector[(!blindspot ? animationFrameIndex % totalFrames : totalFrames) + blindspot * totalFrames].transformed(QTransform().scale(flip ? -1 : 1, 1));
+        // Draw the image
+        p.drawPixmap(xPosition, baseYPosition, signalWidth, signalHeight, signal);
+      }
+    };
+
+    // Display the animation based on which signal is activated
+    drawSignal(turnSignalLeft, leftSignalXPosition, false, blindspotLeft);
+    drawSignal(turnSignalRight, rightSignalXPosition, true, blindspotRight);
+  }
 }
