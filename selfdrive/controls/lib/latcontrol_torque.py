@@ -23,7 +23,7 @@ from selfdrive.modeld.constants import T_IDXS, IDX_N
 
 LOW_SPEED_X = [0, 10, 20, 30]
 LOW_SPEED_Y = [15, 13, 10, 5]
-LOW_SPEED_Y_NNFF = [13, 5, 0, 0]
+LOW_SPEED_Y_NNFF = [5, 2, 0, 0]
 
 LAT_PLAN_MIN_IDX = 5
 
@@ -91,7 +91,8 @@ class LatControlTorque(LatControl):
         actual_curvature = interp(CS.vEgo, [2.0, 5.0], [actual_curvature_vm, actual_curvature_llk])
         curvature_deadzone = 0.0
       
-      lookahead = interp(CS.vEgo, [10.0, 30.0], [0.9, 1.8]) # seconds
+      lat_accel_jerk_same_sign_lowspeed = (CS.vEgo > 7.0 or sign(desired_curvature) == sign(desired_curvature_rate))
+      lookahead = interp(CS.vEgo, [10.0, 30.0], [0.9 if lat_accel_jerk_same_sign_lowspeed else 0.2, 1.8]) # seconds
       lookahead_upper_idx = next((i for i, val in enumerate(T_IDXS) if val > lookahead), 16)
       lookahead_curvature_rate = get_lookahead_value(list(lat_plan.curvatureRates)[LAT_PLAN_MIN_IDX:lookahead_upper_idx], desired_curvature_rate)
       lookahead_lateral_jerk = lookahead_curvature_rate * CS.vEgo ** 2
