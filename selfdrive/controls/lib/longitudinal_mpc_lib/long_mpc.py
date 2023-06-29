@@ -353,7 +353,7 @@ class LongitudinalMpc:
     elif personality==log.LongitudinalPersonality.standard:
       op_profile_key = 2
     elif personality==log.LongitudinalPersonality.aggressive:
-      op_profile_key = 3
+      op_profile_key = 1
     else:
       raise NotImplementedError("Longitudinal personality not supported")
 
