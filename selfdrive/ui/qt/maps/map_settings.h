@@ -41,7 +41,7 @@ private:
   QVBoxLayout *destinations_layout;
   std::unique_ptr<NavDestination> current_destination;
   DestinationWidget *current_widget;
-
+  bool custom_mapbox;
   QPixmap close_icon;
 
 signals:

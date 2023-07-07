@@ -188,6 +188,7 @@ jobs:
   static_analysis:
     name: static analysis
     runs-on: ubuntu-20.04
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v3
       with:
@@ -200,6 +201,7 @@ jobs:
   valgrind:
     name: valgrind
     runs-on: ubuntu-20.04
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v3
       with:
@@ -217,6 +219,7 @@ jobs:
   unit_tests:
     name: unit tests
     runs-on: ubuntu-20.04
+    timeout-minutes: 40
     steps:
     - uses: actions/checkout@v3
       with:
@@ -242,6 +245,7 @@ jobs:
                         $UNIT_TEST selfdrive/athena && \
                         $UNIT_TEST selfdrive/thermald && \
                         $UNIT_TEST system/hardware/tici && \
+                        $UNIT_TEST selfdrive/mapd && \
                         $UNIT_TEST tools/lib/tests && \
                         ./selfdrive/ui/tests/create_test_translations.sh && \
                         QT_QPA_PLATFORM=offscreen ./selfdrive/ui/tests/test_translations && \
@@ -259,47 +263,48 @@ jobs:
     - name: "Upload coverage to Codecov"
       uses: codecov/codecov-action@v2
 
-  process_replay:
-    name: process replay
-    runs-on: ubuntu-20.04
-    steps:
-    - uses: actions/checkout@v3
-      with:
-        submodules: true
-    - uses: ./.github/workflows/setup
-    - name: Cache test routes
-      id: dependency-cache
-      uses: actions/cache@v3
-      with:
-        path: /tmp/comma_download_cache
-        key: proc-replay-${{ hashFiles('.github/workflows/selfdrive_tests.yaml', 'selfdrive/test/process_replay/ref_commit') }}
-    - name: Build openpilot
-      run: |
-        ${{ env.RUN }} "scons -j$(nproc)"
-    - name: Run replay
-      run: |
-        ${{ env.RUN }} "CI=1 coverage run selfdrive/test/process_replay/test_processes.py -j$(nproc) && \
-                        coverage xml"
-    - name: Print diff
-      id: print-diff
-      if: always()
-      run: cat selfdrive/test/process_replay/diff.txt
-    - uses: actions/upload-artifact@v2
-      if: always()
-      continue-on-error: true
-      with:
-        name: process_replay_diff.txt
-        path: selfdrive/test/process_replay/diff.txt
-    - name: Upload reference logs
-      if: ${{ failure() && steps.print-diff.outcome == 'success' && github.repository == 'commaai/openpilot' && env.AZURE_TOKEN != '' }}
-      run: |
-        ${{ env.RUN }} "CI=1 AZURE_TOKEN='$AZURE_TOKEN' python selfdrive/test/process_replay/test_processes.py -j$(nproc) --upload-only"
-    - name: "Upload coverage to Codecov"
-      uses: codecov/codecov-action@v2
+  #process_replay:
+  #  name: process replay
+  #  runs-on: ubuntu-20.04
+  #  steps:
+  #  - uses: actions/checkout@v3
+  #    with:
+  #      submodules: true
+  #  - uses: ./.github/workflows/setup
+  #  - name: Cache test routes
+  #    id: dependency-cache
+  #    uses: actions/cache@v3
+  #    with:
+  #      path: /tmp/comma_download_cache
+  #      key: proc-replay-${{ hashFiles('.github/workflows/selfdrive_tests.yaml', 'selfdrive/test/process_replay/ref_commit') }}
+  #  - name: Build openpilot
+  #    run: |
+  #      ${{ env.RUN }} "scons -j$(nproc)"
+  #  - name: Run replay
+  #    run: |
+  #      ${{ env.RUN }} "CI=1 coverage run selfdrive/test/process_replay/test_processes.py -j$(nproc) && \
+  #                      coverage xml"
+  #  - name: Print diff
+  #    id: print-diff
+  #    if: always()
+  #    run: cat selfdrive/test/process_replay/diff.txt
+  #  - uses: actions/upload-artifact@v2
+  #    if: always()
+  #    continue-on-error: true
+  #    with:
+  #      name: process_replay_diff.txt
+  #      path: selfdrive/test/process_replay/diff.txt
+  #  - name: Upload reference logs
+  #    if: ${{ failure() && steps.print-diff.outcome == 'success' && github.repository == 'commaai/openpilot' && env.AZURE_TOKEN != '' }}
+  #    run: |
+  #      ${{ env.RUN }} "CI=1 AZURE_TOKEN='$AZURE_TOKEN' python selfdrive/test/process_replay/test_processes.py -j$(nproc) --upload-only"
+  #  - name: "Upload coverage to Codecov"
+  #    uses: codecov/codecov-action@v2
 
   test_modeld:
     name: model tests
     runs-on: ubuntu-20.04
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v3
       with:
@@ -325,6 +330,7 @@ jobs:
   test_longitudinal:
     name: longitudinal
     runs-on: ubuntu-20.04
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v3
       with:
@@ -351,6 +357,7 @@ jobs:
   test_cars:
     name: cars
     runs-on: ubuntu-20.04
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:

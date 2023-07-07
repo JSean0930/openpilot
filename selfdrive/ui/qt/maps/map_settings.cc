@@ -120,6 +120,11 @@ MapSettings::MapSettings(bool closeable, QWidget *parent)
 }
 
 void MapSettings::showEvent(QShowEvent *event) {
+  custom_mapbox = Params().getBool("dp_otisserv");
+  if (custom_mapbox) {
+    QString list = QString::fromStdString((params.get("ApiCache_NavDestinations")).c_str());
+    parseResponse(list.toUtf8(), true);
+  }
   updateCurrentRoute();
 }
 

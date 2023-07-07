@@ -3,6 +3,7 @@ LICENSE
 launch_env.sh
 launch_chffrplus.sh
 launch_openpilot.sh
+force_car_recognition.py
 
 Jenkinsfile
 SConstruct
@@ -144,6 +145,9 @@ selfdrive/debug/uiview.py
 selfdrive/debug/hyundai_enable_radar_points.py
 selfdrive/debug/vw_mqb_config.py
 
+selfdrive/gpxd/gpx_uploader.py
+selfdrive/gpxd/gpxd.py
+
 common/SConscript
 common/version.h
 
@@ -175,12 +179,14 @@ selfdrive/controls/__init__.py
 selfdrive/controls/controlsd.py
 selfdrive/controls/plannerd.py
 selfdrive/controls/radard.py
+selfdrive/controls/vtsc.py
 selfdrive/controls/lib/__init__.py
 selfdrive/controls/lib/alertmanager.py
 selfdrive/controls/lib/alerts_offroad.json
 selfdrive/controls/lib/desire_helper.py
 selfdrive/controls/lib/drive_helpers.py
 selfdrive/controls/lib/events.py
+selfdrive/controls/lib/lane_planner.py
 selfdrive/controls/lib/latcontrol_angle.py
 selfdrive/controls/lib/latcontrol_torque.py
 selfdrive/controls/lib/latcontrol_pid.py
@@ -407,7 +413,7 @@ selfdrive/assets/assets.qrc
 selfdrive/assets/*.png
 selfdrive/assets/*.svg
 selfdrive/assets/body/*
-selfdrive/assets/fonts/*.ttf
+selfdrive/assets/fonts/*
 selfdrive/assets/icons/*
 selfdrive/assets/images/*
 selfdrive/assets/offroad/*

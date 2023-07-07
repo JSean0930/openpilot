@@ -9,6 +9,7 @@ from common.basedir import BASEDIR
 from common.conversions import Conversions as CV
 from common.kalman.simple_kalman import KF1D
 from common.numpy_fast import clip
+from common.params import Params
 from common.realtime import DT_CTRL
 from selfdrive.car import apply_hysteresis, gen_empty_fingerprint, scale_rot_inertia, scale_tire_stiffness
 from selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, get_friction
@@ -176,6 +177,8 @@ class CarInterfaceBase(ABC):
     ret.longitudinalActuatorDelayLowerBound = 0.15
     ret.longitudinalActuatorDelayUpperBound = 0.15
     ret.steerLimitTimer = 1.0
+    params = Params()
+    ret.experimentalModeViaWheel = params.get_bool("e2e_link")
     return ret
 
   @staticmethod
