@@ -55,6 +55,7 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QObject::connect(uiState(), &UIState::offroadTransition, this, &OnroadWindow::offroadTransition);
 }
 
+bool mapVisible;
 void OnroadWindow::updateState(const UIState &s) {
   QColor bgColor = bg_colors[s.status];
   // dpatl {{
@@ -73,6 +74,7 @@ void OnroadWindow::updateState(const UIState &s) {
   }
 
   nvg->updateState(s);
+  mapVisible = isMapVisible();
 
   // update spacing
   bool navDisabledNow = (*s.sm)["controlsState"].getControlsState().getEnabled() &&
@@ -104,19 +106,19 @@ void OnroadWindow::mousePressEvent(QMouseEvent* e) {
   }
 #endif
   const auto &scene = uiState()->scene;
-  const SubMaster &sm = *uiState()->sm;
+  // const SubMaster &sm = *uiState()->sm;
   static auto params = Params();
   const bool isDrivingPersonalitiesViaUI = scene.driving_personalities_ui_wheel;
   const bool isExperimentalModeViaUI = scene.experimental_mode_via_wheel && !scene.steering_wheel_car;
   static bool propagateEvent = false;
   static bool recentlyTapped = false;
-  static bool rightHandDM = false;
-  const int x_offset = scene.mute_dm ? 50 : 250;
+  // static bool rightHandDM = false;
+  // const int x_offset = scene.mute_dm ? 50 : 250;
 
-  rightHandDM = sm["driverMonitoringState"].getDriverMonitoringState().getIsRHD();
+  // rightHandDM = sm["driverMonitoringState"].getDriverMonitoringState().getIsRHD();
 
   // Driving personalities button
-  int x = rightHandDM ? rect().right() - (btn_size - 24) / 2 - (bdr_s * 2) - x_offset : (btn_size - 24) / 2 + (bdr_s * 2) + x_offset;
+  int x = rect().right() - (btn_size - 24) / 2 - (bdr_s * 2);
   const int y = rect().bottom() - footer_h / 2;
   // Give the button a 25% offset so it doesn't need to be clicked on perfectly
   bool isDrivingPersonalitiesClicked = (e->pos() - QPoint(x, y)).manhattanLength() <= btn_size * 1.25 && isDrivingPersonalitiesViaUI;
@@ -709,6 +711,9 @@ void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::RadarState
 
   //QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
   float homebase_h = 12;
+  if(mapVisible){
+    sz *= 0.7; //顯示地圖時將 V 形變小。
+  }
   QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo + homebase_h},{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo},{x - (sz * 1.35) - g_xo, y + sz + g_yo + homebase_h}, {x, y + sz + homebase_h + g_yo + 10}};
   painter.setBrush(QColor(218, 202, 37, 210));
   painter.drawPolygon(glow, std::size(glow));
@@ -1162,7 +1167,7 @@ void AnnotatedCameraWidget::drawDrivingPersonalities(QPainter &p) {
   p.setRenderHint(QPainter::Antialiasing);
 
   // Set the x and y coordinates
-  int x = rightHandDM ? rect().right() - (btn_size - 24) / 2 - (bdr_s * 2) - (muteDM ? 50 : 250) : (btn_size - 24) / 2 + (bdr_s * 2) + (muteDM ? 50 : 250);
+  int x = rect().right() - (btn_size - 24) / 2 - (bdr_s * 2);
   const int y = rect().bottom() - footer_h / 2 + 30;
 
   // Select the appropriate profile image/text
