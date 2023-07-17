@@ -156,6 +156,7 @@ void TogglesPanel::updateToggles() {
       e2e_toggle->setEnabled(true);
       e2e_toggle->setDescription(e2e_description);
       long_personality_setting->setEnabled(true);
+      long_personality_setting->refresh();
     } else {
       // no long for now
       e2e_toggle->setEnabled(false);
