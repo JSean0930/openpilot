@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import datetime
+# import datetime
 import os
 import json
 import queue
@@ -36,7 +36,7 @@ DISCONNECT_TIMEOUT = 5.  # wait 5 seconds before going offroad after disconnect 
 PANDA_STATES_TIMEOUT = int(1000 * 1.5 * DT_TRML)  # 1.5x the expected pandaState frequency
 
 ThermalBand = namedtuple("ThermalBand", ['min_temp', 'max_temp'])
-HardwareState = namedtuple("HardwareState", ['network_type', 'network_info', 'network_strength', 'network_stats', 'network_metered', 'nvme_temps', 'modem_temps'])
+HardwareState = namedtuple("HardwareState", ['network_type', 'network_info', 'network_strength', 'network_stats', 'network_metered', 'nvme_temps', 'modem_temps', 'wifi_address'])
 
 # List of thermal bands. We will stay within this region as long as we are within the bounds.
 # When exiting the bounds, we'll jump to the lower or higher band. Bands are ordered in the dict.
@@ -131,6 +131,7 @@ def hw_state_thread(end_event, hw_queue):
           network_metered=HARDWARE.get_network_metered(network_type),
           nvme_temps=HARDWARE.get_nvme_temperatures(),
           modem_temps=modem_temps,
+          wifi_address=HARDWARE.get_ip_address(),
         )
 
         try:
@@ -178,6 +179,7 @@ def thermald_thread(end_event, hw_queue):
     network_stats={'wwanTx': -1, 'wwanRx': -1},
     nvme_temps=[],
     modem_temps=[],
+    wifi_address='N/A',
   )
 
   all_temp_filter = FirstOrderFilter(0., TEMP_TAU, DT_TRML, initialized=False)
@@ -246,6 +248,7 @@ def thermald_thread(end_event, hw_queue):
 
     msg.deviceState.nvmeTempC = last_hw_state.nvme_temps
     msg.deviceState.modemTempC = last_hw_state.modem_temps
+    msg.deviceState.wifiIpAddress = last_hw_state.wifi_address
 
     msg.deviceState.screenBrightnessPercent = HARDWARE.get_screen_brightness()
     msg.deviceState.usbOnline = HARDWARE.get_usb_present()
@@ -283,16 +286,16 @@ def thermald_thread(end_event, hw_queue):
     # **** starting logic ****
 
     # Ensure date/time are valid
-    now = datetime.datetime.utcnow()
-    startup_conditions["time_valid"] = now > MIN_DATE
-    set_offroad_alert_if_changed("Offroad_InvalidTime", (not startup_conditions["time_valid"]))
+    # now = datetime.datetime.utcnow()
+    # startup_conditions["time_valid"] = (now.year > 2020) or (now.year == 2020 and now.month >= 10)
+    # set_offroad_alert_if_changed("Offroad_InvalidTime", (not startup_conditions["time_valid"]))
 
-    startup_conditions["up_to_date"] = params.get("Offroad_ConnectivityNeeded") is None or params.get_bool("DisableUpdates") or params.get_bool("SnoozeUpdate")
+    # startup_conditions["up_to_date"] = params.get("Offroad_ConnectivityNeeded") is None or params.get_bool("DisableUpdates") or params.get_bool("SnoozeUpdate")
     startup_conditions["not_uninstalling"] = not params.get_bool("DoUninstall")
     startup_conditions["accepted_terms"] = params.get("HasAcceptedTerms") == terms_version
 
     # with 2% left, we killall, otherwise the phone will take a long time to boot
-    startup_conditions["free_space"] = msg.deviceState.freeSpacePercent > 2
+    # startup_conditions["free_space"] = msg.deviceState.freeSpacePercent > 2
     startup_conditions["completed_training"] = params.get("CompletedTrainingVersion") == training_version or \
                                                params.get_bool("Passive")
     startup_conditions["not_driver_view"] = not params.get_bool("IsDriverViewEnabled")
@@ -380,10 +383,10 @@ def thermald_thread(end_event, hw_queue):
 
     if not TICI:
       # Check if we need to disable charging (handled by boardd)
-      msg.deviceState.chargingDisabled = power_monitor.legacy_should_disable_charging(onroad_conditions["ignition"], in_car, off_ts)
+      msg.deviceState.chargingDisabled = power_monitor.legacy_should_shutdown(peripheralState, onroad_conditions["ignition"], in_car, off_ts, started_seen)
 
       # Check if we need to shut down
-      if power_monitor.legacy_should_shutdown(peripheralState, onroad_conditions["ignition"], in_car, off_ts, started_seen):
+      if msg.deviceState.chargingDisabled:
         cloudlog.warning(f"shutting device down, offroad since {off_ts}")
         params.put_bool("DoShutdown", True)
     else:

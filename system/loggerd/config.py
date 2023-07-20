@@ -1,13 +1,18 @@
 import os
 from pathlib import Path
 from system.hardware import PC
+from common.params import Params
 
 if os.environ.get('LOG_ROOT', False):
   ROOT = os.environ['LOG_ROOT']
 elif PC:
   ROOT = str(Path.home() / ".comma" / "media" / "0" / "realdata")
 else:
-  ROOT = '/data/media/0/realdata/'
+  params = Params()
+  if params.get_bool('dp_jetson'):
+    ROOT = '/data/media/0/fakedata/'
+  else:
+    ROOT = '/data/media/0/realdata/'
 
 
 CAMERA_FPS = 20

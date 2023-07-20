@@ -1,6 +1,7 @@
 from cereal import car
 from panda import Panda
 from common.conversions import Conversions as CV
+from common.params import Params
 from selfdrive.car import STD_CARGO_KG, get_safety_config
 from selfdrive.car.interfaces import CarInterfaceBase
 from selfdrive.car.volkswagen.values import CAR, PQ_CARS, CANBUS, NetworkLocation, TransmissionType, GearShifter
@@ -116,10 +117,12 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.GOLF_MK7:
       ret.mass = 1397 + STD_CARGO_KG
       ret.wheelbase = 2.62
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.JETTA_MK7:
       ret.mass = 1328 + STD_CARGO_KG
       ret.wheelbase = 2.71
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.PASSAT_MK8:
       ret.mass = 1551 + STD_CARGO_KG
@@ -136,6 +139,7 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.POLO_MK6:
       ret.mass = 1230 + STD_CARGO_KG
       ret.wheelbase = 2.55
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.SHARAN_MK2:
       ret.mass = 1639 + STD_CARGO_KG
@@ -154,6 +158,7 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.TIGUAN_MK2:
       ret.mass = 1715 + STD_CARGO_KG
       ret.wheelbase = 2.74
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.TOURAN_MK2:
       ret.mass = 1516 + STD_CARGO_KG
@@ -171,6 +176,7 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.AUDI_A3_MK3:
       ret.mass = 1335 + STD_CARGO_KG
       ret.wheelbase = 2.61
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.AUDI_Q2_MK1:
       ret.mass = 1205 + STD_CARGO_KG
@@ -199,10 +205,12 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.SKODA_KAROQ_MK1:
       ret.mass = 1278 + STD_CARGO_KG
       ret.wheelbase = 2.66
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.SKODA_KODIAQ_MK1:
       ret.mass = 1569 + STD_CARGO_KG
       ret.wheelbase = 2.79
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.SKODA_OCTAVIA_MK3:
       ret.mass = 1388 + STD_CARGO_KG
@@ -218,6 +226,9 @@ class CarInterface(CarInterfaceBase):
 
     else:
       raise ValueError(f"unsupported car {candidate}")
+
+    if Params().get_bool("EnableTorqueController"):
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     ret.autoResumeSng = ret.minEnableSpeed == -1
     ret.centerToFront = ret.wheelbase * 0.45

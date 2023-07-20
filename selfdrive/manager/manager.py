@@ -31,7 +31,8 @@ def manager_init() -> None:
   set_time(cloudlog)
 
   # save boot log
-  subprocess.call("./bootlog", cwd=os.path.join(BASEDIR, "selfdrive/loggerd"))
+  if not Params().get_bool('dp_jetson'):
+    subprocess.call("./bootlog", cwd=os.path.join(BASEDIR, "selfdrive/loggerd"))
 
   params = Params()
   params.clear_all(ParamKeyType.CLEAR_ON_MANAGER_START)
@@ -39,17 +40,41 @@ def manager_init() -> None:
   params.clear_all(ParamKeyType.CLEAR_ON_OFFROAD_TRANSITION)
 
   default_params: List[Tuple[str, Union[str, bytes]]] = [
+    ("CarModel", ""),
     ("CompletedTrainingVersion", "0"),
     ("DisengageOnAccelerator", "0"),
+    ("DrivingPersonalitiesUIWheel", "1"),
     ("GsmMetered", "1"),
     ("HasAcceptedTerms", "0"),
+    ("IsLdwEnabled", "1"),
+    ("IsMetric", "1"),
     ("LanguageSetting", "main_en"),
-    ("OpenpilotEnabledToggle", "1"),
     ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
+    ("NudgelessLaneChange", "0"),
+    ("NavSettingTime24h", "1"),
+    ("OpenpilotEnabledToggle", "1"),
+
+    ("PrimeAd", "1"),
+    ("RecordFront", "0"),
+    ("TurnVisionControl", "1"),
+    ("EnableTorqueController", "1"),
+    ("LiveTorque", "1"),
+    ("e2e_link", "1"),
+    ("toyotaautolock", "1"),
+    ("toyotaautounlock", "1"),
+    ("toyota_bsm", "0"),
+    ("dynamic_lane", "1"),
+    ("dp_atl", "0"),
+    ("TimSignals", "1"),
+    ("ReverseAccChange", "1"),
+    ("dp_jetson", "0"),
+    ("dp_mapd", "0"),
     ("DisableUpdates", "1"),
     ("dp_no_gps_ctrl", "0"),
-    ("dp_no_fan_ctrl", "0"),
+    ("dp_no_fan_ctrl", "1"),
     ("dp_logging", "0"),
+    ("dp_fileserv", "0"),
+    ("dp_otisserv", "0"),
   ]
   if not PC:
     default_params.append(("LastUpdateTime", datetime.datetime.utcnow().isoformat().encode('utf8')))
@@ -135,6 +160,10 @@ def manager_thread() -> None:
   params = Params()
 
   ignore: List[str] = []
+  dp_jetson = params.get_bool('dp_jetson')
+  ignore += ['dmonitoringmodeld', 'dmonitoringd'] if dp_jetson else []
+  ignore += ['uploader'] if dp_jetson else []
+  ignore += ['logcatd', 'proclogd', 'loggerd', 'logmessaged', 'encoderd', '']
   if params.get("DongleId", encoding='utf8') in (None, UNREGISTERED_DONGLE_ID):
     ignore += ["manage_athenad", "uploader"]
   if os.getenv("NOBOARD") is not None:
@@ -144,8 +173,16 @@ def manager_thread() -> None:
     ignore += ["logcatd", "proclogd", "loggerd"]
   ignore += [x for x in os.getenv("BLOCK", "").split(",") if len(x) > 0]
 
+  if not params.get_bool("dp_mapd") or params.get_bool("dp_no_gps_ctrl"):
+    ignore += ["mapd", "gpx_uploader", "gpxd"]
   if params.get_bool("dp_no_gps_ctrl"):
     ignore.append("ubloxd")
+
+  if not params.get_bool("dp_fileserv"):
+    ignore += ["fileserv"]
+
+  if not params.get_bool("dp_otisserv"):
+    ignore += ["otisserv"]
 
   sm = messaging.SubMaster(['deviceState', 'carParams'], poll=['deviceState'])
   pm = messaging.PubMaster(['managerState'])
