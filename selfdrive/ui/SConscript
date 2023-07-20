@@ -27,7 +27,7 @@ widgets_src = ["ui.cc", "qt/widgets/input.cc", "qt/widgets/drive_stats.cc", "qt/
                "qt/widgets/ssh_keys.cc", "qt/widgets/toggle.cc", "qt/widgets/controls.cc",
                "qt/widgets/offroad_alerts.cc", "qt/widgets/prime.cc", "qt/widgets/keyboard.cc",
                "qt/widgets/scrollview.cc", "#third_party/qrcode/QrCode.cc",
-               "qt/request_repeater.cc", "qt/qt_window.cc"]
+               "qt/request_repeater.cc", "qt/qt_window.cc", "qt/offroad/timpilot.cc"]
 
 if arch != 'aarch64':
   widgets_src += ["qt/widgets/cameraview.cc", "qt/offroad/networking.cc", "qt/offroad/wifiManager.cc"]
