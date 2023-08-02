@@ -138,6 +138,8 @@ class TestCarModelBase(unittest.TestCase):
         self.assertTrue(self.CP.lateralTuning.torque.kf > 0)
       elif tuning == 'indi':
         self.assertTrue(len(self.CP.lateralTuning.indi.outerLoopGainV))
+      elif tuning == 'lqr':
+        self.assertTrue(len(self.CP.lateralTuning.lqr.a))
       else:
         raise Exception("unknown tuning")
 

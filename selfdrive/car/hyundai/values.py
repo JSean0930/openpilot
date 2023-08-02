@@ -1981,3 +1981,11 @@ DBC = {
   CAR.GENESIS_GV80: dbc_dict('hyundai_canfd', None),
   CAR.KIA_CARNIVAL_4TH_GEN: dbc_dict('hyundai_canfd', None),
 }
+
+def main():
+  for member, value in vars(CAR).items():
+    if not member.startswith("_"):
+      print(value)
+
+if __name__ == "__main__":
+  main()

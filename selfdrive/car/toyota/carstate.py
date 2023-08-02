@@ -4,6 +4,7 @@ from cereal import car
 from common.conversions import Conversions as CV
 from common.numpy_fast import mean
 from common.filter_simple import FirstOrderFilter
+from common.params import Params, put_nonblocking
 from common.realtime import DT_CTRL
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
@@ -41,7 +42,32 @@ class CarState(CarStateBase):
 
     self.low_speed_lockout = False
     self.acc_type = 1
+    self.params = Params()
+    self.experimental_mode_via_wheel = self.CP.experimentalModeViaWheel
+
+    # KRKeegan - Add support for toyota distance button
+    self.distance_btn = 0
+    self.previous_distance_lines = 0
+    self.e2e_link = Params().get_bool('e2e_link')
+    self.ispressed_prev = 2
+    self.ispressed_init = 0
+    self.e2e_init = 0
+    self.topsng = Params().get_bool('topsng')
     self.lkas_hud = {}
+
+    # bsm
+    self.toyota_bsm = Params().get_bool("toyota_bsm")
+    self.left_blindspot = False
+    self.left_blindspot_d1 = 0
+    self.left_blindspot_d2 = 0
+    self.left_blindspot_counter = 0
+
+    self.right_blindspot = False
+    self.right_blindspot_d1 = 0
+    self.right_blindspot_d2 = 0
+    self.right_blindspot_counter = 0
+
+    self.frame = 0
 
   def update(self, cp, cp_cam):
     ret = car.CarState.new_message()
@@ -118,7 +144,7 @@ class CarState(CarStateBase):
     else:
       ret.accFaulted = cp.vl["PCM_CRUISE_2"]["ACC_FAULTED"] != 0
       ret.cruiseState.available = cp.vl["PCM_CRUISE_2"]["MAIN_ON"] != 0
-      ret.cruiseState.speed = cp.vl["PCM_CRUISE_2"]["SET_SPEED"] * CV.KPH_TO_MS
+      ret.cruiseState.speed = cp.vl["PCM_CRUISE_2"]["SET_SPEED"] * CV.KPH_TO_MS * self.CP.wheelSpeedFactor
       cluster_set_speed = cp.vl["PCM_CRUISE_SM"]["UI_SET_SPEED"]
 
     # UI_SET_SPEED is always non-zero when main is on, hide until first enable
@@ -143,7 +169,11 @@ class CarState(CarStateBase):
       self.low_speed_lockout = cp.vl["PCM_CRUISE_2"]["LOW_SPEED_LOCKOUT"] == 2
 
     self.pcm_acc_status = cp.vl["PCM_CRUISE"]["CRUISE_STATE"]
-    if self.CP.carFingerprint not in (NO_STOP_TIMER_CAR - TSS2_CAR):
+    if self.topsng and (self.CP.flags & ToyotaFlags.HYBRID) and (self.CP.flags & ToyotaFlags.SMART_DSU):
+      # ignore standstill in hybrid vehicles, since pcm allows to restart without
+      # receiving any special command. Also if interceptor is detected
+      ret.cruiseState.standstill = False
+    elif not self.topsng and self.CP.carFingerprint not in (NO_STOP_TIMER_CAR - TSS2_CAR):
       # ignore standstill state in certain vehicles, since pcm allows to restart with just an acceleration request
       ret.cruiseState.standstill = self.pcm_acc_status == 7
     ret.cruiseState.enabled = bool(cp.vl["PCM_CRUISE"]["CRUISE_ACTIVE"])
@@ -159,8 +189,83 @@ class CarState(CarStateBase):
       ret.leftBlindspot = (cp.vl["BSM"]["L_ADJACENT"] == 1) or (cp.vl["BSM"]["L_APPROACHING"] == 1)
       ret.rightBlindspot = (cp.vl["BSM"]["R_ADJACENT"] == 1) or (cp.vl["BSM"]["R_APPROACHING"] == 1)
 
+    # DP: Enable blindspot debug mode once (@arne182)
+    # let's keep all the commented out code for easy debug purpose for future.
+    if self.toyota_bsm and self.frame > 1999: #self.CP.carFingerprint == CAR.PRIUS_TSS2: #not (self.CP.carFingerprint in TSS2_CAR or self.CP.carFingerprint == CAR.CAMRY or self.CP.carFingerprint == CAR.CAMRYH):
+      distance_1 = cp.vl["DEBUG"].get('BLINDSPOTD1')
+      distance_2 = cp.vl["DEBUG"].get('BLINDSPOTD2')
+      side = cp.vl["DEBUG"].get('BLINDSPOTSIDE')
+
+      if distance_1 is not None and distance_2 is not None and side is not None:
+        if side == 65: # Left blind spot
+          if distance_1 != self.left_blindspot_d1:
+            self.left_blindspot_d1 = distance_1
+            self.left_blindspot_counter = 100
+          if distance_2 != self.left_blindspot_d2:
+            self.left_blindspot_d2 = distance_2
+            self.left_blindspot_counter = 100
+          if self.left_blindspot_d1 > 10 or self.left_blindspot_d2 > 10:
+            self.left_blindspot = True
+        elif side == 66: # Right blind spot
+          if distance_1 != self.right_blindspot_d1:
+            self.right_blindspot_d1 = distance_1
+            self.right_blindspot_counter = 100
+          if distance_2 != self.right_blindspot_d2:
+            self.right_blindspot_d2 = distance_2
+            self.right_blindspot_counter = 100
+          if self.right_blindspot_d1 > 10 or self.right_blindspot_d2 > 10:
+            self.right_blindspot = True
+
+        if self.left_blindspot_counter > 0:
+          self.left_blindspot_counter -= 2
+        else:
+          self.left_blindspot = False
+          self.left_blindspot_d1 = 0
+          self.left_blindspot_d2 = 0
+
+        if self.right_blindspot_counter > 0:
+          self.right_blindspot_counter -= 2
+        else:
+          self.right_blindspot = False
+          self.right_blindspot_d1 = 0
+          self.right_blindspot_d2 = 0
+
+        ret.leftBlindspot = self.left_blindspot
+        ret.rightBlindspot = self.right_blindspot
+
     if self.CP.carFingerprint != CAR.PRIUS_V:
       self.lkas_hud = copy.copy(cp_cam.vl["LKAS_HUD"])
+
+    self.frame += 1
+
+    # Driving personalities function
+    if self.CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR):
+      self.distance_btn = 1 if cp_cam.vl["ACC_CONTROL"]["DISTANCE"] == 1 else 0
+    elif self.CP.carFingerprint in RADAR_ACC_CAR:
+      self.distance_btn = 1 if cp.vl["ACC_CONTROL"]["DISTANCE"] == 1 else 0
+    elif self.CP.flags & ToyotaFlags.SMART_DSU:
+      self.distance_btn = 1 if cp.vl["SDSU"]["FD_BUTTON"] == 1 else 0
+
+    ret.distanceLines = max(cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"] - 1, 0)
+
+    ret.steeringWheelCar = True if self.CP.carName == "toyota" else False
+    if ret.distanceLines != self.previous_distance_lines:
+      put_nonblocking("LongitudinalPersonality", str(ret.distanceLines))
+      self.previous_distance_lines = ret.distanceLines
+
+
+    if self.e2e_link:
+      self.ispressed = cp.vl["GEAR_PACKET"]["ECON_ON"]
+      self.ispressed_init += int(self.ispressed)
+      self.e2e_init += int(self.params.get_bool("ExperimentalMode"))
+      self.status_check = int(self.ispressed_init + self.e2e_init)
+      if (self.status_check == 1 or self.status_check >= 4) and self.ispressed != self.ispressed_prev:
+        self.e2eLongButton = not self.params.get_bool("ExperimentalMode")
+        self.params.put_bool("ExperimentalMode", self.e2eLongButton)
+      self.ispressed_prev = self.ispressed
+      self.ispressed_init = 2
+      self.e2e_init = 2
+
 
     return ret
 
@@ -197,6 +302,8 @@ class CarState(CarStateBase):
       ("TURN_SIGNALS", "BLINKERS_STATE"),
       ("LKA_STATE", "EPS_STATUS"),
       ("AUTO_HIGH_BEAM", "LIGHT_STALK"),
+      ("ECON_ON", "GEAR_PACKET"),
+      ("DISTANCE_LINES", "PCM_CRUISE_SM"),
     ]
 
     # Check LTA state if using LTA angle control
@@ -226,6 +333,9 @@ class CarState(CarStateBase):
       signals.append(("GAS_PEDAL", "GAS_PEDAL"))
       checks.append(("GAS_PEDAL", 33))
 
+    if CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR):
+      signals.append(("ECON_ON", "GEAR_PACKET"))
+
     if CP.carFingerprint in UNSUPPORTED_DSU_CAR:
       signals.append(("MAIN_ON", "DSU_CRUISE"))
       signals.append(("SET_SPEED", "DSU_CRUISE"))
@@ -245,6 +355,9 @@ class CarState(CarStateBase):
       signals.append(("INTERCEPTOR_GAS2", "GAS_SENSOR"))
       checks.append(("GAS_SENSOR", 50))
 
+
+    toyota_bsm = Params().get_bool("toyota_bsm")
+
     if CP.enableBsm:
       signals += [
         ("L_ADJACENT", "BSM"),
@@ -253,6 +366,15 @@ class CarState(CarStateBase):
         ("R_APPROACHING", "BSM"),
       ]
       checks.append(("BSM", 1))
+
+    if toyota_bsm:
+      signals += [
+        ("BLINDSPOT", "DEBUG"),
+        ("BLINDSPOTSIDE", "DEBUG"),
+        ("BLINDSPOTD1", "DEBUG"),
+        ("BLINDSPOTD2", "DEBUG"),
+      ]
+      checks.append(("DEBUG", 65))
 
     if CP.carFingerprint in RADAR_ACC_CAR:
       if not CP.flags & ToyotaFlags.SMART_DSU.value:
@@ -263,11 +385,18 @@ class CarState(CarStateBase):
           ("ACC_CONTROL", 33),
         ]
       signals += [
+        ("DISTANCE", 'ACC_CONTROL'),
         ("FCW", "ACC_HUD"),
       ]
       checks += [
+        ("ACC_CONTROL", 0),
         ("ACC_HUD", 1),
       ]
+
+    # KRKeegan - Add support for toyota distance button
+    if CP.carFingerprint in (TSS2_CAR | RADAR_ACC_CAR):
+      signals.append(("DISTANCE_LINES", "PCM_CRUISE_SM"))
+      checks.append(("PCM_CRUISE_SM", 0))
 
     if CP.carFingerprint not in (TSS2_CAR - RADAR_ACC_CAR) and not CP.enableDsu:
       signals += [
@@ -277,6 +406,11 @@ class CarState(CarStateBase):
       checks += [
         ("PRE_COLLISION", 33),
       ]
+
+    # KRKeegan - Add support for toyota distance button
+    if CP.flags & ToyotaFlags.SMART_DSU:
+      signals.append(("FD_BUTTON", "SDSU"))
+      checks.append(("SDSU", 33))
 
     return CANParser(DBC[CP.carFingerprint]["pt"], signals, checks, 0)
 
@@ -303,6 +437,7 @@ class CarState(CarStateBase):
         ("FORCE", "PRE_COLLISION"),
         ("ACC_TYPE", "ACC_CONTROL"),
         ("FCW", "ACC_HUD"),
+        ("DISTANCE", "ACC_CONTROL"),
       ]
       checks += [
         ("PRE_COLLISION", 33),
