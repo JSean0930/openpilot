@@ -5,6 +5,7 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
+#include "common/params.h"
 #include "selfdrive/ui/qt/offroad/experimental_mode.h"
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/widgets/prime.h"
@@ -157,7 +158,7 @@ OffroadHome::OffroadHome(QWidget* parent) : QFrame(parent) {
     left_widget->addWidget(new PrimeAdWidget);
     left_widget->setStyleSheet("border-radius: 10px;");
 
-    left_widget->setCurrentIndex(uiState()->primeType() ? 0 : 1);
+    left_widget->setCurrentIndex(uiState()->primeType() || Params().getBool("PrimeAd") ? 0 : 1);
     connect(uiState(), &UIState::primeTypeChanged, [=](int prime_type) {
       left_widget->setCurrentIndex(prime_type ? 0 : 1);
     });

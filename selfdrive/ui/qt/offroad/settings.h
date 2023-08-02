@@ -6,10 +6,14 @@
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QWidget>
+#include <QStackedLayout>
 
 
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/widgets/controls.h"
+#include "selfdrive/ui/qt/offroad/timpilot.h"
+
+QFrame *horizontal_line(QWidget *parent = nullptr);
 
 // ********** settings window + top-level panels **********
 class SettingsWindow : public QFrame {
@@ -89,4 +93,18 @@ private:
 
   Params params;
   ParamWatcher *fs_watch;
+};
+
+class TimpilotPanel : public QWidget {
+  Q_OBJECT
+
+private:
+  QStackedLayout* main_layout = nullptr;
+  QWidget* home = nullptr;
+  ForceCarRecognition* setCar = nullptr;
+
+  QWidget* home_widget;
+
+public:
+  explicit TimpilotPanel(QWidget *parent = nullptr);
 };
