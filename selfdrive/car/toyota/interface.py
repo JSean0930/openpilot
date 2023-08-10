@@ -323,7 +323,7 @@ class CarInterface(CarInterfaceBase):
           # while in standstill, send a user alert
           events.add(EventName.manualRestart)
 
-    if self.dp_atl:
+    if self.dp_atl and (self.CP.carFingerprint in TSS2_CAR or (self.CP.flags & ToyotaFlags.SMART_DSU)):
       if not self.prev_atl and ret.cruiseState.available:
         events.add(EventName.atlEngageSound)
         Params().put_bool("LateralAllowed", True)

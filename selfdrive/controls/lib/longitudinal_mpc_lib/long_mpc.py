@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import numpy as np
+from common.params import put_nonblocking
 from cereal import log
 from common.conversions import Conversions as CV
 from common.realtime import sec_since_boot
@@ -368,14 +369,17 @@ class LongitudinalMpc:
       if profile_key == 1: # No Cut In
         self.t_follow = 0.85
         self.stop_distance = 3.5
+        put_nonblocking('LongitudinalPersonality', str(0))
 
       elif profile_key == 2: # Relaxed
         self.t_follow = T_FOLLOW
         self.stop_distance = STOP_DISTANCE
+        put_nonblocking('LongitudinalPersonality', str(1))
 
       elif profile_key == 3: # Let You Cut In
         self.t_follow = 1.8
         self.stop_distance = 5.5
+        put_nonblocking('LongitudinalPersonality', str(2))
 
     else:
       self.t_follow = T_FOLLOW

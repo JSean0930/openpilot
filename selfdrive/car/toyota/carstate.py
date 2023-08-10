@@ -4,7 +4,7 @@ from cereal import car
 from common.conversions import Conversions as CV
 from common.numpy_fast import mean
 from common.filter_simple import FirstOrderFilter
-from common.params import Params, put_nonblocking
+from common.params import Params
 from common.realtime import DT_CTRL
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
@@ -47,7 +47,6 @@ class CarState(CarStateBase):
 
     # KRKeegan - Add support for toyota distance button
     self.distance_btn = 0
-    self.previous_distance_lines = 0
     self.e2e_link = Params().get_bool('e2e_link')
     self.ispressed_prev = 2
     self.ispressed_init = 0
@@ -246,13 +245,7 @@ class CarState(CarStateBase):
     elif self.CP.flags & ToyotaFlags.SMART_DSU:
       self.distance_btn = 1 if cp.vl["SDSU"]["FD_BUTTON"] == 1 else 0
 
-    ret.distanceLines = max(cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"] - 1, 0)
-
-    ret.steeringWheelCar = True if self.CP.carName == "toyota" else False
-    if ret.distanceLines != self.previous_distance_lines:
-      put_nonblocking("LongitudinalPersonality", str(ret.distanceLines))
-      self.previous_distance_lines = ret.distanceLines
-
+    ret.distanceLines = cp.vl["PCM_CRUISE_SM"]["DISTANCE_LINES"]
 
     if self.e2e_link:
       self.ispressed = cp.vl["GEAR_PACKET"]["ECON_ON"]
@@ -266,6 +259,7 @@ class CarState(CarStateBase):
       self.ispressed_init = 2
       self.e2e_init = 2
 
+    ret.steeringWheelCar = True if self.CP.carName == "toyota" else False
 
     return ret
 
