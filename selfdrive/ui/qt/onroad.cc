@@ -1,9 +1,12 @@
 #include "selfdrive/ui/qt/onroad.h"
 
+#include <chrono>
 #include <cmath>
 
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QMouseEvent>
+#include <QTimer>
 
 #include "common/timing.h"
 #include "selfdrive/ui/qt/util.h"
@@ -12,6 +15,7 @@
 #include "selfdrive/ui/qt/maps/map_panel.h"
 #endif
 
+#define FONT_OPEN_SANS "Inter" //"Open Sans"
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
   main_layout->setMargin(UI_BORDER_SIZE);
@@ -53,6 +57,12 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
 
 void OnroadWindow::updateState(const UIState &s) {
   QColor bgColor = bg_colors[s.status];
+  // dpatl {{
+  if(s.status == STATUS_DISENGAGED && Params().getBool("LateralAllowed")){
+      bgColor = bg_colors[STATUS_LAT_ALLOWED];
+  }
+  // }} dpatl
+
   Alert alert = Alert::get(*(s.sm), s.scene.started_frame);
   alerts->updateAlert(alert);
 
@@ -80,8 +90,42 @@ void OnroadWindow::mousePressEvent(QMouseEvent* e) {
     map->setVisible(show_map && !map->isVisible());
   }
 #endif
+  const auto &scene = uiState()->scene;
+  // const SubMaster &sm = *uiState()->sm;
+  static auto params = Params();
+  const bool isDrivingPersonalitiesViaUI = scene.driving_personalities_ui_wheel;
+  const bool isExperimentalModeViaUI = scene.experimental_mode_via_wheel && !scene.steering_wheel_car;
+  static bool propagateEvent = false;
+  static bool recentlyTapped = false;
+  // const int x_offset = scene.mute_dm ? 50 : 250;
+  // bool rightHandDM = sm["driverMonitoringState"].getDriverMonitoringState().getIsRHD();
+
+  // Driving personalities button
+  int x = rect().right() - (btn_size - 24) / 2 - (UI_BORDER_SIZE * 2);
+  const int y = rect().bottom() - 140;
+  // Give the button a 25% offset so it doesn't need to be clicked on perfectly
+  bool isDrivingPersonalitiesClicked = (e->pos() - QPoint(x, y)).manhattanLength() <= btn_size * 1.25 && isDrivingPersonalitiesViaUI;
+
+  // Check if the button was clicked
+  if (isDrivingPersonalitiesClicked) {
+    params.putInt("LongitudinalPersonality", (scene.personality_profile + 2) % 3);
+    propagateEvent = false;
+  // If the click wasn't on the button for drivingPersonalities, change the value of "ExperimentalMode"
+  } else if (recentlyTapped && isExperimentalModeViaUI) {
+    bool experimentalMode = params.getBool("ExperimentalMode");
+    params.putBool("ExperimentalMode", !experimentalMode);
+    params.putBool("TogglesUpdated", "True");
+    recentlyTapped = false;
+    propagateEvent = true;
+  } else {
+    recentlyTapped = true;
+    propagateEvent = true;
+  }
+
   // propagation event to parent(HomeWindow)
-  QWidget::mousePressEvent(e);
+  if (propagateEvent) {
+    QWidget::mousePressEvent(e);
+  }
 }
 
 void OnroadWindow::offroadTransition(bool offroad) {
@@ -229,13 +273,47 @@ AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget* par
 
   experimental_btn = new ExperimentalButton(this);
   main_layout->addWidget(experimental_btn, 0, Qt::AlignTop | Qt::AlignRight);
+  main_layout->setContentsMargins(0, 60, 0, 0);
+  map_img = loadPixmap("../assets/img_world_icon.png", {subsign_img_size, subsign_img_size});
   #ifdef QCOM
   dm_img = loadPixmap("../assets/img_driver_face_qcom.png", {img_size + 5, img_size + 5});
   #else
   dm_img = loadPixmap("../assets/img_driver_face.png", {img_size + 5, img_size + 5});
   #endif
+
+  // Driving personalities profiles
+  profile_data = {
+    {QPixmap("../assets/aggressive.png"), "Aggressive"},
+    {QPixmap("../assets/standard.png"), "Standard"},
+    {QPixmap("../assets/relaxed.png"), "Relaxed"}
+  };
+
+  // Turn signal images
+  const QStringList imagePaths = {
+    "../assets/images/tim_turn_signal_1.png",
+    "../assets/images/tim_turn_signal_2.png",
+    "../assets/images/tim_turn_signal_3.png",
+    "../assets/images/tim_turn_signal_4.png"
+  };
+  signalImgVector.reserve(2 * imagePaths.size() + 1);
+  for (int i = 0; i < 2; ++i) {
+    for (const QString& path : imagePaths) {
+      signalImgVector.push_back(QPixmap(path));
+    }
+  }
+  // Add the blindspot signal image to the vector
+  signalImgVector.push_back(QPixmap("../assets/images/tim_turn_signal_1_red.png"));
+
+  // Initialize the timer for the turn signal animation
+  auto animationTimer = new QTimer(this);
+  connect(animationTimer, &QTimer::timeout, this, [this] {
+    animationFrameIndex = (animationFrameIndex + 1) % totalFrames;
+    update();
+  });
+  animationTimer->start(totalFrames * 11); // 11 * totalFrames (88) milliseconds per frame
 }
 
+static float vc_speed;
 void AnnotatedCameraWidget::updateState(const UIState &s) {
   const int SET_SPEED_NA = 255;
   const SubMaster &sm = *(s.sm);
@@ -262,6 +340,7 @@ void AnnotatedCameraWidget::updateState(const UIState &s) {
     v_ego_cluster_seen = true;
   }
   float cur_speed = cs_alive ? std::max<float>(0.0, v_ego) : 0.0;
+  vc_speed = v_ego;
   cur_speed *= s.scene.is_metric ? MS_TO_KPH : MS_TO_MPH;
 
   auto speed_limit_sign = sm["navInstruction"].getNavInstruction().getSpeedLimitSign();
@@ -297,6 +376,18 @@ void AnnotatedCameraWidget::updateState(const UIState &s) {
     setProperty("rightHandDM", sm["driverMonitoringState"].getDriverMonitoringState().getIsRHD());
   }
   #endif
+
+  const auto lmd = sm["liveMapData"].getLiveMapData();
+  setProperty("roadName", QString::fromStdString(lmd.getCurrentRoadName()));
+  setProperty("blindSpotLeft", s.scene.blind_spot_left);
+  setProperty("blindSpotRight", s.scene.blind_spot_right);
+  setProperty("drivingPersonalitiesUIWheel", s.scene.driving_personalities_ui_wheel);
+  setProperty("experimentalMode", s.scene.experimental_mode);
+  setProperty("timSignals", s.scene.tim_signals);
+  setProperty("muteDM", s.scene.mute_dm);
+  setProperty("personalityProfile", s.scene.personality_profile);
+  setProperty("turnSignalLeft", s.scene.turn_signal_left);
+  setProperty("turnSignalRight", s.scene.turn_signal_right);
 }
 
 void AnnotatedCameraWidget::drawHud(QPainter &p) {
@@ -328,7 +419,7 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   int top_radius = 32;
   int bottom_radius = has_eu_speed_limit ? 100 : 32;
 
-  QRect set_speed_rect(QPoint(60 + (default_size.width() - set_speed_size.width()) / 2, 45), set_speed_size);
+  QRect set_speed_rect(QPoint(60 + (default_size.width() - set_speed_size.width()) / 2, roadName.isEmpty() ? 45 : 70), set_speed_size);
   p.setPen(QPen(whiteColor(75), 6));
   p.setBrush(blackColor(166));
   drawRoundedRect(p, set_speed_rect, top_radius, top_radius, bottom_radius, bottom_radius);
@@ -394,6 +485,16 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   p.setFont(InterFont(66));
   drawText(p, rect().center().x(), 290, speedUnit, 200);
 
+  // Bottom bar road name
+  if (!roadName.isEmpty()) {
+    const int h = 60;
+    QRect bar_rc(rect().left(), rect().top(), rect().width(), h);
+    p.setBrush(QColor(0, 0, 0, 100));
+    p.drawRect(bar_rc);
+    p.setFont(InterFont(50, QFont::Bold));
+    drawCenteredText(p, bar_rc.center().x(), bar_rc.center().y(), roadName, QColor(255, 255, 255, 200));
+  }
+
   // dm icon
   if (!hideDM) {
     int offset = UI_BORDER_SIZE + btn_size / 2;
@@ -403,6 +504,16 @@ void AnnotatedCameraWidget::drawHud(QPainter &p) {
   }
 
   p.restore();
+
+  // Driving personalities button - Hide the button when the turn signal animation is on
+  if (drivingPersonalitiesUIWheel && (!timSignals || (timSignals && !turnSignalLeft && !turnSignalRight))) {
+    drawDrivingPersonalities(p);
+  }
+
+  // Animated turn signals
+  if (timSignals && (turnSignalLeft || turnSignalRight)) {
+    drawTimSignals(p);
+  }
 }
 
 void AnnotatedCameraWidget::drawText(QPainter &p, int x, int y, const QString &text, int alpha) {
@@ -411,6 +522,16 @@ void AnnotatedCameraWidget::drawText(QPainter &p, int x, int y, const QString &t
 
   p.setPen(QColor(0xff, 0xff, 0xff, alpha));
   p.drawText(real_rect.x(), real_rect.bottom(), text);
+}
+
+void AnnotatedCameraWidget::drawCenteredText(QPainter &p, int x, int y, const QString &text, QColor color) {
+  QFontMetrics fm(p.font());
+  QRect init_rect = fm.boundingRect(text);
+  QRect real_rect = fm.boundingRect(init_rect, 0, text);
+  real_rect.moveCenter({x, y});
+
+  p.setPen(color);
+  p.drawText(real_rect, Qt::AlignCenter, text);
 }
 
 void AnnotatedCameraWidget::drawIcon(QPainter &p, int x, int y, QPixmap &img, QBrush bg, float opacity) {
@@ -565,18 +686,25 @@ void AnnotatedCameraWidget::drawDriverState(QPainter &painter, const UIState *s)
   painter.restore();
 }
 #endif
-void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::RadarState::LeadData::Reader &lead_data, const QPointF &vd) {
-  painter.save();
 
+static float global_a_rel;
+static float global_a_rel_col;
+void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::RadarState::LeadData::Reader &lead_data, const QPointF &vd , int num /*不使用, size_t leads_num*/) {
+  painter.save();
   const float speedBuff = 10.;
   const float leadBuff = 40.;
+//  const float d_rel = lead_data.getX()[0];
+//  const float v_rel = lead_data.getV()[0];
   const float d_rel = lead_data.getDRel();
   const float v_rel = lead_data.getVRel();
+//  const float t_rel = lead_data.getT()[0];
+//  const float y_rel = lead_data.getY()[0];
+//  const float a_rel = lead_data.getA()[0];
 
   float fillAlpha = 0;
   if (d_rel < leadBuff) {
     fillAlpha = 255 * (1.0 - (d_rel / leadBuff));
-    if (v_rel < 0) {
+    if (v_rel < 0) { //速度？如果它是負數，它會增加紅色三角形的密度。
       fillAlpha += 255 * (-1 * (v_rel / speedBuff));
     }
     fillAlpha = (int)(fmin(fillAlpha, 255));
@@ -589,16 +717,51 @@ void AnnotatedCameraWidget::drawLead(QPainter &painter, const cereal::RadarState
   float g_xo = sz / 5;
   float g_yo = sz / 10;
 
-  QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
-  painter.setBrush(QColor(218, 202, 37, 255));
+  //QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo}};
+  float homebase_h = 12;
+  QPointF glow[] = {{x + (sz * 1.35) + g_xo, y + sz + g_yo + homebase_h},{x + (sz * 1.35) + g_xo, y + sz + g_yo}, {x, y - g_yo}, {x - (sz * 1.35) - g_xo, y + sz + g_yo},{x - (sz * 1.35) - g_xo, y + sz + g_yo + homebase_h}, {x, y + sz + homebase_h + g_yo + 10}};
+  painter.setBrush(QColor(218, 202, 37, 210));
   painter.drawPolygon(glow, std::size(glow));
 
   // chevron
-  QPointF chevron[] = {{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz}};
+  //QPointF chevron[] = {{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz}};
+  QPointF chevron[] = {{x + (sz * 1.25), y + sz + homebase_h},{x + (sz * 1.25), y + sz}, {x, y}, {x - (sz * 1.25), y + sz},{x - (sz * 1.25), y + sz + homebase_h}, {x, y + sz + homebase_h - 7}};
   painter.setBrush(redColor(fillAlpha));
   painter.drawPolygon(chevron, std::size(chevron));
 
-  painter.restore();
+  if(num == 0){ //顯示到第 0 輛前車的距離
+    //float dist = d_rel; //lead_data.getT()[0];
+    QString dist = QString::number(d_rel,'f',0) + "m";
+    int str_w = 200;
+    QString kmph = QString::number((v_rel + vc_speed)*3.6,'f',0) + "k";
+    int str_w2 = 200;
+//    dist += "<" + QString::number(rect().height()) + ">"; str_w += 500;c2 和 c3 的屏幕高度均為 1020。
+//    dist += "<" + QString::number(leads_num) + ">";
+//   int str_w = 600; //200;
+//    dist += QString::number(v_rel,'f',1) + "v";
+//    dist += QString::number(t_rel,'f',1) + "t";
+//    dist += QString::number(y_rel,'f',1) + "y";
+//    dist += QString::number(a_rel,'f',1) + "a";
+    painter.setFont(InterFont(44, QFont::DemiBold));
+    painter.setPen(QColor(0x0, 0x0, 0x0 , 200)); //影
+    float lock_indicator_dx = 2; //避免向下的十字準星。
+    painter.drawText(QRect(x+2+lock_indicator_dx, y-50+2, str_w, 50), Qt::AlignBottom | Qt::AlignLeft, dist);
+    painter.drawText(QRect(x+2-lock_indicator_dx-str_w2-2, y-50+2, str_w2, 50), Qt::AlignBottom | Qt::AlignRight, kmph);
+    painter.setPen(QColor(0xff, 0xff, 0xff));
+    painter.drawText(QRect(x+lock_indicator_dx, y-50, str_w, 50), Qt::AlignBottom | Qt::AlignLeft, dist);
+    if(global_a_rel >= global_a_rel_col){
+      global_a_rel_col = -0.1; //減少混亂的緩衝區。
+      painter.setPen(QColor(0.09*255, 0.945*255, 0.26*255, 255));
+    } else {
+      global_a_rel_col = 0;
+      painter.setPen(QColor(245, 0, 0, 255));
+    }
+    painter.drawText(QRect(x-lock_indicator_dx-str_w2-2, y-50, str_w2, 50), Qt::AlignBottom | Qt::AlignRight, kmph);
+    painter.setPen(Qt::NoPen);
+  }
+
+    painter.restore();
+
 }
 
 #ifndef QCOM
@@ -670,16 +833,16 @@ void AnnotatedCameraWidget::paintGL() {
       auto lead_one = radar_state.getLeadOne();
       auto lead_two = radar_state.getLeadTwo();
       if (lead_one.getStatus()) {
-        drawLead(painter, lead_one, s->scene.lead_vertices[0]);
+        drawLead(painter, lead_one, s->scene.lead_vertices[0] , 0);
       }
       if (lead_two.getStatus() && (std::abs(lead_one.getDRel() - lead_two.getDRel()) > 3.0)) {
-        drawLead(painter, lead_two, s->scene.lead_vertices[1]);
+        drawLead(painter, lead_two, s->scene.lead_vertices[1] , 1);
       }
     }
   }
 
   // DMoji
-  if (!hideDM && (sm.rcv_frame("driverStateV2") > s->scene.started_frame)) {
+  if (!hideDM && (sm.rcv_frame("driverStateV2") > s->scene.started_frame) && !muteDM && (!timSignals || (timSignals && !turnSignalLeft && !turnSignalRight))) {
     update_dmonitoring(s, sm["driverStateV2"].getDriverStateV2(), dm_fade_state, rightHandDM);
     drawDriverState(painter, s);
   }
@@ -735,10 +898,10 @@ void AnnotatedCameraWidget::paintGL() {
       auto lead_one = radar_state.getLeadOne();
       auto lead_two = radar_state.getLeadTwo();
       if (lead_one.getStatus()) {
-        drawLead(painter, lead_one, s->scene.lead_vertices[0]);
+        drawLead(painter, lead_one, s->scene.lead_vertices[0] , 0);
       }
       if (lead_two.getStatus() && (std::abs(lead_one.getDRel() - lead_two.getDRel()) > 3.0)) {
-        drawLead(painter, lead_two, s->scene.lead_vertices[1]);
+        drawLead(painter, lead_two, s->scene.lead_vertices[1] , 1);
       }
     }
   }
@@ -760,4 +923,88 @@ void AnnotatedCameraWidget::showEvent(QShowEvent *event) {
 
   ui_update_params(uiState());
   prev_draw_t = millis_since_boot();
+}
+
+void AnnotatedCameraWidget::drawDrivingPersonalities(QPainter &p) {
+  // Declare the variables
+  static QElapsedTimer timer;
+  static bool displayText = false;
+  static int lastProfile = 0;
+  constexpr int fadeDuration = 1000; // 1 second
+  constexpr int textDuration = 3000; // 3 seconds
+  int x = rect().right() - (btn_size - 24) / 2 - (UI_BORDER_SIZE * 2);
+  const int y = rect().bottom() - 110;
+
+  // Enable Antialiasing
+  p.setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
+
+  // Select the appropriate profile image/text
+  int index = qBound(0, personalityProfile, 2);
+  QPixmap &profile_image = profile_data[index].first;
+  QString profile_text = profile_data[index].second;
+
+  // Display the profile text when the user changes profiles
+  if (lastProfile != personalityProfile) {
+    displayText = true;
+    lastProfile = personalityProfile;
+    timer.restart();
+  }
+
+  // Set the text display
+  displayText = !timer.hasExpired(textDuration);
+
+  // Set the elapsed time since the profile switch
+  int elapsed = timer.elapsed();
+
+  // Calculate the opacity for the text and image based on the elapsed time
+  qreal textOpacity = qBound(0.0, (1.0 - static_cast<qreal>(elapsed - textDuration) / fadeDuration), 1.0);
+  qreal imageOpacity = qBound(0.0, (static_cast<qreal>(elapsed - textDuration) / fadeDuration), 1.0);
+
+  // Draw the profile text with the calculated opacity
+  if (textOpacity > 0.0) {
+    p.setFont(InterFont(50, QFont::Bold));
+    p.setPen(QColor(255, 255, 255));
+    // Calculate the center position for text
+    QFontMetrics fontMetrics(p.font());
+    int textWidth = fontMetrics.horizontalAdvance(profile_text);
+    // Apply opacity to the text
+    p.setOpacity(textOpacity);
+    p.drawText(x - textWidth / 2, y + fontMetrics.height() / 2, profile_text);
+  }
+
+  // Draw the profile image with the calculated opacity
+  if (imageOpacity > 0.0) {
+    drawIcon(p, x, y, profile_image, blackColor(0), imageOpacity);
+  }
+}
+
+void AnnotatedCameraWidget::drawTimSignals(QPainter &p) {
+  // Declare the turn signal size
+  constexpr int signalHeight = 480;
+  constexpr int signalWidth = 360;
+
+  // Calculate the vertical position for the turn signals
+  const int baseYPosition = (height() - signalHeight) / 2 + 300;
+  // Calculate the x-coordinates for the turn signals
+  int leftSignalXPosition = 75 + width() - signalWidth - 300 * (blindSpotLeft ? 0 : animationFrameIndex);
+  int rightSignalXPosition = -75 + 300 * (blindSpotRight ? 0 : animationFrameIndex);
+
+  // Enable Antialiasing
+  p.setRenderHint(QPainter::Antialiasing);
+
+  // Draw the turn signals
+  if (animationFrameIndex < static_cast<int>(signalImgVector.size())) {
+    const auto drawSignal = [&](const bool signalActivated, const int xPosition, const bool flip, const bool blindspot) {
+      if (signalActivated) {
+        // Get the appropriate image from the signalImgVector
+        QPixmap signal = signalImgVector[(blindspot ? signalImgVector.size()-1 : animationFrameIndex % totalFrames)].transformed(QTransform().scale(flip ? -1 : 1, 1));
+        // Draw the image
+        p.drawPixmap(xPosition, baseYPosition, signalWidth, signalHeight, signal);
+      }
+    };
+
+    // Display the animation based on which signal is activated
+    drawSignal(turnSignalLeft, leftSignalXPosition, false, blindSpotLeft);
+    drawSignal(turnSignalRight, rightSignalXPosition, true, blindSpotRight);
+  }
 }
