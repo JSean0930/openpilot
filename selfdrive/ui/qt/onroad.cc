@@ -226,7 +226,7 @@ ExperimentalButton::ExperimentalButton(QWidget *parent) : experimental_mode(fals
   setFixedSize(btn_size, btn_size);
 
   params = Params();
-  engage_img = loadPixmap("../assets/img_chffr_wheel.png", {img_size, img_size});
+  engage_img = loadPixmap("../assets/images/button_home.png", {img_size, img_size});
   experimental_img = loadPixmap("../assets/img_experimental.svg", {img_size, img_size});
   QObject::connect(this, &QPushButton::clicked, this, &ExperimentalButton::changeMode);
 }
@@ -256,7 +256,7 @@ void ExperimentalButton::paintEvent(QPaintEvent *event) {
 
   p.setOpacity(1.0);
   p.setPen(Qt::NoPen);
-  p.setBrush(QColor(0, 0, 0, 166));
+  p.setBrush(QColor(0, 0, 0, 0));
   p.drawEllipse(center, btn_size / 2, btn_size / 2);
   p.setOpacity((isDown() || !engageable) ? 0.6 : 1.0);
   p.drawPixmap((btn_size - img_size) / 2, (btn_size - img_size) / 2, img);
