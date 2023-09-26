@@ -258,31 +258,6 @@ def no_gps_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, m
     AlertStatus.normal, AlertSize.mid,
     Priority.LOWER, VisualAlert.none, AudibleAlert.none, .2, creation_delay=300.)
 
-def torque_nn_load_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int) -> Alert:
-  model_name = CP.lateralTuning.torque.nnModelName
-  fuzzy = CP.lateralTuning.torque.nnModelFuzzyMatch
-  if model_name == "":
-    return Alert(
-      "NN 扭矩控制器未載入",
-      "上傳你的 rlog 檔給 twilsonco，可讓你的車款取得支援!",
-      AlertStatus.userPrompt, AlertSize.mid,
-      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0)
-  else:
-    if 'b\'' in model_name:
-      car, eps = model_name.split('b\'')
-      eps = 'b\'' + eps
-      return Alert(
-        f"NN 扭矩控制器 ({fuzzy = }): {car}",
-        f"eps: {eps}",
-        AlertStatus.userPrompt, AlertSize.mid,
-        Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0)
-    else:
-      return Alert(
-        f"NN 扭矩控制器已載入 ({fuzzy = })",
-        model_name,
-        AlertStatus.userPrompt, AlertSize.mid,
-        Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0)
-
 # *** debug alerts ***
 
 def out_of_space_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int) -> Alert:
@@ -997,8 +972,28 @@ EVENTS: Dict[int, Dict[str, Union[Alert, AlertCallbackType]]] = {
     ET.PERMANENT: EngagementAlert(AudibleAlert.disengage),
   },
 
-  EventName.torqueNNLoad: {
-    ET.PERMANENT: torque_nn_load_alert,
+  EventName.torqueNNFFLoadSuccess: {
+    ET.PERMANENT: Alert(
+      "e2e NN 扭矩控制器載入成功",
+      "",
+      AlertStatus.userPrompt, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0),
+  },
+
+  EventName.torqueNNFFLoadFailure: {
+    ET.PERMANENT: Alert(
+      "e2e NN 扭矩控制器載入失敗！",
+      "",
+      AlertStatus.userPrompt, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0),
+  },
+
+  EventName.torqueNNFFNotLoaded: {
+  ET.PERMANENT: Alert(
+    "e2e NN 扭矩控制器未載入",
+    "車款尚未支援",
+    AlertStatus.userPrompt, AlertSize.mid,
+    Priority.LOW, VisualAlert.none, AudibleAlert.prompt, 6.0),
   },
 
   EventName.automaticBrakehold: {

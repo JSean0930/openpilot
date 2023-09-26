@@ -187,8 +187,8 @@ class Controls:
     self.experimental_mode = False
     self.v_cruise_helper = VCruiseHelper(self.CP)
     self.recalibrating_seen = False
+    self.nnff_alert_shown = False
 
-    self.nn_alert_shown = False
     self.reverse_acc_change = False
 
     self.live_torque = self.params.get_bool("NNFF")
@@ -246,9 +246,12 @@ class Controls:
       return
 
     # show alert to indicate whether NNFF is loaded
-    if not self.nn_alert_shown and self.sm.frame % 1000 == 0 and self.CP.lateralTuning.which() == 'torque' and self.CP.twilsoncoNNFF:
-      self.nn_alert_shown = True
-      self.events.add(EventName.torqueNNLoad)
+    if not self.nnff_alert_shown and self.sm.frame % 1000 == 0 and self.CP.lateralTuning.which() == 'torque' and self.CP.twilsoncoNNFF:
+      self.nnff_alert_shown = True
+      if self.LaC.use_nn:
+        self.events.add(EventName.torqueNNFFLoadSuccess)
+      else: 
+        self.events.add(EventName.torqueNNFFNotLoaded)
 
     # Block resume if cruise never previously enabled
     resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)

@@ -16,13 +16,13 @@ from cereal import log
 
 PATH_COST = 1.0
 LATERAL_MOTION_COST = 0.11
-LATERAL_ACCEL_COST = 1.0
+LATERAL_ACCEL_COST = 0.0
 LATERAL_JERK_COST = 0.04
 # Extreme steering rate is unpleasant, even
 # when it does not cause bad jerk.
 # TODO this cost should be lowered when low
 # speed lateral control is stable on all cars
-STEERING_RATE_COST = 8.0
+STEERING_RATE_COST = 700.0
 
 
 class LateralPlanner:
@@ -42,12 +42,12 @@ class LateralPlanner:
     self.plan_yaw = np.zeros((TRAJECTORY_SIZE,))
     self.plan_yaw_rate = np.zeros((TRAJECTORY_SIZE,))
     self.t_idxs = np.arange(TRAJECTORY_SIZE)
+    self.d_path_w_lines_xyz = np.zeros((TRAJECTORY_SIZE, 3))
     self.y_pts = np.zeros((TRAJECTORY_SIZE,))
     self.v_plan = np.zeros((TRAJECTORY_SIZE,))
     self.v_ego = 0.0
     self.l_lane_change_prob = 0.0
     self.r_lane_change_prob = 0.0
-    self.d_path_w_lines_xyz = np.zeros((TRAJECTORY_SIZE, 3))
 
     self.debug_mode = debug
 
