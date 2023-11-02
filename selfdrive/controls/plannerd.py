@@ -21,8 +21,10 @@ def publish_ui_plan(sm, pm, lateral_planner, longitudinal_planner):
   ui_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'modelV2'])
   uiPlan = ui_send.uiPlan
   uiPlan.frameId = sm['modelV2'].frameId
-  uiPlan.position.x = np.interp(plan_odo, model_odo, lateral_planner.lat_mpc.x_sol[:,0]).tolist()
-  uiPlan.position.y = np.interp(plan_odo, model_odo, lateral_planner.lat_mpc.x_sol[:,1]).tolist()
+  x_fp = (lateral_planner.lat_mpc.x_sol if lateral_planner.dynamic_lane_profile_status else lateral_planner.x_sol)[:,0]
+  y_fp = (lateral_planner.lat_mpc.x_sol if lateral_planner.dynamic_lane_profile_status else lateral_planner.x_sol)[:,1]
+  uiPlan.position.x = np.interp(plan_odo, model_odo, x_fp).tolist()
+  uiPlan.position.y = np.interp(plan_odo, model_odo, y_fp).tolist()
   uiPlan.position.z = np.interp(plan_odo, model_odo, lateral_planner.path_xyz[:,2]).tolist()
   uiPlan.accel = longitudinal_planner.a_desired_trajectory_full.tolist()
   pm.send('uiPlan', ui_send)
@@ -42,7 +44,7 @@ def plannerd_thread():
   lateral_planner = LateralPlanner(CP, debug=debug_mode)
 
   pm = messaging.PubMaster(['longitudinalPlan', 'lateralPlan', 'uiPlan'])
-  sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'radarState', 'modelV2'],
+  sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'radarState', 'modelV2', 'longitudinalPlan', 'liveMapData'],
                            poll=['radarState', 'modelV2'], ignore_avg_freq=['radarState'])
 
   while True:
