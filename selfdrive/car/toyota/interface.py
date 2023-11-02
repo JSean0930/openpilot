@@ -294,7 +294,7 @@ class CarInterface(CarInterfaceBase):
     self.dp_atl = Params().get_bool("dp_atl")
 
     # low speed re-write (dp)
-    self.cruise_speed_override = True # change this to False if you want to disable cruise speed override
+    self.cruise_speed_override = True if (self.CP.flags & ToyotaFlags.SMART_DSU) else False # change this to False if you want to disable cruise speed override
     if ret.cruiseState.enabled and ret.cruiseState.speed < 45 * CV.KPH_TO_MS and self.CP.openpilotLongitudinalControl:
       if self.cruise_speed_override:
         if self.low_cruise_speed == 0.:
