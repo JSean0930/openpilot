@@ -85,7 +85,6 @@ class FluxModel:
       self.layers.append((W, b, activation))
 
     self.validate_layers()
-    self.check_for_friction_override()
 
   # Begin activation functions.
   # These are called by name using the keys in the model json file
@@ -125,9 +124,6 @@ class FluxModel:
       if not hasattr(self, activation):
         raise ValueError(f"Unknown activation: {activation}")
 
-  def check_for_friction_override(self):
-    y = self.evaluate([10.0, 0.0, 0.2])
-    self.friction_override = (y < 0.1)
 
 def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
   def check_nn_path(check_model):
