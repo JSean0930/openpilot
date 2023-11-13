@@ -215,8 +215,9 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"CarModel", PERSISTENT},
     {"dp_atl", PERSISTENT},
     {"dp_jetson", PERSISTENT},
+    {"DistanceBasedCurvature", PERSISTENT},
+    {"Distances", PERSISTENT},
     {"DrivingPersonalitiesUIWheel", PERSISTENT},
-    {"dynamic_lane", PERSISTENT},
     {"e2e_link", PERSISTENT},
     {"LateralAllowed", CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION},
     {"NNFF", PERSISTENT},
@@ -242,7 +243,6 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"dp_nav_amap_enable", PERSISTENT},
     {"dp_nav_amap_key", PERSISTENT},
     {"dp_nav_amap_key_2", PERSISTENT},
-    {"dp_gpxd", PERSISTENT},
     {"dp_mapd", PERSISTENT},
     {"opwebd", PERSISTENT},
 };

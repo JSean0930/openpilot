@@ -85,6 +85,7 @@ class FluxModel:
       self.layers.append((W, b, activation))
 
     self.validate_layers()
+    self.check_for_friction_override()
 
   # Begin activation functions.
   # These are called by name using the keys in the model json file
@@ -124,6 +125,9 @@ class FluxModel:
       if not hasattr(self, activation):
         raise ValueError(f"Unknown activation: {activation}")
 
+  def check_for_friction_override(self):
+    y = self.evaluate([10.0, 0.0, 0.2])
+    self.friction_override = (y < 0.1)
 
 def get_nn_model_path(car, eps_firmware) -> Tuple[Union[str, None, float]]:
   def check_nn_path(check_model):
@@ -164,7 +168,6 @@ class CarInterfaceBase(ABC):
     self.CP = CP
     self.VM = VehicleModel(CP)
     eps_firmware = str(next((fw.fwVersion for fw in CP.carFw if fw.ecu == "eps"), ""))
-    self.has_lateral_torque_nn = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware) and Params().get_bool("NNFF")
 
     self.frame = 0
     self.steering_unpressed = 0
@@ -189,6 +192,7 @@ class CarInterfaceBase(ABC):
     if CarController is not None:
       self.CC = CarController(self.cp.dbc_name, CP, self.VM)
 
+    self.has_lateral_torque_nn = self.initialize_lat_torque_nn(CP.carFingerprint, eps_firmware) and Params().get_bool("NNFF")
   def get_ff_nn(self, x):
     return self.lat_torque_nn_model.evaluate(x)
 
@@ -218,7 +222,7 @@ class CarInterfaceBase(ABC):
       eps_firmware = str(next((fw.fwVersion for fw in car_fw if fw.ecu == "eps"), ""))
       model, similarity_score = get_nn_model_path(candidate, eps_firmware)
       if model is not None:
-        ret.lateralTuning.torque.nnModelName = candidate
+        ret.lateralTuning.torque.nnModelName = os.path.splitext(os.path.basename(model))[0]
         ret.lateralTuning.torque.nnModelFuzzyMatch = (similarity_score < 0.99)
 
     # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
