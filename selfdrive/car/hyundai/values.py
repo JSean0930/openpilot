@@ -2213,3 +2213,11 @@ DBC = {
   CAR.KIA_K8_HEV_1ST_GEN: dbc_dict('hyundai_canfd', None),
   CAR.CUSTIN_1ST_GEN: dbc_dict('hyundai_kia_generic', None),
 }
+
+def main():
+  for member, value in vars(CAR).items():
+    if not member.startswith("_"):
+      print(value)
+
+if __name__ == "__main__":
+  main()

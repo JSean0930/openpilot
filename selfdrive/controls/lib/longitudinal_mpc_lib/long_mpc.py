@@ -3,12 +3,16 @@ import os
 import time
 import numpy as np
 from cereal import log
+from openpilot.common.conversions import Conversions as CV
+from openpilot.common.params import put_nonblocking
 from openpilot.common.numpy_fast import clip
+from openpilot.selfdrive.car.toyota.values import ToyotaFlags, TSS2_CAR, RADAR_ACC_CAR
 from openpilot.system.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.car.interfaces import ACCEL_MIN
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
+from openpilot.selfdrive.controls.distance_based_curvature import dbc
 
 if __name__ == '__main__':  # generating code
   from openpilot.third_party.acados.acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -26,7 +30,7 @@ SOURCES = ['lead0', 'lead1', 'cruise', 'e2e']
 
 X_DIM = 3
 U_DIM = 1
-PARAM_DIM = 6
+PARAM_DIM = 7
 COST_E_DIM = 5
 COST_DIM = COST_E_DIM + 1
 CONSTR_DIM = 4
@@ -53,40 +57,82 @@ T_IDXS_LST = [index_function(idx, max_val=MAX_T, max_idx=N) for idx in range(N+1
 T_IDXS = np.array(T_IDXS_LST)
 FCW_IDXS = T_IDXS < 5.0
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
-COMFORT_BRAKE = 2.5
-STOP_DISTANCE = 6.0
+COMFORT_BRAKE = 2.2
+# STOP_DISTANCE = 6.0
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
     return 1.0
   elif personality==log.LongitudinalPersonality.standard:
-    return 1.0
-  elif personality==log.LongitudinalPersonality.aggressive:
     return 0.5
+  elif personality==log.LongitudinalPersonality.aggressive:
+    return 0.222
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
-    return 1.75
+    return 1.8
   elif personality==log.LongitudinalPersonality.standard:
-    return 1.45
+    return 1.3
   elif personality==log.LongitudinalPersonality.aggressive:
-    return 1.25
+    return 0.9
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
-def get_stopped_equivalence_factor(v_lead):
-  return (v_lead**2) / (2 * COMFORT_BRAKE)
 
-def get_safe_obstacle_distance(v_ego, t_follow):
-  return (v_ego**2) / (2 * COMFORT_BRAKE) + t_follow * v_ego + STOP_DISTANCE
+def get_dynamic_follow(v_ego, personality=log.LongitudinalPersonality.standard):
+  # The Dynamic follow function is adjusted by Marc(cgw1968-5779)
+  if personality==log.LongitudinalPersonality.relaxed:
+    x_vel =  [0.0,  3.0,  3.01,  8.33,  8.34,  13.89, 13.90,  19.99, 20,    25,   40]
+    y_dist = [1.4,  1.4,  1.40,  1.40,  1.50,  1.50,  1.65,   1.65,  1.85,  1.85, 2.0]
+  elif personality==log.LongitudinalPersonality.standard:
+    x_vel =  [0.0,  3.0,  3.01,  8.33,  8.34,  13.89, 13.90,  19.99, 20,    25,   40]
+    y_dist = [1.2,  1.2,  1.2,   1.2,   1.3,   1.3,   1.40,   1.40,  1.45,  1.45, 1.5]
+  elif personality==log.LongitudinalPersonality.aggressive:
+    x_vel =  [0.0,  3.0,  3.01,  8.33,  8.34,  13.89, 13.90,  19.99, 20,    25,   40]
+    y_dist = [0.95, 0.95, 1.00,  1.00,  1.05,  1.05,   1.05,    1.05,  1.05,  1.11, 1.12]
+  else:
+    raise NotImplementedError("Dynamic Follow personality not supported")
+  return np.interp(v_ego, x_vel, y_dist)
 
-def desired_follow_distance(v_ego, v_lead, t_follow=None):
+
+def get_STOP_DISTANCE(personality=log.LongitudinalPersonality.standard):
+  if personality==log.LongitudinalPersonality.relaxed:
+    return 5.5
+  elif personality==log.LongitudinalPersonality.standard:
+    return 4.5
+  elif personality==log.LongitudinalPersonality.aggressive:
+    return 3.5
+  else:
+    raise NotImplementedError("Longitudinal personality not supported")
+
+
+def get_stopped_equivalence_factor(v_lead, v_ego):
+  # KRKeegan this offset rapidly decreases the following distance when the lead pulls
+  # away, resulting in an early demand for acceleration.
+  v_diff_offset = 0
+  v_diff_offset_max = 12
+  speed_to_reach_max_v_diff_offset = 26 # in kp/h
+  speed_to_reach_max_v_diff_offset = speed_to_reach_max_v_diff_offset * CV.KPH_TO_MS
+  delta_speed = v_lead - v_ego
+  if np.all(delta_speed > 0):
+    v_diff_offset = delta_speed * 2
+    v_diff_offset = np.clip(v_diff_offset, 0, v_diff_offset_max)
+                                                                    # increase in a linear behavior
+    v_diff_offset = np.maximum(v_diff_offset * ((speed_to_reach_max_v_diff_offset - v_ego)/speed_to_reach_max_v_diff_offset), 0)
+  return (v_lead**2) / (2 * COMFORT_BRAKE) + v_diff_offset
+
+def get_safe_obstacle_distance(v_ego, t_follow, stop_distance):
+  return (v_ego**2) / (2 * COMFORT_BRAKE) + t_follow * v_ego + stop_distance
+
+def desired_follow_distance(v_ego, v_lead, t_follow=None, stop_distance=None):
   if t_follow is None:
     t_follow = get_T_FOLLOW()
-  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead)
+  if stop_distance is None:
+    stop_distance = get_STOP_DISTANCE()
+  return get_safe_obstacle_distance(v_ego, t_follow, stop_distance) - get_stopped_equivalence_factor(v_lead, v_ego)
 
 
 def gen_long_model():
@@ -116,7 +162,8 @@ def gen_long_model():
   prev_a = SX.sym('prev_a')
   lead_t_follow = SX.sym('lead_t_follow')
   lead_danger_factor = SX.sym('lead_danger_factor')
-  model.p = vertcat(a_min, a_max, x_obstacle, prev_a, lead_t_follow, lead_danger_factor)
+  stop_distance = SX.sym('stop_distance')
+  model.p = vertcat(a_min, a_max, x_obstacle, prev_a, lead_t_follow, lead_danger_factor, stop_distance)
 
   # dynamics model
   f_expl = vertcat(v_ego, a_ego, j_ego)
@@ -152,11 +199,12 @@ def gen_long_ocp():
   prev_a = ocp.model.p[3]
   lead_t_follow = ocp.model.p[4]
   lead_danger_factor = ocp.model.p[5]
+  stop_distance = ocp.model.p[6]
 
   ocp.cost.yref = np.zeros((COST_DIM, ))
   ocp.cost.yref_e = np.zeros((COST_E_DIM, ))
 
-  desired_dist_comfort = get_safe_obstacle_distance(v_ego, lead_t_follow)
+  desired_dist_comfort = get_safe_obstacle_distance(v_ego, lead_t_follow, stop_distance)
 
   # The main cost in normal operation is how close you are to the "desired" distance
   # from an obstacle at every timestep. This obstacle can be a lead car
@@ -182,8 +230,7 @@ def gen_long_ocp():
 
   x0 = np.zeros(X_DIM)
   ocp.constraints.x0 = x0
-  ocp.parameter_values = np.array([-1.2, 1.2, 0.0, 0.0, get_T_FOLLOW(), LEAD_DANGER_FACTOR])
-
+  ocp.parameter_values = np.array([-1.2, 1.2, 0.0, 0.0, get_T_FOLLOW(), LEAD_DANGER_FACTOR, get_STOP_DISTANCE()])
 
   # We put all constraint cost weights to 0 and only set them at runtime
   cost_weights = np.zeros(CONSTR_DIM)
@@ -220,7 +267,8 @@ def gen_long_ocp():
 
 
 class LongitudinalMpc:
-  def __init__(self, mode='acc'):
+  def __init__(self, CP, mode='acc'):
+    self.CP = CP
     self.mode = mode
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
     self.reset()
@@ -271,15 +319,25 @@ class LongitudinalMpc:
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
+
+  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard, v_lead0=0, v_lead1=0):
     jerk_factor = get_jerk_factor(personality)
+    v_ego = self.x0[1]
+    v_ego_bps = [0, 10]
+    # KRKeegan adjustments to improve sluggish acceleration
+    # do not apply to deceleration
+    j_ego_v_ego = 1
+    a_change_v_ego = 1
+    if (v_lead0 - v_ego >= 0) and (v_lead1 - v_ego >= 0):
+      j_ego_v_ego = np.interp(v_ego, v_ego_bps, [.01, 1.])
+      a_change_v_ego = np.interp(v_ego, v_ego_bps, [.01, 1.])
     if self.mode == 'acc':
       a_change_cost = A_CHANGE_COST if prev_accel_constraint else 0
-      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost * a_change_v_ego, jerk_factor * J_EGO_COST * j_ego_v_ego]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else 0
-      cost_weights = [0., 0.1, 0.2, 5.0, a_change_cost, 1.0]
+      cost_weights = [0., 0.1, 0.2, 5.0, a_change_cost * a_change_v_ego, 1.0]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, 50.0]
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner cost set')
@@ -330,19 +388,49 @@ class LongitudinalMpc:
     self.cruise_min_a = min_a
     self.max_a = max_a
 
-  def update(self, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
-    t_follow = get_T_FOLLOW(personality)
+  def update_TF(self, carstate, personality=log.LongitudinalPersonality.standard):
+    if personality==log.LongitudinalPersonality.relaxed:
+      op_profile_key = 3
+    elif personality==log.LongitudinalPersonality.standard:
+      op_profile_key = 2
+    elif personality==log.LongitudinalPersonality.aggressive:
+      op_profile_key = 1
+    else:
+      raise NotImplementedError("Longitudinal personality not supported")
+
+    self.adjustable_follow_car = True if (self.CP.carFingerprint in (TSS2_CAR - RADAR_ACC_CAR) or (self.CP.flags & ToyotaFlags.SMART_DSU)) else False
+    if self.adjustable_follow_car or personality is not None:
+      if self.adjustable_follow_car:
+        profile_key = carstate.distanceLines
+      else:
+        profile_key = op_profile_key
+
+      if profile_key == 1: # No Cut In
+        put_nonblocking('LongitudinalPersonality', str(0))
+
+      elif profile_key == 2: # Relaxed
+        put_nonblocking('LongitudinalPersonality', str(1))
+
+      elif profile_key == 3: # Let You Cut In
+        put_nonblocking('LongitudinalPersonality', str(2))
+
+  def update(self, carstate, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard, dynamic_follow=False):
+    # t_follow = get_T_FOLLOW(personality)
     v_ego = self.x0[1]
+    t_follow = get_T_FOLLOW(personality) if not dynamic_follow else get_dynamic_follow(v_ego, personality)
+    stop_distance = get_STOP_DISTANCE(personality)
+
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
     lead_xv_0 = self.process_lead(radarstate.leadOne)
     lead_xv_1 = self.process_lead(radarstate.leadTwo)
 
+    self.update_TF(carstate)
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
     # and then treat that as a stopped car/obstacle at this new distance.
-    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1])
-    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1])
+    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1], v_ego)
+    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1], v_ego)
 
     self.params[:,0] = ACCEL_MIN
     self.params[:,1] = self.max_a
@@ -358,7 +446,7 @@ class LongitudinalMpc:
       v_cruise_clipped = np.clip(v_cruise * np.ones(N+1),
                                  v_lower,
                                  v_upper)
-      cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow)
+      cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow, stop_distance)
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
@@ -393,6 +481,7 @@ class LongitudinalMpc:
     self.params[:,2] = np.min(x_obstacles, axis=1)
     self.params[:,3] = np.copy(self.prev_a)
     self.params[:,4] = t_follow
+    self.params[:,6] = stop_distance
 
     self.run()
     if (np.any(lead_xv_0[FCW_IDXS,0] - self.x_sol[FCW_IDXS,0] < CRASH_DISTANCE) and
@@ -404,9 +493,9 @@ class LongitudinalMpc:
     # Check if it got within lead comfort range
     # TODO This should be done cleaner
     if self.mode == 'blended':
-      if any((lead_0_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow))- self.x_sol[:,0] < 0.0):
+      if any((lead_0_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow, stop_distance))- self.x_sol[:,0] < 0.0):
         self.source = 'lead0'
-      if any((lead_1_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow))- self.x_sol[:,0] < 0.0) and \
+      if any((lead_1_obstacle - get_safe_obstacle_distance(self.x_sol[:,1], t_follow, stop_distance))- self.x_sol[:,0] < 0.0) and \
          (lead_1_obstacle[0] - lead_0_obstacle[0]):
         self.source = 'lead1'
 
@@ -436,6 +525,7 @@ class LongitudinalMpc:
     for i in range(N):
       self.u_sol[i] = self.solver.get(i, 'u')
 
+    dbc.distances = self.x_sol[:,0]
     self.v_solution = self.x_sol[:,1]
     self.a_solution = self.x_sol[:,2]
     self.j_solution = self.u_sol[:,0]

@@ -82,6 +82,10 @@ procs = [
   PythonProcess("uploader", "system.loggerd.uploader", always_run),
   PythonProcess("statsd", "selfdrive.statsd", always_run),
 
+  PythonProcess("mapd", "selfdrive.mapd.mapd", only_onroad),
+  PythonProcess("otisserv", "selfdrive.navd.otisserv", always_run),
+  PythonProcess("opwebd", "selfdrive.opwebd", always_run),
+
   # debug procs
   NativeProcess("bridge", "cereal/messaging", ["./bridge"], notcar),
   PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),

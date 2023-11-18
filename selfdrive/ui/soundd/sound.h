@@ -15,6 +15,7 @@ const float MAX_VOLUME = 1.0;
 const std::tuple<AudibleAlert, QString, int, float> sound_list[] = {
   // AudibleAlert, file name, loop count
   {AudibleAlert::ENGAGE, "engage.wav", 0, MAX_VOLUME},
+  {AudibleAlert::ENGAGE_BRAKEHOLD, "engage_brakehold.wav", 0, MAX_VOLUME},
   {AudibleAlert::DISENGAGE, "disengage.wav", 0, MAX_VOLUME},
   {AudibleAlert::REFUSE, "refuse.wav", 0, MAX_VOLUME},
 
@@ -33,6 +34,7 @@ public:
 protected:
   void update();
   void setAlert(const Alert &alert);
+  bool shouldPlaySound(const Alert &alert);
 
   SubMaster sm;
   Alert current_alert = {};

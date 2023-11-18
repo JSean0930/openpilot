@@ -16,20 +16,30 @@ from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import Longi
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX, CONTROL_N, get_speed_error
 from openpilot.system.swaglog import cloudlog
+from openpilot.selfdrive.controls.vtsc import vtsc
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MIN = -1.2
+A_CRUISE_MIN_VALS_TOYOTA = [-0.01, -0.0002, -0.0001,  -0.14, -0.28, -0.30, -0.25, -0.20]
+A_CRUISE_MIN_BP_TOYOTA =   [0.,    0.01,    0.03,     8.33,  12,    20.,   30.,   55.]
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
+A_CRUISE_MAX_VALS_TOYOTA = [2.2, 1.75, 1.3, 0.85, 0.77, 0.70, 0.58, 0.4,  0.31, 0.11]  # Sets the limits of the planner accel, PID may exceed
+# CRUISE_MAX_BP in kmh =   [0.,  10,   20,  30,   40,   53,   72,   90,   107,  150]
+A_CRUISE_MAX_BP_TOYOTA =   [0.,  3,    6.,  8.,   11.,  15.,  20.,  25.,  30.,  55.]
 
 # Lookup table for turns
 _A_TOTAL_MAX_V = [1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
+def get_min_accel_toyota(v_ego):
+  return interp(v_ego, A_CRUISE_MIN_BP_TOYOTA, A_CRUISE_MIN_VALS_TOYOTA)
 
 def get_max_accel(v_ego):
   return interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
 
+def get_max_accel_toyota(v_ego):
+  return interp(v_ego, A_CRUISE_MAX_BP_TOYOTA, A_CRUISE_MAX_VALS_TOYOTA)
 
 def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
   """
@@ -49,7 +59,7 @@ def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
 class LongitudinalPlanner:
   def __init__(self, CP, init_v=0.0, init_a=0.0):
     self.CP = CP
-    self.mpc = LongitudinalMpc()
+    self.mpc = LongitudinalMpc(CP)
     self.fcw = False
 
     self.a_desired = init_a
@@ -64,6 +74,7 @@ class LongitudinalPlanner:
     self.param_read_counter = 0
     self.read_param()
     self.personality = log.LongitudinalPersonality.standard
+    self.dynamic_follow = False
 
   def read_param(self):
     try:
@@ -71,6 +82,7 @@ class LongitudinalPlanner:
     except (ValueError, TypeError):
       self.personality = log.LongitudinalPersonality.standard
 
+    self.dynamic_follow = self.params.get_bool("Marc_Dynamic_Follow")
   @staticmethod
   def parse_model(model_msg, model_error):
     if (len(model_msg.position.x) == 33 and
@@ -107,7 +119,10 @@ class LongitudinalPlanner:
     prev_accel_constraint = not (reset_state or sm['carState'].standstill)
 
     if self.mpc.mode == 'acc':
-      accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
+      if self.CP.carName == "toyota":
+        accel_limits = [get_min_accel_toyota(v_ego), get_max_accel_toyota(v_ego)]
+      else:
+        accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
       accel_limits_turns = limit_accel_in_turns(v_ego, sm['carState'].steeringAngleDeg, accel_limits, self.CP)
     else:
       accel_limits = [ACCEL_MIN, ACCEL_MAX]
@@ -129,11 +144,21 @@ class LongitudinalPlanner:
     accel_limits_turns[0] = min(accel_limits_turns[0], self.a_desired + 0.05)
     accel_limits_turns[1] = max(accel_limits_turns[1], self.a_desired - 0.05)
 
-    self.mpc.set_weights(prev_accel_constraint, personality=self.personality)
+    # PFEIFER - VTSC {{
+    vtsc.update(prev_accel_constraint, v_ego, sm)
+    if vtsc.active and v_cruise > vtsc.v_target:
+      v_cruise = vtsc.v_target
+    # }} PFEIFER - VTSC
+
+    lead_xv_0 = self.mpc.process_lead(sm['radarState'].leadOne)
+    lead_xv_1 = self.mpc.process_lead(sm['radarState'].leadTwo)
+    v_lead0 = lead_xv_0[0,1]
+    v_lead1 = lead_xv_1[0,1]
+    self.mpc.set_weights(prev_accel_constraint, personality=self.personality, v_lead0=v_lead0, v_lead1=v_lead1)
     self.mpc.set_accel_limits(accel_limits_turns[0], accel_limits_turns[1])
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     x, v, a, j = self.parse_model(sm['modelV2'], self.v_model_error)
-    self.mpc.update(sm['radarState'], v_cruise, x, v, a, j, personality=self.personality)
+    self.mpc.update(sm['carState'], sm['radarState'], v_cruise, x, v, a, j, personality=self.personality, dynamic_follow=self.dynamic_follow)
 
     self.v_desired_trajectory_full = np.interp(ModelConstants.T_IDXS, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory_full = np.interp(ModelConstants.T_IDXS, T_IDXS_MPC, self.mpc.a_solution)
