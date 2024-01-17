@@ -15,6 +15,9 @@ T_IDXS_LST = [index_function(idx, max_val=MAX_T, max_idx=N) for idx in range(N+1
 T_IDXS_MPC = np.array(T_IDXS_LST)
 
 class DistanceBasedCurvature:
+  def __init__(self):
+    self.enabled = mem_params.get_bool("DistanceBasedCurvature")
+
   @property
   def distances(self):
     distances = mem_params.get("Distances")
@@ -40,7 +43,9 @@ class DistanceBasedCurvature:
     distances = self.distances
     distance = np.interp(delay, ModelConstants.T_IDXS[:CONTROL_N], distances)
     distance = max(0.0001, distance)
-    average_curvature_desired = psi / distance if mem_params.get_bool("DistanceBasedCurvature") else psi / (v_ego * delay)
+    average_curvature_desired = psi / distance if self.enabled else psi / (v_ego * delay)
+    if isinstance(average_curvature_desired, np.float64):
+      return average_curvature_desired.item()
     return average_curvature_desired
 
 dbc = DistanceBasedCurvature()
