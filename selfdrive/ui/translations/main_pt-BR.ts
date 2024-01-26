@@ -1089,6 +1089,14 @@ Isso pode levar até um minuto.</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>NNFF Torque Control</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Use Twilsonco&apos;s Neural Network Feedforward torque system for more precise lateral control.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Stop And Go</source>
         <translation type="unfinished"></translation>
     </message>

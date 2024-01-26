@@ -228,6 +228,7 @@ class CarController:
     # don't reset until a reasonable compensatory value is reached
     if CS.pcm_neutral_force > COMPENSATORY_CALCULATION_THRESHOLD * self.CP.mass:
       self.prohibit_neg_calculation = False
+
     # NO_STOP_TIMER_CAR will creep if compensation is applied when stopping or stopped, don't compensate when stopped or stopping
     should_compensate = True
     if self.CP.carFingerprint in NO_STOP_TIMER_CAR and ((CS.out.vEgo <  1e-3 and actuators.accel < 1e-3) or stopping):

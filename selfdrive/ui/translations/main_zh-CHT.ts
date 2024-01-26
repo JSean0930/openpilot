@@ -1085,6 +1085,14 @@ This may take up to a minute.</source>
         <translation>開啟此功能將會讓車道維持一直開啟，並不會被煞車給中斷。</translation>
     </message>
     <message>
+        <source>NNFF Torque Control</source>
+        <translation>開啟 NNFF 控制器</translation>
+    </message>
+    <message>
+        <source>Use Twilsonco&apos;s Neural Network Feedforward torque system for more precise lateral control.</source>
+        <translation>使用 Twilsonco 的神經網絡前饋扭矩系統可實現更精確的橫向控制。</translation>
+    </message>
+    <message>
         <source>Stop And Go</source>
         <translation>Stop And Go</translation>
     </message>
