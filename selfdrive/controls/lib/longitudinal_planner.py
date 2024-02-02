@@ -26,12 +26,14 @@ LON_MPC_STEP = 0.2  # first step is 0.2s
 A_CRUISE_MIN = -1.2
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
-A_CRUISE_MIN_VALS = [-0.0009, -0.001,  -0.10, -0.28, -0.6, -0.6]
-A_CRUISE_MIN_BP =   [0.,      1.,      8.,    16.,   28.,  42.]
+A_CRUISE_MIN_VALS =    [-0.0009, -0.004,  -0.16, -0.36, -0.6, -0.6]
+A_CRUISE_MIN_BP =      [0.,      1.,      8.,    16.,   28.,  42.]
+A_CRUISE_MIN_VALS_DF = [-0.0009, -0.001,  -0.10, -0.28, -0.6, -0.6]
+A_CRUISE_MIN_BP_DF =   [0.,      1.,      8.,    16.,   28.,  42.]
 A_CRUISE_MAX_VALS_DF =     [1.54, 2.4, 2.4, 2.1, 1.548, 1.221, .863, .660, .478, .328, .09]  # Sets the limits of the planner accel, PID may exceed
 A_CRUISE_MAX_BP_DF =       [0.,  0.1,  3.,  6.,  8.,    11.,   15.,   20.,  25.,  30.,  55.]
 # A_CRUISE_MAX_VALS_TOYOTA = [2.0, 1.68, 1.58, 1.3,  1.15, 0.92, 0.72, 0.52, 0.34, 0.11]  # Sets the limits of the planner accel, PID may exceed
-A_CRUISE_MAX_VALS_TOYOTA =   [2.0, 1.65, 1.5, 1.3, 1.1, 0.85, 0.68, 0.48, 0.33, 0.11]  # Sets the limits of the planner accel, PID may exceed
+A_CRUISE_MAX_VALS_TOYOTA =   [2.0, 1.62, 1.45, 1.28, 1.1, 0.85, 0.68, 0.48, 0.33, 0.11]  # Sets the limits of the planner accel, PID may exceed
 # CRUISE_MAX_BP in kmh =     [0.,  10,   20,  30,  40,  53,   72,   90,   107,  150]
 A_CRUISE_MAX_BP_TOYOTA =     [0.,  3,    6.,  8.,  11., 15.,  20.,  25.,  30.,  55.]
 
@@ -45,6 +47,9 @@ def get_max_accel(v_ego):
 
 def get_min_accel(v_ego):
   return interp(v_ego, A_CRUISE_MIN_BP, A_CRUISE_MIN_VALS)
+
+def get_min_accel_df(v_ego):
+  return interp(v_ego, A_CRUISE_MIN_BP_DF, A_CRUISE_MIN_VALS_DF)
 
 def get_max_accel_df(v_ego):
   return interp(v_ego, A_CRUISE_MAX_BP_DF, A_CRUISE_MAX_VALS_DF)
@@ -140,7 +145,7 @@ class LongitudinalPlanner:
       if self.CP.carName == "toyota":
         accel_limits = [get_min_accel(v_ego), get_max_accel_toyota(v_ego)]
       elif self.dynamic_follow and self.CP.carFingerprint in TSS2_CAR:
-        accel_limits = [get_min_accel(v_ego), get_max_accel_df(v_ego)]
+        accel_limits = [get_min_accel_df(v_ego), get_max_accel_df(v_ego)]
       else:
         accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]
       accel_limits_turns = limit_accel_in_turns(v_ego, sm['carState'].steeringAngleDeg, accel_limits, self.CP)
