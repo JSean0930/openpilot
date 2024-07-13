@@ -75,7 +75,7 @@ class CarState(CarStateBase):
     self.frame = 0
 
     # AleSato's automatic brakehold
-    self.time_to_brakehold = 100 * .3   # .3 seconds stopped to activate
+    self.time_to_brakehold = 100 * 1   # 1 seconds stopped to activate
     self.GearShifter = car.CarState.GearShifter # avoid Rear and Park gears
     self.stock_aeb = {}
     self.brakehold_condition_satisfied = False
@@ -228,7 +228,7 @@ class CarState(CarStateBase):
       self.short_press_button_counter += 1
       if not self.distance_button_hold:
         self.gap_button_counter += 1
-        if self.gap_button_counter > 100:  # 50 miliseconds
+        if self.gap_button_counter > 300:  # 300 miliseconds
           self.params.put_bool_nonblocking('ExperimentalMode', not self.params.get_bool("ExperimentalMode"))  # change experimental/chill mode on fly with long press
           self.gap_button_counter = 0
 
