@@ -10,7 +10,6 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.car.interfaces import ACCEL_MIN, ACCEL_MAX
-from openpilot.selfdrive.car.toyota.values import TSS2_CAR
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
@@ -29,7 +28,7 @@ A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
 A_CRUISE_MAX_BP = [0., 10.0, 25., 40.]
 A_CRUISE_MIN_VALS =    [-1.02,  -0.25, -0.001, -0.01, -0.15, -0.25, -0.33, -0.42, -0.65, -0.65]
 A_CRUISE_MIN_BP =      [ 0.,    .01,   .02,    .3,     5.,    8.,    11.,   16.,   28.,   42.]
-A_CRUISE_MIN_VALS_DF = [-0.01,  -0.0002,  -0.0002,  -0.19,  -0.19,  -0.30,  -0.40,  -0.45, -0.8, -0.8]
+A_CRUISE_MIN_VALS_DF = [-0.04,  -0.0002,  -0.0002,  -0.19,  -0.19,  -0.30,  -0.40,  -0.45, -0.8, -0.8]
 A_CRUISE_MIN_BP_DF =   [0.,    0.01,      0.05,     0.12,    0.30,   5.,    11.,    16.,   28.,  42.]
 A_CRUISE_MAX_VALS_DF =     [1.4, 2.4, 2.4, 2.4, 1.53, 1.23, .88, .65, .44, .29, .084]  # Sets the limits of the planner accel, PID may exceed
 A_CRUISE_MAX_BP_DF =       [0.,  0.1,  3.,  6.,  8.,    11.,   15.,   20.,  25.,  30.,  55.]
@@ -133,7 +132,7 @@ class LongitudinalPlanner:
     if self.mpc.mode == 'acc':
       if self.CP.carName == "toyota":
         accel_limits = [get_min_accel(v_ego), get_max_accel_toyota(v_ego)]
-      elif self.dynamic_follow and self.CP.carFingerprint in TSS2_CAR:
+      elif self.dynamic_follow:
         accel_limits = [get_min_accel_df(v_ego), get_max_accel_df(v_ego)]
       else:
         accel_limits = [A_CRUISE_MIN, get_max_accel(v_ego)]

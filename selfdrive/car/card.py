@@ -14,7 +14,7 @@ from openpilot.common.realtime import config_realtime_process, Priority, Ratekee
 from openpilot.selfdrive.pandad import can_list_to_can_capnp
 from openpilot.selfdrive.car.car_helpers import get_car, get_one_can
 from openpilot.selfdrive.car.interfaces import CarInterfaceBase
-from openpilot.selfdrive.car.toyota.values import TSS2_CAR
+from openpilot.selfdrive.car.toyota.values import TSS2_CAR, ToyotaFlags
 from openpilot.selfdrive.controls.lib.events import Events
 
 REPLAY = "REPLAY" in os.environ
@@ -61,11 +61,11 @@ class Car:
     if dp_atl:
       self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALKA
 
-    auto_brakehold = self.params.get_bool("AleSato_AutomaticBrakeHold")
+    auto_brakehold = self.params.get_bool("AleSato_AutomaticBrakeHold") and self.CP.carFingerprint in TSS2_CAR and not (self.CP.flags & ToyotaFlags.HYBRID.value)
     if auto_brakehold:
       self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.ALLOW_AEB
 
-    sport_mode = self.params.get_bool("Marc_Dynamic_Follow") and self.CP.carFingerprint in TSS2_CAR
+    sport_mode = self.params.get_bool("Marc_Dynamic_Follow")
     if sport_mode:
       self.CP.alternativeExperience |= ALTERNATIVE_EXPERIENCE.RAISE_LONGITUDINAL_LIMITS_TO_ISO_MAX
 
