@@ -50,7 +50,7 @@ def manager_init() -> None:
     ("LongitudinalPersonality", str(log.LongitudinalPersonality.standard)),
 
     ("AleSato_AutomaticBrakeHold", "0"),
-    ("CarModel", ""),
+    ("CarModel", "[-Not selected-]"),
     ("ToyotaTune", "1"),
     ("dp_atl", "0"),
     ("dp_jetson", "0"),
