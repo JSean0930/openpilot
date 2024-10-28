@@ -117,7 +117,7 @@ def get_stopped_equivalence_factor(v_lead, v_ego):
   speed_to_reach_max_v_diff_offset = speed_to_reach_max_v_diff_offset * CV.KPH_TO_MS
   delta_speed = v_lead - v_ego
   if np.all(delta_speed > 0):
-    v_diff_offset = delta_speed * 3 #2
+    v_diff_offset = delta_speed * 20 #2
     v_diff_offset = np.clip(v_diff_offset, 0, v_diff_offset_max)
                                                                     # increase in a linear behavior
     v_diff_offset = np.maximum(v_diff_offset * ((speed_to_reach_max_v_diff_offset - v_ego)/speed_to_reach_max_v_diff_offset), 0)
@@ -404,13 +404,13 @@ class LongitudinalMpc:
     lead_xv_1 = self.process_lead(radarstate.leadTwo)
     lead = radarstate.leadOne
 
-    self.smoother_braking = True if self.mode == 'acc' and np.any(v_ego < 16) and np.any(lead_xv_0[:,0] < 40) and not np.any(lead.dRel < (v_ego - 1) * t_follow) else False
-    if self.smoother_braking:
-      distance_factor = np.maximum(1, lead_xv_0[:,0] - (lead_xv_0[:,1] * t_follow))
-      self.braking_offset = np.clip((v_ego - lead_xv_0[:,1]) - COMFORT_BRAKE, 1, distance_factor)
-      t_follow = t_follow / self.braking_offset
-    else:
-      self.braking_offset = 1
+    ##self.smoother_braking = True if self.mode == 'acc' and np.any(v_ego < 16) and np.any(lead_xv_0[:,0] < 40) and not np.any(lead.dRel < (v_ego - 1) * t_follow) else False
+    ##if self.smoother_braking:
+      ##distance_factor = np.maximum(1, lead_xv_0[:,0] - (lead_xv_0[:,1] * t_follow))
+      ##self.braking_offset = np.clip((v_ego - lead_xv_0[:,1]) - COMFORT_BRAKE, 1, distance_factor)
+      ##t_follow = t_follow / self.braking_offset
+    ##else:
+      ##self.braking_offset = 1
 
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
