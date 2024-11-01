@@ -38,7 +38,7 @@ A_CRUISE_MAX_VALS_TOYOTA =   [2.0, 1.7, 1.32, 1.22, 1.02, .87, .73, .58, .38, .2
 A_CRUISE_MAX_BP_TOYOTA =     [0.,  1.,  3.,   6.,   8.,    11., 15., 20., 25., 30., 55.]
 
 # Lookup table for turns
-_A_TOTAL_MAX_V = [1.7, 3.2]
+_A_TOTAL_MAX_V = [2.04, 3.84] #[1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
 
