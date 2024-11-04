@@ -63,7 +63,7 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
     return 1.5
   elif personality==log.LongitudinalPersonality.standard:
-    return 1.0
+    return 1.5
   elif personality==log.LongitudinalPersonality.aggressive:
     return 2.0 #0.22 /2.0
   else:
@@ -99,9 +99,9 @@ def get_dynamic_follow(v_ego, personality=log.LongitudinalPersonality.standard):
 
 def get_STOP_DISTANCE(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
-    return 5.0
+    return 4.0
   elif personality==log.LongitudinalPersonality.standard:
-    return 4.5
+    return 4.0
   elif personality==log.LongitudinalPersonality.aggressive:
     return 4.0
   else:
