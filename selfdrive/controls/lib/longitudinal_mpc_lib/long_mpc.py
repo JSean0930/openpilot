@@ -42,7 +42,7 @@ J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
 DANGER_ZONE_COST = 100.
 CRASH_DISTANCE = .25
-LEAD_DANGER_FACTOR = 0.525 #0.75/0.85
+LEAD_DANGER_FACTOR = 0.368 #0.75/0.525
 LIMIT_COST = 1e6
 ACADOS_SOLVER_TYPE = 'SQP_RTI'
 
@@ -65,7 +65,7 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   elif personality==log.LongitudinalPersonality.standard:
     return 1.5
   elif personality==log.LongitudinalPersonality.aggressive:
-    return 2.0 #0.22 /2.0
+    return 0.22 #0.22 /2.0
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -85,10 +85,10 @@ def get_dynamic_follow(v_ego, personality=log.LongitudinalPersonality.standard):
   # The Dynamic follow function is adjusted by Marc(cgw1968-5779)
   if personality==log.LongitudinalPersonality.relaxed:
     x_vel =  [0.0,    17,     28,      40]     #[0.0,  5.0,   13.90,  20,    25,    40]
-    y_dist = [0.9,    1.2,    1.3,     1.4]    #[1.2,  1.2,   1.5,   1.8,   2.2,  2.2]
+    y_dist = [0.9,    1.0,    1.2,     1.4]    #[1.2,  1.2,   1.5,   1.8,   2.2,  2.2]
   elif personality==log.LongitudinalPersonality.standard:
     x_vel =  [0.0,    17,     28,      40]     #[0.0,  5.0,   13.90,  20,    25,    40]
-    y_dist = [0.9,    1.1,    1.2,     1.3]    #[1.1,  1.1,   1.3,    1.45,  1.6,  1.6]
+    y_dist = [0.9,    1.1,    1.3,     1.4]    #[1.1,  1.1,   1.3,    1.45,  1.6,  1.6]
   elif personality==log.LongitudinalPersonality.aggressive:
     x_vel =  [0.0,    17,     28,      40]     #[0.0,  5.0,   12.00,  15.,   20,    25,    40]
     y_dist = [0.9,    1.0,    1.2,     1.4]    #[1.05, 1.10,  1.20,   1.20,  1.25,  1.25,   1.3]
