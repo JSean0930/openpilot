@@ -42,7 +42,7 @@ J_EGO_COST = 5.0
 A_CHANGE_COST = 200.
 DANGER_ZONE_COST = 100.
 CRASH_DISTANCE = .25
-LEAD_DANGER_FACTOR = 0.525 #0.75/0.525 /0.368
+LEAD_DANGER_FACTOR = 1.25 #0.75/0.525 /0.368
 LIMIT_COST = 1e6
 ACADOS_SOLVER_TYPE = 'SQP_RTI'
 
@@ -99,11 +99,11 @@ def get_dynamic_follow(v_ego, personality=log.LongitudinalPersonality.standard):
 
 def get_STOP_DISTANCE(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
-    return 4.0
+    return 5.0
   elif personality==log.LongitudinalPersonality.standard:
-    return 4.0
+    return 5.0
   elif personality==log.LongitudinalPersonality.aggressive:
-    return 4.0
+    return 5.0
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -112,13 +112,13 @@ def get_stopped_equivalence_factor(v_lead, v_ego):
   # KRKeegan this offset rapidly decreases the following distance when the lead pulls
   # away, resulting in an early demand for acceleration.
   v_diff_offset = 0
-  v_diff_offset_max = 5 #12
-  speed_to_reach_max_v_diff_offset = 10 #26 # in kp/h
+  v_diff_offset_max = 1 #12
+  speed_to_reach_max_v_diff_offset = 2 #26 # in kp/h
   speed_to_reach_max_v_diff_offset = speed_to_reach_max_v_diff_offset * CV.KPH_TO_MS
   delta_speed = v_lead - v_ego
   #delta_speed = 0.0 if abs(v_lead) < 0.5 else v_lead - v_ego
   if np.all(delta_speed > 0):
-    v_diff_offset = delta_speed * 20 #2
+    v_diff_offset = delta_speed * 2 #2
     v_diff_offset = np.clip(v_diff_offset, 0, v_diff_offset_max)
                                                                     # increase in a linear behavior
     v_diff_offset = np.maximum(v_diff_offset * ((speed_to_reach_max_v_diff_offset - v_ego)/speed_to_reach_max_v_diff_offset), 0)
@@ -405,7 +405,7 @@ class LongitudinalMpc:
     lead_xv_1 = self.process_lead(radarstate.leadTwo)
     lead = radarstate.leadOne
 
-    self.smoother_braking = True if self.mode == 'acc' and np.any(v_ego < 29) and np.any(lead_xv_0[:,0] < 30) and not np.any(lead.dRel < (v_ego - 1) * t_follow) else False
+    self.smoother_braking = True if self.mode == 'acc' and np.any(v_ego < 35) and np.any(lead_xv_0[:,0] < 35) and not np.any(lead.dRel < (v_ego - 1) * t_follow) else False
     if self.smoother_braking:
       distance_factor = np.maximum(1, lead_xv_0[:,0] - (lead_xv_0[:,1] * t_follow))
       self.braking_offset = np.clip((v_ego - lead_xv_0[:,1]) - COMFORT_BRAKE, 1, distance_factor)
