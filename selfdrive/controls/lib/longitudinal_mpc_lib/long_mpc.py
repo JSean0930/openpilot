@@ -88,7 +88,7 @@ def get_dynamic_follow(v_ego, personality=log.LongitudinalPersonality.standard):
     y_dist = [0.9,    1.0,    1.35,     1.45]    #[1.2,  1.2,   1.5,   1.8,   2.2,  2.2]
   elif personality==log.LongitudinalPersonality.standard:
     x_vel =  [0.0,    14,     28,      35]     #[0.0,  5.0,   13.90,  20,    25,    40]
-    y_dist = [0.9,    1.1,    1.25,     1.35]    #[1.1,  1.1,   1.3,    1.45,  1.6,  1.6]
+    y_dist = [0.9,    1.1,    1.3,     1.4]    #[1.1,  1.1,   1.3,    1.45,  1.6,  1.6]
   elif personality==log.LongitudinalPersonality.aggressive:
     x_vel =  [0.0,    14,     28,      35]     #[0.0,  5.0,   12.00,  15.,   20,    25,    40]
     y_dist = [0.9,    1.0,    1.2,     1.35]    #[1.05, 1.10,  1.20,   1.20,  1.25,  1.25,   1.3]
