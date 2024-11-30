@@ -46,12 +46,12 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[0].safetyParam |= Panda.FLAG_TOYOTA_LTA
 
       # LTA control can be more delayed and winds up more often
-      ret.steerActuatorDelay = 0.17
+      ret.steerActuatorDelay = 0.15
       ret.steerLimitTimer = 0.8
     else:
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
-      ret.steerActuatorDelay = 0.17  # Default delay, Prius has larger delay
+      ret.steerActuatorDelay = 0.15  # Default delay, Prius has larger delay
       ret.steerLimitTimer = 0.4
 
     ret.stoppingControl = False  # Toyota starts braking more when it thinks you want to stop
