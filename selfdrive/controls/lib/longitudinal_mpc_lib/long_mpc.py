@@ -65,7 +65,7 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   elif personality==log.LongitudinalPersonality.standard:
     return 1.0
   elif personality==log.LongitudinalPersonality.aggressive:
-    return 0.35 #0.22 /0.5
+    return 0.6 #0.22 /0.5
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -117,8 +117,8 @@ def get_stopped_equivalence_factor(v_lead, v_ego):
   speed_to_reach_max_v_diff_offset = speed_to_reach_max_v_diff_offset * CV.KPH_TO_MS
   delta_speed = v_lead - v_ego
   #delta_speed = 0.0 if abs(v_lead) < 0.5 else v_lead - v_ego
-  if np.all(delta_speed > 0.5):
-    v_diff_offset = delta_speed * 5 #2
+  if np.all(delta_speed > 1.0):
+    v_diff_offset = delta_speed * 4 #2
     v_diff_offset = np.clip(v_diff_offset, 0, v_diff_offset_max)
                                                                     # increase in a linear behavior
     v_diff_offset = np.maximum(v_diff_offset * ((speed_to_reach_max_v_diff_offset - v_ego)/speed_to_reach_max_v_diff_offset), 0)
