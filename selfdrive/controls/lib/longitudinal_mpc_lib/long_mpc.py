@@ -61,7 +61,7 @@ COMFORT_BRAKE = 1.2 #2.5/1.5/1.35/1.25
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
-    return 2.0 
+    return 1.5 
   elif personality==log.LongitudinalPersonality.standard:
     return 1.0
   elif personality==log.LongitudinalPersonality.aggressive:
@@ -117,7 +117,7 @@ def get_stopped_equivalence_factor(v_lead, v_ego):
   speed_to_reach_max_v_diff_offset = speed_to_reach_max_v_diff_offset * CV.KPH_TO_MS
   delta_speed = v_lead - v_ego
   #delta_speed = 0.0 if abs(v_lead) < 0.5 else v_lead - v_ego
-  if np.all(delta_speed > 1.0):
+  if np.all(delta_speed > 0.5):
     v_diff_offset = delta_speed * 5 #2
     v_diff_offset = np.clip(v_diff_offset, 0, v_diff_offset_max)
                                                                     # increase in a linear behavior
@@ -405,7 +405,7 @@ class LongitudinalMpc:
     lead_xv_1 = self.process_lead(radarstate.leadTwo)
     lead = radarstate.leadOne
 
-    self.smoother_braking = True if self.mode == 'acc' and np.any(v_ego < 8) and np.any(lead_xv_0[:,0] < 40) and not np.any(lead.dRel < (v_ego - 1) * t_follow) else False
+    self.smoother_braking = True if self.mode == 'acc' and np.any(v_ego < 5) and np.any(lead_xv_0[:,0] < 40) and not np.any(lead.dRel < (v_ego - 1) * t_follow) else False
     if self.smoother_braking:
       distance_factor = np.maximum(1, lead_xv_0[:,0] - (lead_xv_0[:,1] * t_follow))
       self.braking_offset = np.clip((v_ego - lead_xv_0[:,1]) - COMFORT_BRAKE, 1, distance_factor)
