@@ -21,8 +21,6 @@ private:
   void hideSubToggles();
   void hideToggles();
   void showToggles(const std::set<QString> &keys);
-  void startDownloadAllModels();
-  void updateModelLabels();
   void updateState(const UIState &s);
 
   ButtonControl *deleteModelBtn;
