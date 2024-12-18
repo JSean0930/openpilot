@@ -5,6 +5,7 @@ import numpy as np
 from cereal import log
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.numpy_fast import clip
+from openpilot.selfdrive.car.toyota.values import ToyotaFlags
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
