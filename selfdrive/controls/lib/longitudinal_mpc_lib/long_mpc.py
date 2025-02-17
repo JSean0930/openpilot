@@ -34,7 +34,7 @@ COST_E_DIM = 5
 COST_DIM = COST_E_DIM + 1
 CONSTR_DIM = 4
 
-X_EGO_OBSTACLE_COST = 6.
+X_EGO_OBSTACLE_COST = 10.#6.
 X_EGO_COST = 0.
 V_EGO_COST = 0.
 A_EGO_COST = 0.
@@ -61,9 +61,9 @@ COMFORT_BRAKE = 1.0 #2.5，1.1
 
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
-    return 1.2 #1.0
+    return 1.5 #1.0
   elif personality==log.LongitudinalPersonality.standard:
-    return 0.6 #0.5
+    return 1.8 #0.5
   elif personality==log.LongitudinalPersonality.aggressive:
     return 0.9 #0.22
   else:
