@@ -32,8 +32,7 @@ VISION_PROB_MIN = 0.35
 RADAR_OVERRIDE_PROB = 0.60
 
 # -------------------- 速度切換門檻 --------------------
-# 車速 > 60 km/h（≈16.67 m/s） → 退回「原版 雷達為主的融合」
-SPEED_SWITCH_KMH = 60.0
+SPEED_SWITCH_KMH = 30.0
 SPEED_SWITCH_MS = SPEED_SWITCH_KMH / 3.6
 
 
