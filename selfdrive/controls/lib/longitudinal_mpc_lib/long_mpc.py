@@ -70,26 +70,76 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
     raise NotImplementedError("Longitudinal personality not supported")
 
 
-def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
+def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
+  v_kph = float(v_ego * 3.6)
+  
   if personality==log.LongitudinalPersonality.relaxed:
-    return 1.75
+    base = 1.0 + 0.0030 * v_kph
   elif personality==log.LongitudinalPersonality.standard:
-    return 1.45
+    base = 1.0 + 0.0025 * v_kph
   elif personality==log.LongitudinalPersonality.aggressive:
-    return 1.25
+    base = 1.0 + 0.0020 * v_kph
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
-def get_stopped_equivalence_factor(v_lead):
-  return (v_lead**2) / (2 * COMFORT_BRAKE)
+  t_follow = base
+  return t_follow
+
+def get_stopped_equivalence_factor(v_lead, v_ego):
+  """
+  目標：
+  - 在低速時更積極縮短跟車距離，減少減速後再加速的遲滯
+  - offset 對 (v_lead - v_ego) 呈現更線性且可預期的放大
+  - 高速時自動收斂到較保守（接近既有邏輯）
+
+  修改：
+  - 快跟（二次）增益：僅在 <50 km/h 有效
+  - 基礎線性偏移量：僅在 <10 km/h 有效
+  """
+  v_lead = np.asarray(v_lead, dtype=float)
+  v_ego = float(v_ego)
+
+  v10 = 10.0 * CV.KPH_TO_MS   # 10 km/h 分界
+  v50 = 50.0 * CV.KPH_TO_MS   # 50 km/h 分界
+  v60 = 60.0 * CV.KPH_TO_MS   # k 混合分界（維持原設計）
+
+  delta = v_lead - v_ego  # 相對速度（>0 表 lead 拉開）
+
+  # 權重：
+  # w_k:   0~60 km/h 內較積極（k_low），>60 收斂到 k_high
+  # w_quick: 0~50 km/h 內快跟有效，>50 為 0
+  # w_base:  0~10 km/h 內線性偏移有效，>10 為 0
+  w_k     = np.clip(1.0 - (v_ego / v60), 0.0, 1.0)
+  w_quick = np.clip(1.0 - (v_ego / v50), 0.0, 1.0)
+  w_base  = np.clip(1.0 - (v_ego / v10), 0.0, 1.0)
+
+  # 低速 vs 高速增益（低速更積極）
+  k_low, k_high = 5.5, 3.5
+  k = k_high + (k_low - k_high) * w_k
+
+  # 快跟（二次）增益：僅 <50 km/h 有效
+  quad_gain = 0.35
+  quick = quad_gain * (np.clip(delta, 0.0, 5.0) ** 2) * w_quick
+
+  # 基礎線性偏移量：僅 <10 km/h 有效
+  base = k * np.maximum(delta, 0.0) * (0.6 + 0.4 * w_base) * w_base
+
+  # 合成 offset 並依速度調整上限（用 w_k 維持原本「低速允許較大 offset」概念）
+  v_diff_offset = base + quick
+  cap_low, cap_high = 8.0, 5.0
+  cap = cap_high + (cap_low - cap_high) * w_k
+  v_diff_offset = np.clip(v_diff_offset, 0.0, cap)
+
+  # 等效「前車煞停距離」 + offset
+  return (v_lead**2) / (2 * COMFORT_BRAKE) + v_diff_offset
 
 def get_safe_obstacle_distance(v_ego, t_follow):
   return (v_ego**2) / (2 * COMFORT_BRAKE) + t_follow * v_ego + STOP_DISTANCE
 
 def desired_follow_distance(v_ego, v_lead, t_follow=None):
   if t_follow is None:
-    t_follow = get_T_FOLLOW()
-  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead)
+    t_follow = get_T_FOLLOW(v_ego)
+  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead, v_ego)
 
 
 def gen_long_model():
@@ -339,8 +389,8 @@ class LongitudinalMpc:
     # To estimate a safe distance from a moving lead, we calculate how much stopping
     # distance that lead needs as a minimum. We can add that to the current distance
     # and then treat that as a stopped car/obstacle at this new distance.
-    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1])
-    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1])
+    lead_0_obstacle = lead_xv_0[:,0] + get_stopped_equivalence_factor(lead_xv_0[:,1], v_ego)
+    lead_1_obstacle = lead_xv_1[:,0] + get_stopped_equivalence_factor(lead_xv_1[:,1], v_ego)
 
     self.params[:,0] = ACCEL_MIN
     self.params[:,1] = ACCEL_MAX
