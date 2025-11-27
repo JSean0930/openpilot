@@ -1,0 +1,248 @@
+"""
+Copyright (c) 2025, Rick Lan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, and/or sublicense,
+for non-commercial purposes only, subject to the following conditions:
+
+- The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+- Commercial use (e.g. use in a product, service, or activity intended to
+  generate revenue) is prohibited without explicit written permission from
+  the copyright holder.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+"""
+
+import time
+import numpy as np
+from openpilot.selfdrive.modeld.constants import ModelConstants
+
+
+# ============================================================
+# 可調參數集中區（人性化 AEM v2）
+# ============================================================
+
+# --- 1) 觸發與解除時間/權重（平滑淡入淡出） -------------------
+# AEM 觸發後的淡入/淡出時間（秒），會依速度再做比例放大
+RAMP_UP_TIME_BASE = 0.25     # 觸發後多快「進入」AEM
+RAMP_DOWN_TIME_BASE = 0.45   # 解除前多快「退出」AEM
+
+# 速度自適應倍率（v 越高越保守、淡入淡出/冷卻越長）
+RAMP_V_BP = [0.0, 6.0, 14.0, 25.0]         # m/s  ≈ 0/22/50/90 km/h
+RAMP_V_MULT = [0.8, 1.0, 1.4, 1.8]         # 淡入淡出倍率
+
+# 速度自適應 cooldown（秒）
+COOLDOWN_V_BP = [0.0, 6.0, 14.0, 25.0]     # m/s
+COOLDOWN_V_VALS = [0.30, 0.55, 0.80, 1.10] # 高速更久
+
+# 超過此權重才「硬覆蓋」mode=blended（維持向下相容）
+W_MODE_OVERRIDE = 0.60
+
+
+# --- 2) 停止線/紅燈判停距離（S 型 / 兩段斜率更像人） ----------
+# 速度 m/s -> 判停門檻距離 m
+# 建議：低速不要太早判停；中速開始提早；高速顯著提早
+SLOW_DOWN_BP =   [0.0,  2.5,  5.5,  8.5,  11.5,  14.0,  17.0,  20.0,  25.0]
+SLOW_DOWN_DIST = [8.0,  18.0, 35.0, 55.0, 70.0,  85.0, 105.0, 130.0, 165.0]
+
+
+# --- 3) 連續幀確認 / 趨勢判斷 ---------------------------------
+# 連續幀都滿足觸發條件才啟動（避免單幀誤判）
+TRIGGER_CONFIRM_FRAMES = 3
+
+# 趨勢判斷：末端距離需「持續收斂」的最低斜率門檻（越小越容易觸發）
+# 例：最後 K 段平均增量 < 此值才視為「要停了」
+TREND_K = 4
+TREND_DX_MAX = 0.80   # m/step（視 ModelConstants time spacing 而定，偏保守）
+
+# 末端距離「絕對小於門檻」需再乘上的觸發裕度（<1 提早觸發）
+TRIGGER_MARGIN = 1.00
+
+
+# --- 4) 解除 hysteresis（避免反覆觸發抖動） -------------------
+# 末端距離需 > 門檻 * RELEASE_MARGIN 才允許解除
+RELEASE_MARGIN = 1.20
+
+# 解除最短保持時間（即使條件變好，也至少 active 這麼久）
+MIN_ACTIVE_TIME = 0.25  # s
+
+
+# --- 5) lead gate（有可信 lead 時不搶控） ---------------------
+# 若有 leadOne 且距離小於此值，優先相信 lead，避免 AEM 抢控制
+LEAD_GATE_DIST = 45.0   # m
+# 若 lead 相對速度還在快速逼近，也讓 AEM 介入（避免只看距離）
+LEAD_GATE_VREL = -3.0   # m/s（負值表示接近）
+
+
+# ============================================================
+# AEM v2
+# ============================================================
+class AEM:
+  """
+  人性化 AEM：
+  - 用模型「末端路徑收斂 + 距離門檻」偵測停止線/紅燈
+  - 連續幀確認 + 趨勢判斷避免誤觸
+  - 速度自適應 cooldown
+  - 權重淡入淡出（w_aem），並維持 get_mode 相容
+  - 有可信 lead 時降低/禁止搶控
+  """
+
+  def __init__(self):
+    self._active = False
+    self._trigger_cnt = 0
+    self._start_time = 0.0
+    self._cooldown_end_time = 0.0
+    self._last_w = 0.0
+
+  # ---------------------------
+  # 工具：安全取得 radar lead 資訊
+  # ---------------------------
+  def _get_lead_info(self, radar_msg):
+    lead = getattr(radar_msg, "leadOne", None)
+    if lead is None:
+      return False, 1e9, 0.0   # no lead
+    status = bool(getattr(lead, "status", False))
+    d_rel = float(getattr(lead, "dRel", 1e9))
+    v_rel = float(getattr(lead, "vRel", 0.0))
+    return status, d_rel, v_rel
+
+  # ---------------------------
+  # 觸發 AEM（進入 active）
+  # ---------------------------
+  def _perform_experimental_mode(self, v_ego):
+    t_now = time.monotonic()
+    cooldown = float(np.interp(v_ego, COOLDOWN_V_BP, COOLDOWN_V_VALS))
+    self._active = True
+    self._start_time = t_now
+    self._cooldown_end_time = t_now + cooldown
+
+  # ---------------------------
+  # 計算 AEM 權重（淡入淡出）
+  # ---------------------------
+  def get_weight(self, v_ego):
+    t_now = time.monotonic()
+    if not self._active:
+      self._last_w = 0.0
+      return 0.0
+
+    # 速度倍率（高速淡入淡出更慢、更保守）
+    v_mult = float(np.interp(v_ego, RAMP_V_BP, RAMP_V_MULT))
+    ramp_up = RAMP_UP_TIME_BASE * v_mult
+    ramp_dn = RAMP_DOWN_TIME_BASE * v_mult
+
+    t_start = self._start_time
+    t_end = self._cooldown_end_time
+
+    # 淡入
+    w_in = np.clip((t_now - t_start) / max(ramp_up, 1e-3), 0.0, 1.0)
+    # 淡出
+    w_out = np.clip((t_end - t_now) / max(ramp_dn, 1e-3), 0.0, 1.0)
+
+    w = float(w_in * w_out)
+    self._last_w = w
+    return w
+
+  # ---------------------------
+  # 對外：取得 mode（相容原介面）
+  # ---------------------------
+  def get_mode(self, mode, v_ego=None):
+    """
+    維持原本的 get_mode(mode) 用法：
+    - 權重 w_aem >= W_MODE_OVERRIDE 時，硬覆蓋 blended
+    - 否則回傳外部 mode
+    若外部願意更細緻混合，可另外讀 get_weight()
+    """
+    # 若外部沒給 v_ego，就用上一幀權重保底
+    w = self._last_w if v_ego is None else self.get_weight(v_ego)
+
+    if w >= W_MODE_OVERRIDE and time.monotonic() < self._cooldown_end_time:
+      return "blended"
+
+    # cooldown 過了才真正解除
+    if time.monotonic() >= self._cooldown_end_time:
+      self._active = False
+      self._trigger_cnt = 0
+
+    return mode
+
+  # ---------------------------
+  # 主更新：判斷是否觸發/維持
+  # ---------------------------
+  def update_states(self, model_msg, radar_msg, v_ego):
+    """
+    觸發條件（需連續 TRIGGER_CONFIRM_FRAMES 幀）：
+      1) model position/orientation 長度正確
+      2) 末端距離 x_end < 門檻 * TRIGGER_MARGIN
+      3) 末段路徑增量趨勢收斂（平均 dx < TREND_DX_MAX）
+      4) lead gate：若前方有可信 lead 且情境合理，避免搶控
+
+    解除條件：
+      - cooldown 時間到
+      - 且末端距離回到門檻 * RELEASE_MARGIN 以上
+      - 且 active 已超過 MIN_ACTIVE_TIME
+    """
+
+    # -----------------------
+    # 0) lead gate
+    # -----------------------
+    lead_ok, d_rel, v_rel = self._get_lead_info(radar_msg)
+    # 有可信 lead 且距離近、但相對速度沒在「快速逼近」時，降低 AEM 介入
+    lead_gate_block = lead_ok and d_rel < LEAD_GATE_DIST and v_rel > LEAD_GATE_VREL
+
+    # -----------------------
+    # 1) 檢查模型輸出可用
+    # -----------------------
+    N = ModelConstants.IDX_N
+    if not (len(model_msg.orientation.x) == len(model_msg.position.x) == N):
+      self._trigger_cnt = 0
+      return
+
+    pos_x = np.asarray(model_msg.position.x)
+    x_end = float(pos_x[N - 1])
+
+    # -----------------------
+    # 2) 計算速度對應門檻距離
+    # -----------------------
+    slow_dist = float(np.interp(v_ego, SLOW_DOWN_BP, SLOW_DOWN_DIST))
+    trigger_th = slow_dist * TRIGGER_MARGIN
+    release_th = slow_dist * RELEASE_MARGIN
+
+    # -----------------------
+    # 3) 趨勢判斷（末段平均增量）
+    # -----------------------
+    k = min(TREND_K, N - 1)
+    dx_tail = np.diff(pos_x[-(k+1):])
+    mean_dx_tail = float(np.mean(dx_tail)) if dx_tail.size else 1e9
+    trend_ok = mean_dx_tail < TREND_DX_MAX
+
+    # -----------------------
+    # 4) 觸發判斷（連續幀確認）
+    # -----------------------
+    trigger_now = (x_end < trigger_th) and trend_ok and (not lead_gate_block)
+
+    if not self._active:
+      if trigger_now:
+        self._trigger_cnt += 1
+        if self._trigger_cnt >= TRIGGER_CONFIRM_FRAMES:
+          self._perform_experimental_mode(v_ego)
+          self._trigger_cnt = 0
+      else:
+        self._trigger_cnt = 0
+
+    # -----------------------
+    # 5) 解除 hysteresis（只允許在 cooldown 過後真正解除）
+    # -----------------------
+    if self._active:
+      t_now = time.monotonic()
+
+      # 未到最短 active 時間，不允許過早解除
+      if (t_now - self._start_time) < MIN_ACTIVE_TIME:
+        return
+
+      # cooldown 到了，且末端距離回到較安全區才解除
+      if t_now >= self._cooldown_end_time and x_end > release_th:
+        self._active = False
+        self._trigger_cnt = 0
