@@ -18,7 +18,11 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.system.hardware import HARDWARE, PC, TICI
 from openpilot.system.ui.lib.multilang import multilang
 from openpilot.common.realtime import Ratekeeper
-from openpilot.common.params import Params
+
+try:
+  from openpilot.common.params import Params
+except ImportError:
+  Params = None
 
 _DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20}.get(HARDWARE.get_device_type(), 60)))
 FPS_LOG_INTERVAL = 5  # Seconds between logging FPS drops
@@ -190,7 +194,10 @@ class MouseState:
 class GuiApplication:
   def __init__(self, width: int | None = None, height: int | None = None):
     self._fonts: dict[FontWeight, rl.Font] = {}
-    dp_ui_four = Params().get_bool("dp_ui_four")
+    if Params is not None:
+      dp_ui_four = Params().get_bool("dp_ui_four")
+    else:
+      dp_ui_four = False
     self._width = width if width is not None else GuiApplication._default_width(dp_ui_four)
     self._height = height if height is not None else GuiApplication._default_height(dp_ui_four)
 
