@@ -11,7 +11,7 @@ from openpilot.common.swaglog import cloudlog
 COMFORT_LAT_G = 0.20
 
 # 安全係數（<1 會更保守），越小 = 彎道目標速度越低
-SAFETY_FACTOR = 0.85 #0.92
+SAFETY_FACTOR = 0.65 #0.92
 
 # aggressiveness 允許範圍（外部 set_aggressiveness 也會夾在這裡）
 AGGR_MIN = 0.5
