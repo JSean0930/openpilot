@@ -70,7 +70,7 @@ LEAD_GATE_VREL = -3.0        # m/s（> -3 表示沒有在很快逼近）
 # 有前車 + 車速 < 此值 + 正在減速，啟動實驗模式，讓減速更人性化
 LOW_SPEED_LEAD_TRIG_KPH   = 30.0   # km/h 以下才啟動此額外條件
 LOW_SPEED_LEAD_DIST_MAX   = 40.0   # m，以內視為「正在跟車」
-LOW_SPEED_LEAD_DECEL_TRIG = -0.2   # m/s^2，低於此視為「正在減速中」
+LOW_SPEED_LEAD_DECEL_TRIG = -0.1   # m/s^2，低於此視為「正在減速中」
 # 可依體感微調：
 # - 想更容易觸發：提高 DIST_MAX、把 DECEL_TRIG 改得更接近 0（例如 -0.2）
 # - 想更保守：降低 DIST_MAX、把 DECEL_TRIG 改成更負（例如 -0.6）
