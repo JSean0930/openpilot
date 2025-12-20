@@ -36,7 +36,7 @@ CONSTR_DIM = 4
 # 注意：依你要求，不改動 T_IDXS；此檔只做「動態 t_follow / danger factor」提升反應速度
 
 # --- 前車風險判定（越大越早減速） ---
-LEAD_BRAKE_A_THRESH = -0.6       # m/s^2：前車減速開始算有感
+LEAD_BRAKE_A_THRESH = -0.9       # m/s^2：前車減速開始算有感, -0.6
 LEAD_BRAKE_A_STRONG = -1.6       # m/s^2：強減速，風險飽和
 CLOSING_VREL_OFFSET = 0.5        # m/s：略過小抖動
 CLOSING_VREL_RANGE = 7.0         # m/s：接近速度飽和範圍（越小越敏感）
@@ -52,8 +52,8 @@ LEAD_DANGER_FACTOR_BASE = 0.75   # 原本常數（沿用）
 LEAD_DANGER_FACTOR_MAX = 1.05    # 風險高時的上限（建議 0.95~1.10）
 
 # 只加強 horizon 前段，後段回到 base（避免高速巡航過度緊張）
-DANGER_FACTOR_HOLD_S = 1.2       # 秒：前段維持加強
-DANGER_FACTOR_FADE_S = 3.0       # 秒：淡出到 base
+DANGER_FACTOR_HOLD_S = 0.9       # 秒：前段維持加強, 1.2
+DANGER_FACTOR_FADE_S = 2.3       # 秒：淡出到 base, 3.0
 # =======================================================================
 
 X_EGO_OBSTACLE_COST = 3.
