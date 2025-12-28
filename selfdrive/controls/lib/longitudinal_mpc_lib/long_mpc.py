@@ -118,7 +118,7 @@ def get_stopped_equivalence_factor(v_lead, v_ego):
   k = k_high + (k_low - k_high) * w_k
 
   # 快跟（二次）增益：僅 <50 km/h 有效
-  quad_gain = 0.65 #0.35
+  quad_gain = 0.75 #0.35
   quick = quad_gain * (np.clip(delta, 0.0, 5.0) ** 2) * w_quick
 
   # 基礎線性偏移量：僅 <10 km/h 有效
