@@ -21,7 +21,7 @@ from openpilot.common.simple_kalman import KF1D
 #LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 5.0, 15.0, 30.0]   # 速度分段 (m/s) ≈ [0, 18, 54, 108] km/h
 #LEAD_ACCEL_TAU_V_EGO_V  = [0.6, 0.8, 1.2, 1.6]     # 對應 tau（秒），建議範圍 0.5 ~ 2.0
 LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 15.0, 30.0]   # 速度分段 (m/s) ≈ [0, 54, 108] km/h
-LEAD_ACCEL_TAU_V_EGO_V  = [0.8, 1.2, 1.6]     # 對應 tau（秒），建議範圍 0.5 ~ 2.0
+LEAD_ACCEL_TAU_V_EGO_V  = [0.5, 1.2, 1.6]     # 對應 tau（秒），建議範圍 0.5 ~ 2.0
 
 # aLead 被視為「幾乎零加速度」的門檻（m/s^2），絕對值小於此值就視為定速/緩變
 LEAD_ACCEL_CONST_ACCEL_THRESH = 0.4
