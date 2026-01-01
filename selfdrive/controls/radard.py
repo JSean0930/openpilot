@@ -24,12 +24,12 @@ LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]   # 速度分段 (m/s) ≈ [0,
 LEAD_ACCEL_TAU_V_EGO_V  = [0.4, 0.7,  1.2,  1.6]     # 對應 tau（秒），建議範圍 0.5 ~ 2.0
 
 # aLead 被視為「幾乎零加速度」的門檻（m/s^2），絕對值小於此值就視為定速/緩變
-LEAD_ACCEL_CONST_ACCEL_THRESH = 0.4
+LEAD_ACCEL_CONST_ACCEL_THRESH = 0.2 #0.4
 
 # 2) 視覺 / 雷達 覆蓋邏輯（你原本就有的，這裡只是集中在上方方便日後調整）
 
 # 視覺最低採用門檻：只要 prob 大於此值，就先用純視覺生成 lead
-VISION_PROB_MIN = 0.40 #0.35
+VISION_PROB_MIN = 0.35
 
 # 雷達覆蓋上限：若視覺 prob 高於此值，就不讓雷達覆蓋（仍可低速補強按原規則覆蓋）
 RADAR_OVERRIDE_PROB = 0.60
