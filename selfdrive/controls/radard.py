@@ -49,14 +49,14 @@ VISION_A_TAU_V_EGO_V  = [0.15, 0.20, 0.30, 0.45]
 #VISION_A_EVENT_TAU_SCALE = 0.55 → 0.45（事件時更敏感）
 #VISION_A_JERK_MAX = 6.0 → 7.5（允許更快 a 變化，但仍有限制）
 # 大加速度/減速度事件：縮短 a 的 tau 以提高反應
-VISION_A_EVENT_THRESH = 0.6
-VISION_A_EVENT_TAU_SCALE = 0.55
+VISION_A_EVENT_THRESH = 0.45 #0.6
+VISION_A_EVENT_TAU_SCALE = 0.4 #0.55
 # jerk 限制：避免 aLeadK 雜訊尖峰造成一下重煞一下放掉
-VISION_A_JERK_MAX = 6.0
+VISION_A_JERK_MAX = 8.0 #6.0
 # a 的來源混合：model a vs v 的差分（fd）
 # prob 越高越偏向 model a，prob 越低越偏向 fd（更貼近幀間速度變化）
-VISION_A_MODEL_W_MAX = 0.85
-VISION_A_MODEL_W_MIN = 0.25
+VISION_A_MODEL_W_MAX = 0.75 #0.85
+VISION_A_MODEL_W_MIN = 0.15 #0.25
 # lead 消失時重置 vision track 的 prob 門檻
 VISION_RESET_PROB = 0.10
 
