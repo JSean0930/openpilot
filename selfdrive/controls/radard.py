@@ -24,7 +24,7 @@ LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]   # 速度分段 (m/s) ≈ [0,
 LEAD_ACCEL_TAU_V_EGO_V  = [0.4, 0.7,  1.2,  1.6]     # 對應 tau（秒），建議範圍 0.5 ~ 2.0
 
 # aLead 被視為「幾乎零加速度」的門檻（m/s^2），絕對值小於此值就視為定速/緩變
-LEAD_ACCEL_CONST_ACCEL_THRESH = 0.2 #0.4
+LEAD_ACCEL_CONST_ACCEL_THRESH = 0.1 #0.4 / 0.2
 
 # 2) 視覺 / 雷達 覆蓋邏輯（你原本就有的，這裡只是集中在上方方便日後調整）
 
