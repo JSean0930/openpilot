@@ -15,66 +15,58 @@ from openpilot.common.simple_kalman import KF1D
 
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
-# 1) 前車加速度時間常數（aLeadTau）速度相依調整（雷達 Track 用）
-#   - 低速時用較小 tau → 更敏感
-#   - 高速時用較大 tau → 穩定不晃
-LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]   # 速度分段 (m/s) ≈ [0, 30, 54, 108] km/h
-LEAD_ACCEL_TAU_V_EGO_V  = [0.4, 0.7,  1.2,  1.6]     # 對應 tau（秒）
+# ===== 功能開關 =====
+# True：在低速（<= SPEED_SWITCH_KMH）強制純視覺（vision-only），不做雷達 match、不被雷達覆蓋、不做低速雷達補強
+# False：回到原本邏輯（低速視覺優先但允許雷達覆蓋/補強；高速雷達為主）
+vision_only = True
 
-# aLead 被視為「幾乎零加速度」的門檻（m/s^2）
+# 1) 前車加速度時間常數（aLeadTau）速度相依調整（雷達 Track 用）
+LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]    # m/s
+LEAD_ACCEL_TAU_V_EGO_V  = [0.4, 0.7,  1.2,  1.6]     # s
 LEAD_ACCEL_CONST_ACCEL_THRESH = 0.1
 
 # 2) 視覺 / 雷達 覆蓋邏輯
-VISION_PROB_MIN = 0.35           # 視覺最低採用門檻（低速分支）
-RADAR_OVERRIDE_PROB = 0.60       # 視覺 prob 高於此值，就不讓雷達覆蓋（低速分支）
-SPEED_SWITCH_KMH = 30.0          # 視覺/雷達切換速度門檻（km/h）
+VISION_PROB_MIN = 0.35
+RADAR_OVERRIDE_PROB = 0.60
+
+# 視覺/雷達切換速度門檻（km/h）— 保留此機制
+SPEED_SWITCH_KMH = 30.0
 SPEED_SWITCH_MS = SPEED_SWITCH_KMH / 3.6
 
-# ====================== Vision-only 強化參數（重點在這） ======================
+# ====================== Vision-only 強化參數 ======================
 
-# prob 影響濾波：prob 越高越敏感
 VISION_PROB_FAST = 0.85
 VISION_PROB_SLOW = 0.45
 
-# vRel 濾波時間常數（秒）：低速快、高速穩
-VISION_VREL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]   # m/s
-VISION_VREL_TAU_V_EGO_V  = [0.20, 0.25, 0.35, 0.45]  # s
+VISION_VREL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]
+VISION_VREL_TAU_V_EGO_V  = [0.20, 0.25, 0.35, 0.45]
 
-# aLead 濾波時間常數（秒）
 VISION_A_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]
 VISION_A_TAU_V_EGO_V  = [0.15, 0.20, 0.30, 0.45]
 
 #VISION_A_EVENT_THRESH = 0.6 → 0.45（更容易進事件模式）
 #VISION_A_EVENT_TAU_SCALE = 0.55 → 0.45（事件時更敏感）
 #VISION_A_JERK_MAX = 6.0 → 7.5（允許更快 a 變化，但仍有限制）
-# 大加速度/減速度事件：縮短 a 的 tau 以提高反應
-VISION_A_EVENT_THRESH = 0.6       # m/s^2
-VISION_A_EVENT_TAU_SCALE = 0.55   # tau *= scale（更快）
+VISION_A_EVENT_THRESH = 0.6
+VISION_A_EVENT_TAU_SCALE = 0.55
 
-# jerk 限制：避免 aLeadK 雜訊尖峰造成一下重煞一下放掉
-VISION_A_JERK_MAX = 6.0           # m/s^3
+VISION_A_JERK_MAX = 6.0
 
-# a 的來源混合：model a vs v 的差分（fd）
-# prob 越高越偏向 model a，prob 越低越偏向 fd（更貼近幀間速度變化）
 VISION_A_MODEL_W_MAX = 0.85
 VISION_A_MODEL_W_MIN = 0.25
 
-# lead 消失時重置 vision track 的 prob 門檻
 VISION_RESET_PROB = 0.10
 
 # =======================================================================
 
-# Default lead acceleration decay（保留原本常數，供舊邏輯或其他模組使用）
 _LEAD_ACCEL_TAU = 1.5
 
-# radar tracks
-SPEED, ACCEL = 0, 1     # Kalman filter states enum
+SPEED, ACCEL = 0, 1
 
-# stationary qualification parameters
-V_EGO_STATIONARY = 4.   # no stationary object flag below this speed
+V_EGO_STATIONARY = 4.
 
-RADAR_TO_CENTER = 2.7   # (deprecated) RADAR is ~ 2.7m ahead from center of car
-RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
+RADAR_TO_CENTER = 2.7
+RADAR_TO_CAMERA = 1.52
 
 
 def _clip(x: float, lo: float, hi: float) -> float:
@@ -82,7 +74,6 @@ def _clip(x: float, lo: float, hi: float) -> float:
 
 
 def _adaptive_lpf(prev: float, meas: float, tau: float, dt: float) -> float:
-  # tau 越小越敏感；tau=0 視為直接跟隨
   if tau <= 1e-3:
     return float(meas)
   a = dt / (tau + dt)
@@ -91,7 +82,7 @@ def _adaptive_lpf(prev: float, meas: float, tau: float, dt: float) -> float:
 
 class KalmanParams:
   def __init__(self, dt: float):
-    assert dt > .01 and dt < .2, "Radar time step must be between .01s and 0.2s"
+    assert .01 < dt < .2, "Radar time step must be between .01s and 0.2s"
     self.A = [[1.0, dt], [0.0, 1.0]]
     self.C = [1.0, 0.0]
 
@@ -112,7 +103,6 @@ class Track:
     self.identifier = identifier
     self.cnt = 0
 
-    # aLeadTau 改為可被速度動態調整的 filter，初始值仍沿用原本 _LEAD_ACCEL_TAU
     self.aLeadTau = FirstOrderFilter(_LEAD_ACCEL_TAU, 0.45, DT_MDL)
 
     self.K_A = kalman_params.A
@@ -122,7 +112,6 @@ class Track:
 
   def update(self, d_rel: float, y_rel: float, v_rel: float,
              v_lead: float, measured: float, v_ego: float):
-    # relative values, copy
     self.dRel = d_rel
     self.yRel = y_rel
     self.vRel = v_rel
@@ -135,7 +124,6 @@ class Track:
     self.vLeadK = float(self.kf.x[SPEED][0])
     self.aLeadK = float(self.kf.x[ACCEL][0])
 
-    # === 速度相依的 aLeadTau 調整 ===
     base_tau = float(np.interp(v_ego, LEAD_ACCEL_TAU_V_EGO_BP, LEAD_ACCEL_TAU_V_EGO_V))
     if abs(self.aLeadK) < LEAD_ACCEL_CONST_ACCEL_THRESH:
       self.aLeadTau.x = base_tau
@@ -171,13 +159,6 @@ class Track:
 
 
 class VisionTrack:
-  """
-  強化 vision-only：跨幀濾波 + 自適應 tau + 事件加速 + jerk 限制 + a 混合（model a + fd）
-  目標：
-    - 前車急減速更快反應（事件時縮短 tau）
-    - 減少 a 跳針導致的煞放抖動（jerk 限制）
-    - prob 低時更穩、prob 高時更敏感（自動）
-  """
   def __init__(self):
     self.initialized = False
     self.dRel = 0.0
@@ -201,11 +182,9 @@ class VisionTrack:
     d_meas = float(lead_msg.x[0] - RADAR_TO_CAMERA)
     y_meas = float(-lead_msg.y[0])
 
-    # model 給的是 lead 絕對速度（model frame），vRel 用 model_v_ego 對齊延遲通常更小
     vLead_meas = float(lead_msg.v[0])
     vRel_meas = float(vLead_meas - model_v_ego)
 
-    # a 混合：model a + fd（降低單一來源跳動）
     a_model = float(lead_msg.a[0])
     if self.initialized:
       a_fd = float((vLead_meas - self.prev_vLead_meas) / DT_MDL)
@@ -216,16 +195,13 @@ class VisionTrack:
     w_model = _clip(VISION_A_MODEL_W_MIN + w_prob * (VISION_A_MODEL_W_MAX - VISION_A_MODEL_W_MIN), 0.0, 1.0)
     a_meas = float(w_model * a_model + (1.0 - w_model) * a_fd)
 
-    # === 自適應 tau：速度越高越穩；prob 越高越快 ===
     vrel_tau_base = float(np.interp(v_ego, VISION_VREL_TAU_V_EGO_BP, VISION_VREL_TAU_V_EGO_V))
     a_tau_base    = float(np.interp(v_ego, VISION_A_TAU_V_EGO_BP, VISION_A_TAU_V_EGO_V))
 
-    # prob 低：放大 tau（更穩）；prob 高：縮小 tau（更敏感）
     tau_scale = float(np.interp(w_prob, [0.0, 1.0], [1.4, 0.6]))
     vrel_tau = vrel_tau_base * tau_scale
     a_tau    = a_tau_base * tau_scale
 
-    # 強事件：再縮短 a_tau，提高反應
     if abs(a_meas) > VISION_A_EVENT_THRESH:
       a_tau *= VISION_A_EVENT_TAU_SCALE
 
@@ -240,7 +216,6 @@ class VisionTrack:
       self.initialized = True
       return
 
-    # d/y 不要濾太慢，避免 cut-in / 距離變化反應落後
     self.dRel = _adaptive_lpf(self.dRel, d_meas, 0.20, DT_MDL)
     self.yRel = _adaptive_lpf(self.yRel, y_meas, 0.25, DT_MDL)
 
@@ -249,7 +224,6 @@ class VisionTrack:
 
     a_f = _adaptive_lpf(self.aLead, a_meas, a_tau, DT_MDL)
 
-    # jerk 限制：避免尖峰
     da = _clip(a_f - self.prev_aLead, -VISION_A_JERK_MAX * DT_MDL, VISION_A_JERK_MAX * DT_MDL)
     self.aLead = float(self.prev_aLead + da)
 
@@ -257,7 +231,6 @@ class VisionTrack:
     self.prev_aLead = self.aLead
 
   def get_RadarState(self, model_prob: float, v_ego: float) -> dict[str, Any]:
-    # 給 MPC / 上層用的 aLeadTau：跟速度 + prob 走，事件再縮短
     base_tau = float(np.interp(v_ego, LEAD_ACCEL_TAU_V_EGO_BP, LEAD_ACCEL_TAU_V_EGO_V))
     w_prob = self._prob_blend(model_prob)
     tau_scale = float(np.interp(w_prob, [0.0, 1.0], [1.2, 0.7]))
@@ -307,7 +280,6 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
 
 def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: float, model_v_ego: float,
                                vtrack: VisionTrack | None = None) -> dict[str, Any]:
-  # 無 vtrack：保留舊行為（保底）
   if vtrack is None:
     lead_v_rel_pred = lead_msg.v[0] - model_v_ego
     return {
@@ -331,16 +303,21 @@ def get_RadarState_from_vision(lead_msg: capnp._DynamicStructReader, v_ego: floa
 
 def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capnp._DynamicStructReader,
              model_v_ego: float, low_speed_override: bool = True, vtrack: VisionTrack | None = None) -> dict[str, Any]:
-  """
-  速度自動切換策略：
-    - v_ego > SPEED_SWITCH_MS：使用「原版：雷達 + 視覺融合（雷達為主）」邏輯
-    - 其餘速度：使用「差異最小的視覺優先」邏輯
-  """
   # lead 很弱時，避免持續沿用舊的 vtrack 狀態
   if vtrack is not None and (not ready or float(lead_msg.prob) < VISION_RESET_PROB):
     vtrack.reset()
 
-  # --- 高速：退回原版（雷達為主） ---
+  # ===== 低速強制純視覺（保留 SPEED_SWITCH_KMH 的切換點）=====
+  # - 不做雷達 match
+  # - 不允許雷達覆蓋（RADAR_OVERRIDE_PROB 不生效）
+  # - 不做 low_speed_override（低速雷達補強不生效）
+  if vision_only and (v_ego <= SPEED_SWITCH_MS):
+    lead_dict: dict[str, Any] = {'status': False}
+    if ready and (lead_msg.prob > VISION_PROB_MIN):
+      lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego, vtrack=vtrack)
+    return lead_dict
+
+  # --- 高速：雷達為主 ---
   if v_ego > SPEED_SWITCH_MS:
     track = None
     if len(tracks) > 0 and ready and lead_msg.prob > .5:
@@ -350,10 +327,8 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
     if track is not None:
       lead_dict = track.get_RadarState(lead_msg.prob)
     elif ready and (lead_msg.prob > .5):
-      # 高速 fallback 也用強化版 vision track（有狀態）
       lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego, vtrack=vtrack)
 
-    # 低速覆蓋（保留原行為）
     if low_speed_override:
       low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
       if len(low_speed_tracks) > 0:
@@ -363,21 +338,17 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
 
     return lead_dict
 
-  # --- 非高速：視覺優先 ---
+  # --- 非高速：視覺優先（可被雷達覆蓋 / 低速雷達補強，僅在 vision_only=False 時會走到這裡） ---
   lead_dict: dict[str, Any] = {'status': False}
 
-  # 1) 視覺優先：只要 ready 且 prob 過門檻，就先用視覺生成 lead（強化版）
   if ready and (lead_msg.prob > VISION_PROB_MIN):
     lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego, vtrack=vtrack)
 
-    # 1b) 視覺較弱時（prob <= RADAR_OVERRIDE_PROB），才允許已匹配的雷達覆蓋
     if len(tracks) > 0 and (lead_msg.prob <= RADAR_OVERRIDE_PROB):
       trk = match_vision_to_track(v_ego, lead_msg, tracks)
       if trk is not None:
         lead_dict = trk.get_RadarState(lead_msg.prob)
-
   else:
-    # 2) 保留原本路徑：若有匹配到雷達，仍可用雷達
     if len(tracks) > 0 and ready and lead_msg.prob > .5:
       track = match_vision_to_track(v_ego, lead_msg, tracks)
     else:
@@ -388,7 +359,6 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
     elif ready and (lead_msg.prob > .5):
       lead_dict = get_RadarState_from_vision(lead_msg, v_ego, model_v_ego, vtrack=vtrack)
 
-  # 3) 低速保守覆蓋（沿用原本邏輯）
   if low_speed_override:
     low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
     if len(low_speed_tracks) > 0:
@@ -415,7 +385,6 @@ class RadarD:
 
     self.ready = False
 
-    # leadOne / leadTwo 各自維護一個有狀態的 VisionTrack
     self.vision_tracks = [VisionTrack(), VisionTrack()]
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData):
@@ -429,25 +398,19 @@ class RadarD:
 
     ar_pts = {pt.trackId: [pt.dRel, pt.yRel, pt.vRel, pt.measured] for pt in rr.points}
 
-    # *** remove missing points from meta data ***
     for ids in list(self.tracks.keys()):
       if ids not in ar_pts:
         self.tracks.pop(ids, None)
 
-    # *** compute the tracks ***
     for ids in ar_pts:
       rpt = ar_pts[ids]
-
-      # align v_ego by a fixed time to align it with the radar measurement
       v_lead = rpt[2] + self.v_ego_hist[0]
 
       if ids not in self.tracks:
         self.tracks[ids] = Track(ids, v_lead, self.kalman_params)
 
-      # 傳入 v_ego（使用與 v_lead 對齊的歷史值）
       self.tracks[ids].update(rpt[0], rpt[1], rpt[2], v_lead, rpt[3], self.v_ego_hist[0])
 
-    # *** publish radarState ***
     self.radar_state_valid = sm.all_checks()
     self.radar_state = log.RadarState.new_message()
     self.radar_state.mdMonoTime = sm.logMonoTime['modelV2']
@@ -468,14 +431,12 @@ class RadarD:
 
   def publish(self, pm: messaging.PubMaster):
     assert self.radar_state is not None
-
     radar_msg = messaging.new_message("radarState")
     radar_msg.valid = self.radar_state_valid
     radar_msg.radarState = self.radar_state
     pm.send("radarState", radar_msg)
 
 
-# fuses camera and radar data for best lead detection
 def main() -> None:
   config_realtime_process(5, Priority.CTRL_LOW)
 
