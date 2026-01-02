@@ -23,6 +23,7 @@ vision_only = True
 # 1) 前車加速度時間常數（aLeadTau）速度相依調整（雷達 Track 用）
 LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]    # m/s
 LEAD_ACCEL_TAU_V_EGO_V  = [0.4, 0.7,  1.2,  1.6]     # s
+# aLead 被視為「幾乎零加速度」的門檻（m/s^2）
 LEAD_ACCEL_CONST_ACCEL_THRESH = 0.1
 
 # 2) 視覺 / 雷達 覆蓋邏輯
