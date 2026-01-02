@@ -44,6 +44,9 @@ VISION_VREL_TAU_V_EGO_V  = [0.20, 0.25, 0.35, 0.45]  # s
 VISION_A_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]
 VISION_A_TAU_V_EGO_V  = [0.15, 0.20, 0.30, 0.45]
 
+#VISION_A_EVENT_THRESH = 0.6 → 0.45（更容易進事件模式）
+#VISION_A_EVENT_TAU_SCALE = 0.55 → 0.45（事件時更敏感）
+#VISION_A_JERK_MAX = 6.0 → 7.5（允許更快 a 變化，但仍有限制）
 # 大加速度/減速度事件：縮短 a 的 tau 以提高反應
 VISION_A_EVENT_THRESH = 0.6       # m/s^2
 VISION_A_EVENT_TAU_SCALE = 0.55   # tau *= scale（更快）
