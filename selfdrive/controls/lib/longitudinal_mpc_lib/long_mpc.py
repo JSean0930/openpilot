@@ -451,19 +451,32 @@ class LongitudinalMpc:
 
   def _ensure_accel_limits(self):
     """
-    確保 self.params[:,0/1]（a_min/a_max）是合理的：
-    - 若 planner 已寫入，且 USE_CALLER_ACCEL_LIMITS=True，則保留
-    - 若全 0 或不合理，則填 fallback
+    確保 self.params[:,0/1]（a_min/a_max）合理：
+    - 若 caller 沒寫（全 0），整段回填 fallback
+    - 若 caller 有寫，但某些點出現 a_max<=a_min：只修壞掉的點（不要整段覆蓋）
     """
-    a_min = self.params[:, 0]
-    a_max = self.params[:, 1]
+    a_min = self.params[:, 0].copy()
+    a_max = self.params[:, 1].copy()
 
-    # 判斷 “caller 沒有寫” 的常見情況：全 0 / 或 a_max <= a_min
-    caller_missing = (np.allclose(a_min, 0.0) and np.allclose(a_max, 0.0)) or np.any(a_max <= a_min + 1e-3)
-
-    if (not USE_CALLER_ACCEL_LIMITS) or caller_missing:
+    # 1) caller 完全沒寫（常見：全 0）
+    if np.allclose(a_min, 0.0) and np.allclose(a_max, 0.0):
       self.params[:, 0] = ACCEL_MIN_FALLBACK
       self.params[:, 1] = ACCEL_MAX_FALLBACK
+      return
+
+    # 2) 逐點清理：限制到 fallback 範圍內（可選，但建議）
+    a_min = np.clip(a_min, ACCEL_MIN_FALLBACK, ACCEL_MAX_FALLBACK)
+    a_max = np.clip(a_max, ACCEL_MIN_FALLBACK, ACCEL_MAX_FALLBACK)
+
+    # 3) 逐點修復不合法：只修壞掉的 stage
+    bad = a_max <= (a_min + 1e-3)
+    if np.any(bad):
+      # 用 fallback 修壞點，或用 “擴開一點點” 的方式也可
+      a_min[bad] = ACCEL_MIN_FALLBACK
+      a_max[bad] = ACCEL_MAX_FALLBACK
+
+    self.params[:, 0] = a_min
+    self.params[:, 1] = a_max
 
   def update(self, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
     v_ego = float(self.x0[1])
