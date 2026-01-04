@@ -32,10 +32,11 @@ DTSC_FUNCTION = True   # Dynamic Turn Speed Control (curve constraint)
 # - 若覺得偶爾有點「急」：先把 ACCEL_CLIP_SLEW_UP_FAST_MPS2_PER_S 往下調（例如 1.0）
 # - 若你主要想改善「前車一煞立刻反應」：把 FAST_V_DESIRED_LEAD_DECEL_THRESH 從 -0.6 改 -0.5
 """
-  •	仍會起步衝一下：SNG_A_POS_CAP 先降到 0.25~0.30、或 SNG_GUARD_TIME 加到 1.2
-	•	覺得太龜、跟不緊：SNG_A_POS_CAP 提到 0.40~0.45，或 SNG_GUARD_TIME 降到 0.8
-	•	前車一煞仍慢半拍：把 ACCEL_CLIP_SLEW_DN_FAST_MPS2_PER_S 往上加（例如 5.0），或把 SNG_LEAD_BRAKE_A 從 -0.4 → -0.3
+  • 仍會起步衝一下：SNG_A_POS_CAP 先降到 0.25~0.30、或 SNG_GUARD_TIME 加到 1.2
+  • 覺得太龜、跟不緊：SNG_A_POS_CAP 提到 0.40~0.45，或 SNG_GUARD_TIME 降到 0.8
+  • 前車一煞仍慢半拍：把 ACCEL_CLIP_SLEW_DN_FAST_MPS2_PER_S 往上加（例如 5.0），或把 SNG_LEAD_BRAKE_A 從 -0.4 → -0.3
 """
+
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
@@ -85,6 +86,12 @@ SNG_A_POS_CAP = 0.35                # m/s^2（想更保守→0.25；想更跟得
 SNG_LEAD_BRAKE_A = -0.4             # m/s^2（前車開始煞的門檻）
 SNG_VREL_CLOSING = -0.5             # m/s（vRel 變負＝你在追近）
 
+# ====================== MPC accel limit 寫入（配合 long_mpc USE_CALLER_ACCEL_LIMITS） ======================
+# 目的：每回合把本回合 accel_clip（含 SNG guard / throttle gating / turn limit）寫入 MPC params
+# 好處：MPC 的可行域會一致反映 planner 的上/下限，SNG guard 的上限也會「真的」影響 MPC 解
+# 注意：不同 fork 的 long_mpc 可能沒有 params 或型別不同，因此這裡做相容寫法避免 process crash
+WRITE_ACCEL_LIMITS_TO_MPC = True
+MPC_PARAMS_WARN_INTERVAL_S = 5.0     # 若寫入失敗，警告節流（秒）
 # =======================================================================
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
@@ -187,6 +194,38 @@ def _accel_clip_slew_steps(dt: float, v_ego: float, lead_a: float):
   return max_up, max_dn
 
 
+def _try_write_mpc_accel_limits(mpc: LongitudinalMpc, accel_clip, warn_cb=None) -> bool:
+  """
+  相容寫法：把 accel_clip[0/1] 寫進 mpc.params 的 a_min/a_max
+  - 支援 numpy array：mpc.params[:,0/1]
+  - 支援 list-of-array：for i: mpc.params[i][0/1]
+  - 若 mpc 沒有 params 或不可寫，回傳 False（不丟例外，避免 process crash）
+  """
+  if not hasattr(mpc, "params"):
+    if warn_cb is not None:
+      warn_cb("LongitudinalPlanner: mpc has no params; skip writing accel limits")
+    return False
+
+  try:
+    # numpy array 版本
+    mpc.params[:, 0] = float(accel_clip[0])  # a_min
+    mpc.params[:, 1] = float(accel_clip[1])  # a_max
+    return True
+  except Exception:
+    pass
+
+  try:
+    # list-of-array 版本
+    for i in range(len(mpc.params)):
+      mpc.params[i][0] = float(accel_clip[0])
+      mpc.params[i][1] = float(accel_clip[1])
+    return True
+  except Exception:
+    if warn_cb is not None:
+      warn_cb("LongitudinalPlanner: mpc.params not writable; skip writing accel limits")
+    return False
+
+
 class LongitudinalPlanner:
   def __init__(self, CP, init_v=0.0, init_a=0.0, dt=DT_MDL):
     self.CP = CP
@@ -211,6 +250,9 @@ class LongitudinalPlanner:
     self.sng_guard_t = 999.0
     self.prev_standstill = False
     self.prev_lead_v = 0.0
+
+    # mpc.params 寫入失敗警告節流
+    self._last_mpc_params_warn_t = -1e9
 
     # 依照本檔案開關決定是否建立模組（避免多餘運算/依賴外部 flags）
     self.acm = ACM() if ACM_FUNCTION else None
@@ -297,8 +339,7 @@ class LongitudinalPlanner:
     # No change cost when user is controlling the speed, or when standstill
     prev_accel_constraint = not (reset_state or standstill)
 
-    # ====================== 先算出 base accel_clip（會寫進 MPC） ======================
-    # 目標：讓 long_mpc 的 USE_CALLER_ACCEL_LIMITS=True 能真正吃到本 planner 的限制（含 turn / throttle / SNG）
+    # 依 mode 決定 accel_clip（本回合的 a_min/a_max）
     if mode == 'acc':
       accel_clip = [ACCEL_MIN, get_max_accel(v_ego)]
       steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['liveParameters'].angleOffsetDeg
@@ -334,42 +375,52 @@ class LongitudinalPlanner:
     if force_slow_decel:
       v_cruise = 0.0
 
-    # ====================== yo-yo 防抖：把 SNG 限制提前作用在 accel_clip（寫進 MPC） ======================
-    # 這樣 MPC 內部解出來的解就會更符合「起步不衝」「前車再煞就別再給正加速」的可行域
+    # ====================== yo-yo 防抖：提前收緊 accel_clip（讓 MPC 也吃到這個上限） ======================
+    # 1) 觀察窗內：限制正向加速度上限（避免起步衝一下）
+    # 2) 若前車又在煞/你正在追近：直接禁止正加速（避免先衝再急煞）
     if in_sng_guard:
       accel_clip[1] = min(accel_clip[1], SNG_A_POS_CAP)
 
     if (lead_ok and (v_ego <= SNG_GUARD_VEGO_MAX) and (lead_d <= SNG_GUARD_DREL_MAX) and
         ((lead_a < SNG_LEAD_BRAKE_A) or (lead_vrel < SNG_VREL_CLOSING))):
       accel_clip[1] = min(accel_clip[1], 0.0)
-
-    # ====================== accel_clip slew rate（非對稱）提前：讓 MPC / 輸出端一致 ======================
-    # 讓「煞車放寬 / 收緊上限」更快，避免慢半拍
-    # 讓「加速放寬」更慢，避免起步衝
-    max_up, max_dn = _accel_clip_slew_steps(self.dt, v_ego, lead_a)
-    for idx in range(2):
-      accel_clip[idx] = np.clip(
-        accel_clip[idx],
-        self.prev_accel_clip[idx] - max_dn,
-        self.prev_accel_clip[idx] + max_up
-      )
-
-    # ====================== 關鍵修改：每回合把 accel_clip 寫進 MPC params（整段 horizon） ======================
-    # - long_mpc 若 USE_CALLER_ACCEL_LIMITS=True：就會把這裡的 a_min/a_max 當作每一段的可行域限制
-    # - DTSC 若啟用：再逐點收緊（覆蓋前段/全段）
-    self.mpc.params[:, 0] = float(accel_clip[0])   # a_min
-    self.mpc.params[:, 1] = float(accel_clip[1])   # a_max
-    # ===================================================================================================
+    # =================================================================================================
 
     self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality)
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
 
+    # ====================== 關鍵修改：每回合把 accel_clip 寫進 MPC params（整段 horizon） ======================
+    # 你之前版本只有 DTSC 時才寫；這裡改成「每回合都寫」
+    # - 讓 long_mpc 的 USE_CALLER_ACCEL_LIMITS=True 能完整生效
+    # - 讓 SNG guard / throttle gating / turn limit 的上限下限一致地影響 MPC 可行域
+    if WRITE_ACCEL_LIMITS_TO_MPC:
+      now_t = 1e-9 * sm.logMonoTime['modelV2']
+      def _warn_once(msg: str):
+        if (now_t - self._last_mpc_params_warn_t) > MPC_PARAMS_WARN_INTERVAL_S:
+          self._last_mpc_params_warn_t = now_t
+          cloudlog.warning(msg)
+
+      _try_write_mpc_accel_limits(self.mpc, accel_clip, warn_cb=_warn_once)
+    # ===================================================================================================
+
     # Apply DTSC curve speed constraints if enabled
+    # 注意：DTSC 是逐點（horizon）限制，會在這裡覆蓋/收緊剛剛寫入的 accel_clip
     if (dp_flags & DPFlags.DTSC) and (self.dtsc is not None):
       a_min_dtsc, a_max_dtsc = self.dtsc.get_mpc_constraints(sm['modelV2'], v_ego, accel_clip[0], accel_clip[1])
-      for i in range(len(a_min_dtsc)):
-        self.mpc.params[i, 0] = max(accel_clip[0], a_min_dtsc[i])   # a_min
-        self.mpc.params[i, 1] = min(accel_clip[1], a_max_dtsc[i])   # a_max
+      # 優先使用 accel_clip（含 SNG guard），再套 DTSC 逐點收緊
+      try:
+        for i in range(len(a_min_dtsc)):
+          self.mpc.params[i, 0] = max(float(accel_clip[0]), float(a_min_dtsc[i]))   # a_min
+          self.mpc.params[i, 1] = min(float(accel_clip[1]), float(a_max_dtsc[i]))   # a_max
+      except Exception:
+        # 若 mpc.params 不是 ndarray，回退到 list-of-array 寫法（避免 crash）
+        try:
+          for i in range(len(a_min_dtsc)):
+            self.mpc.params[i][0] = max(float(accel_clip[0]), float(a_min_dtsc[i]))
+            self.mpc.params[i][1] = min(float(accel_clip[1]), float(a_max_dtsc[i]))
+        except Exception:
+          # 再失敗就算了，不要把 process 弄掛
+          pass
 
     self.mpc.update(sm['radarState'], v_cruise, x, v, a, j, personality=sm['selfdriveState'].personality)
 
@@ -414,8 +465,7 @@ class LongitudinalPlanner:
 
     # ====================== yo-yo 防抖：輸出端限制（最關鍵） ======================
     # 1) 觀察窗內：限制正向加速度上限（避免起步衝一下）
-    # 2) 如果偵測到前車又在煞/你正在追近：直接禁止正加速（避免慢半拍又補救）
-    # 注意：這裡仍保留，作為「就算 MPC 解偶爾偏激」的最後保險
+    # 2) 如果偵測前車又在煞/你正在追近：直接禁止正加速（避免慢半拍又補救）
     if in_sng_guard:
       output_a_target = min(output_a_target, SNG_A_POS_CAP)
 
@@ -423,8 +473,17 @@ class LongitudinalPlanner:
         ((lead_a < SNG_LEAD_BRAKE_A) or (lead_vrel < SNG_VREL_CLOSING))):
       output_a_target = min(output_a_target, 0.0)
 
-    # 最終輸出 clip：
-    # 這裡的 accel_clip 已經是「slew 後 + SNG/turn/throttle 後」且也已寫進 MPC
+    # ====================== accel_clip slew rate（非對稱） ======================
+    # 讓「煞車放寬 / 收緊上限」更快，避免慢半拍
+    # 讓「加速放寬」更慢，避免起步衝
+    max_up, max_dn = _accel_clip_slew_steps(self.dt, v_ego, lead_a)
+    for idx in range(2):
+      accel_clip[idx] = np.clip(
+        accel_clip[idx],
+        self.prev_accel_clip[idx] - max_dn,
+        self.prev_accel_clip[idx] + max_up
+      )
+
     self.output_a_target = np.clip(output_a_target, accel_clip[0], accel_clip[1])
     self.prev_accel_clip = accel_clip
 
