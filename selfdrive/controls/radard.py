@@ -51,7 +51,7 @@ VISION_PROB_MIN = 0.35
 RADAR_OVERRIDE_PROB = 0.60
 
 # 視覺/雷達切換速度門檻（km/h）— 保留此機制
-SPEED_SWITCH_KMH = 30.0
+SPEED_SWITCH_KMH = 40.0
 SPEED_SWITCH_MS = SPEED_SWITCH_KMH / 3.6
 
 # ====================== Vision-only 強化參數（核心） ======================
