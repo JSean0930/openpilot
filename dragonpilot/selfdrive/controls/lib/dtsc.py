@@ -16,8 +16,8 @@ AGGR_MAX = 1.5
 CURV_V_MIN = 2.0              # 曲率計算最小速度（m/s）
 MIN_CURVATURE = 0.0015        # 小於此曲率視為直線（避免雜訊觸發）
 
-EXCESS_SPEED_MPS = 0.6        # 超速門檻（m/s），降低一點更容易觸發煞車
-MIN_CURVE_DISTANCE = 8.0      # 太近不動作
+EXCESS_SPEED_MPS = 0.4        # 超速門檻（m/s），降低一點更容易觸發煞車 0.6
+MIN_CURVE_DISTANCE = 4.0      # 太近不動作 8.0
 BRAKE_PREBUFFER_M = 18.0      # 提前鋪陳距離（越大越早開始）
 
 SAFE_SPEED_BOOST_MPS = 0.15   # ✅ 改小：避免把目標速度放太寬導致不煞
