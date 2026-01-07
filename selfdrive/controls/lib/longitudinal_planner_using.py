@@ -18,6 +18,12 @@ from dragonpilot.selfdrive.controls.lib.acm import ACM
 from dragonpilot.selfdrive.controls.lib.aem import AEM
 from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 
+# ====================================================================
+
+  #低速跟停還想更敏感：把 FAST_V_DESIRED_BLEND 往上加到 0.75~0.8
+	#若覺得偶爾有點「急」：先把 ACCEL_CLIP_SLEW_FAST_MPS2_PER_S 往下調到 2.0
+	#若你主要想改善「前車一煞立刻反應」：把 FAST_V_DESIRED_LEAD_DECEL_THRESH 從 -0.6 改 -0.5
+
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
