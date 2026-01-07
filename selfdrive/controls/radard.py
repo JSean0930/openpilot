@@ -29,7 +29,7 @@ VISION_PROB_MIN = 0.35
 RADAR_OVERRIDE_PROB = 0.60
 
 # 視覺/雷達切換速度門檻（km/h）
-SPEED_SWITCH_KMH = 30.0
+SPEED_SWITCH_KMH = 60.0
 SPEED_SWITCH_MS = SPEED_SWITCH_KMH / 3.6
 
 # ====================== 本次修改重點：低速純視覺（不允許雷達覆蓋） ======================
