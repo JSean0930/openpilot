@@ -8,7 +8,7 @@ from openpilot.common.swaglog import cloudlog
 # ==============================
 
 COMFORT_LAT_G = 0.20          # 舒適側向加速度上限（g）
-SAFETY_FACTOR = 0.75          # 越小越保守（你目前很保守 OK）
+SAFETY_FACTOR = 0.65          # 越小越保守（你目前很保守 OK）0.75
 
 AGGR_MIN = 0.5
 AGGR_MAX = 1.5
@@ -29,7 +29,7 @@ CURV_LPF_ALPHA = 0.35         # 曲率 horizon 低通濾波
 LOG_EVERY_N = 20              # log 節流
 
 # ✅ 新增：觸發後最小入彎減速（避免 ramp 初期完全不煞）
-MIN_ENTRY_DECEL = -0.35       # m/s^2（太大會「一觸發就煞」，太小會沒感覺）
+MIN_ENTRY_DECEL = -0.25       # m/s^2（太大會「一觸發就煞」，太小會沒感覺）-0.35
 
 # ✅ 新增：確保 ramp 至少有一段時間，不要過短導致突然變很負
 RAMP_MIN_S = 0.8              # ramp 最短秒數
