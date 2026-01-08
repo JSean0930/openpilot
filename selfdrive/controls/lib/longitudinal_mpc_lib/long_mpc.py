@@ -5,6 +5,7 @@ import numpy as np
 from cereal import log
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
 from openpilot.common.realtime import DT_MDL
+from openpilot.common.constants import CV
 from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
@@ -17,20 +18,15 @@ else:
 
 from casadi import SX, vertcat
 
-
-# ============================================================================
-# long_mpc：配合你已優化的 radard（看得準、看得快）+ longitudinal_planner（SNG guard）
+# ============================================================
+# long_mpc.py（ACADOS）
+# 方法B版本：由 LongitudinalPlanner 明確傳入 a_min / a_max
+# - a_min/a_max 會寫入 self.params[:,0/1]，並透過 slack constraint 生效
+# - ACC / blended 都會套用同一組 a_min/a_max（因此 blended 也能套用 A_CRUISE_MAX）
 #
-# 本版優化目標（只做“配合”，不跟 planner 打架）：
-#  1) 對「前車突然再煞停」更敏感：不要把負加速度在 MPC 預測裡太快衰減掉
-#  2) moving lead 的 stopped-equivalence 考慮 lead 正在煞：lead 煞越大 → 等效距離更小 → 障礙更近
-#  3) 不覆蓋 planner 送進來的 accel 限制（a_min/a_max），讓 DTSC / SNG 上限能真正生效
-#
-# 注意：
-#  - 不改動 T_IDXS（你先前要求）
-#  - 起步保守/限制正向加速度：由 planner 負責（這裡只讓“煞車反應更快更真實”）
-# ============================================================================
-
+# 重要：要讓 blended 套用 A_CRUISE_MAX，Planner 必須在 blended 模式也把
+#      a_max 設為 get_max_accel(v_ego)（或 per-stage array），並傳進來。
+# ============================================================
 
 MODEL_NAME = 'long'
 LONG_MPC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +42,9 @@ COST_E_DIM = 5
 COST_DIM = COST_E_DIM + 1
 CONSTR_DIM = 4
 
+# =========================
+# 成本/權重（依你原本設定）
+# =========================
 X_EGO_OBSTACLE_COST = 3.
 X_EGO_COST = 0.
 V_EGO_COST = 0.
@@ -58,65 +57,27 @@ LEAD_DANGER_FACTOR = 0.75
 LIMIT_COST = 1e6
 ACADOS_SOLVER_TYPE = 'SQP_RTI'
 
-# Fewer timestamps don't hurt performance and lead to
-# much better convergence of the MPC with low iterations
+# =========================
+# 時域設定
+# =========================
 N = 12
 MAX_T = 10.0
 T_IDXS_LST = [index_function(idx, max_val=MAX_T, max_idx=N) for idx in range(N+1)]
-
-T_IDXS = np.array(T_IDXS_LST)          # ⚠️ 不改
+T_IDXS = np.array(T_IDXS_LST)
 FCW_IDXS = T_IDXS < 5.0
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
+
+# =========================
+# 物理/限制設定
+# =========================
 COMFORT_BRAKE = 2.5
 STOP_DISTANCE = 6.0
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
 
 
-# ====================== 可調參數區（TUNING PARAMS） ======================
-# 1) 是否保留外部（planner）寫入的 a_min/a_max 限制
-#    - True：若 planner 有先寫 self.params[:,0/1]（例如 DTSC 或你 SNG 上限收緊），MPC 會使用
-#    - False：強制 MPC 自己用 fallback（一般不建議）
-USE_CALLER_ACCEL_LIMITS = True
-
-# planner 沒寫限制時的 fallback（維持原本行為）
-ACCEL_MIN_FALLBACK = ACCEL_MIN
-ACCEL_MAX_FALLBACK = ACCEL_MAX
-
-# 2) SNG（塞車走走停停）下的 lead “煞車敏感化”開關
-#    這裡不做正向保守（那由 planner 的 SNG guard 管）
-#    只在「lead 變負加速度」時，讓 MPC 更快把障礙拉近、避免慢半拍
-MPC_SNG_BRAKE_SENSE_ENABLE = True
-MPC_SNG_VEGO_MAX = 8.0          # m/s ≈ 29 km/h（低速才啟用）
-MPC_SNG_DREL_MAX = 18.0         # m（近距離才啟用）
-MPC_SNG_MODELPROB_MIN = 0.50    # lead 可信度下限（避免亂敏感）
-
-# 2a) lead accel 的衰減（extrapolate_lead 內用 a_lead_tau）
-#     你目前公式：a_traj = a0 * exp(-a_lead_tau * (t^2)/2)
-#     → a_lead_tau 越大，衰減越快（越快回到 0）
-#     所以在「lead 明顯煞」時，我們要把 a_lead_tau 變小，讓負加速度維持久一點 → 更保守
-MPC_LEAD_BRAKE_A_THRESH = -0.40         # m/s^2（低於此值視為 lead 在煞）
-MPC_A_LEAD_TAU_SCALE_BRAKE = 0.55       # 煞車時 tau 乘上此值（越小越保守/更快反應）
-MPC_A_LEAD_TAU_MIN = 0.10              # 避免太小造成發散
-MPC_A_LEAD_TAU_MAX = 3.00              # 避免太大導致過度鈍化
-
-# 2b) moving lead 的 stopped-equivalence：lead 正在煞時，等效距離要更小（障礙更近）
-#     原本：v^2/(2*COMFORT_BRAKE)（假設 lead 也用舒適煞車）
-#     改：若 lead 真的在更大減速度煞車，則用更大的 brake_eff → v^2/(2*brake_eff) 更小 → 更保守
-LEAD_BRAKE_EFF_MAX = 6.0                # m/s^2（上限，避免噪聲讓 brake_eff 爆大）
-LEAD_BRAKE_EFF_GAIN = 1.00              # 1.0=直接用 |-a_lead|；<1 會比較溫和
-
-# 2c) danger factor（安全距離約束的倍率）在 SNG/煞車時可提高到 1.0
-#     constraint：x_obstacle - x_ego >= lead_danger_factor * desired_dist
-#     lead_danger_factor 越大 → 越保守
-MPC_LEAD_DANGER_FACTOR_SNG = 1.00        # 建議先用 1.0，不要太大避免 slack 過多
-
-# 2d) t_follow 在 SNG/煞車時可微加一點（很小即可，避免變龜）
-MPC_T_FOLLOW_SNG_ADD = 0.10             # 秒（0.0~0.2 建議範圍）
-# =======================================================================
-
-
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
+  """人格 -> jerk factor（影響 a_change / j 成本）"""
   if personality == log.LongitudinalPersonality.relaxed:
     return 1.0
   elif personality == log.LongitudinalPersonality.standard:
@@ -127,48 +88,81 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
     raise NotImplementedError("Longitudinal personality not supported")
 
 
-def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
+def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
+  """速度相依 T_FOLLOW（你原本邏輯）"""
+  v_kph = float(v_ego * 3.6)
+
   if personality == log.LongitudinalPersonality.relaxed:
-    return 1.45
+    base = 1.0 + 0.0030 * v_kph
   elif personality == log.LongitudinalPersonality.standard:
-    return 1.25
+    base = 1.0 + 0.0025 * v_kph
   elif personality == log.LongitudinalPersonality.aggressive:
-    return 1.00
+    base = 1.0 + 0.0020 * v_kph
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
+  return base
 
-def get_stopped_equivalence_factor(v_lead, brake_eff=COMFORT_BRAKE):
+
+def get_stopped_equivalence_factor(v_lead, v_ego):
   """
-  moving lead 的“等效停止距離”：
-    v^2 / (2*b)
-  b 越大（表示 lead 煞越大）→ 等效距離越小 → 障礙更近（更保守）
+  低速更積極縮短跟車距離（你原本版本，保留）
   """
-  b = float(np.clip(brake_eff, 0.1, 50.0))
-  return (v_lead ** 2) / (2 * b)
+  v_lead = np.asarray(v_lead, dtype=float)
+  v_ego = float(v_ego)
+
+  v10 = 10.0 * CV.KPH_TO_MS
+  v50 = 50.0 * CV.KPH_TO_MS
+  v60 = 60.0 * CV.KPH_TO_MS
+
+  delta = v_lead - v_ego
+
+  w_k     = np.clip(1.0 - (v_ego / v60), 0.0, 1.0)
+  w_quick = np.clip(1.0 - (v_ego / v50), 0.0, 1.0)
+  w_base  = np.clip(1.0 - (v_ego / v10), 0.0, 1.0)
+
+  k_low, k_high = 5.5, 3.5
+  k = k_high + (k_low - k_high) * w_k
+
+  quad_gain = 0.75
+  quick = quad_gain * (np.clip(delta, 0.0, 5.0) ** 2) * w_quick
+
+  base = k * np.maximum(delta, 0.0) * (0.6 + 0.4 * w_base) * w_base
+
+  v_diff_offset = base + quick
+  cap_low, cap_high = 8.0, 5.0
+  cap = cap_high + (cap_low - cap_high) * w_k
+  v_diff_offset = np.clip(v_diff_offset, 0.0, cap)
+
+  return (v_lead ** 2) / (2 * COMFORT_BRAKE) + v_diff_offset
 
 
 def get_safe_obstacle_distance(v_ego, t_follow):
+  """安全距離：煞停距離 + 跟車時間 + 停車距離"""
   return (v_ego ** 2) / (2 * COMFORT_BRAKE) + t_follow * v_ego + STOP_DISTANCE
 
 
 def desired_follow_distance(v_ego, v_lead, t_follow=None):
   if t_follow is None:
-    t_follow = get_T_FOLLOW()
-  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead)
+    t_follow = get_T_FOLLOW(v_ego)
+  return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead, v_ego)
 
+
+# ============================================================
+# ACADOS model / ocp 生成
+# ============================================================
 
 def gen_long_model():
   model = AcadosModel()
   model.name = MODEL_NAME
 
-  # set up states & controls
+  # states: x, v, a
   x_ego = SX.sym('x_ego')
   v_ego = SX.sym('v_ego')
   a_ego = SX.sym('a_ego')
   model.x = vertcat(x_ego, v_ego, a_ego)
 
-  # controls
+  # control: jerk
   j_ego = SX.sym('j_ego')
   model.u = vertcat(j_ego)
 
@@ -178,7 +172,8 @@ def gen_long_model():
   a_ego_dot = SX.sym('a_ego_dot')
   model.xdot = vertcat(x_ego_dot, v_ego_dot, a_ego_dot)
 
-  # live parameters
+  # live parameters（會在 run() 逐 stage set('p', params[i])）
+  # p = [a_min, a_max, x_obstacle, prev_a, t_follow, lead_danger_factor]
   a_min = SX.sym('a_min')
   a_max = SX.sym('a_max')
   x_obstacle = SX.sym('x_obstacle')
@@ -187,7 +182,7 @@ def gen_long_model():
   lead_danger_factor = SX.sym('lead_danger_factor')
   model.p = vertcat(a_min, a_max, x_obstacle, prev_a, lead_t_follow, lead_danger_factor)
 
-  # dynamics model
+  # dynamics
   f_expl = vertcat(v_ego, a_ego, j_ego)
   model.f_impl_expr = model.xdot - f_expl
   model.f_expl_expr = f_expl
@@ -200,16 +195,13 @@ def gen_long_ocp():
 
   Tf = T_IDXS[-1]
 
-  # set dimensions
   ocp.dims.N = N
 
-  # set cost module
   ocp.cost.cost_type = 'NONLINEAR_LS'
   ocp.cost.cost_type_e = 'NONLINEAR_LS'
 
   QR = np.zeros((COST_DIM, COST_DIM))
   Q = np.zeros((COST_E_DIM, COST_E_DIM))
-
   ocp.cost.W = QR
   ocp.cost.W_e = Q
 
@@ -222,34 +214,44 @@ def gen_long_ocp():
   lead_t_follow = ocp.model.p[4]
   lead_danger_factor = ocp.model.p[5]
 
-  ocp.cost.yref = np.zeros((COST_DIM, ))
-  ocp.cost.yref_e = np.zeros((COST_E_DIM, ))
+  ocp.cost.yref = np.zeros((COST_DIM,))
+  ocp.cost.yref_e = np.zeros((COST_E_DIM,))
 
   desired_dist_comfort = get_safe_obstacle_distance(v_ego, lead_t_follow)
 
-  # The main cost in normal operation is how close you are to the "desired" distance
-  # from an obstacle at every timestep.
-  costs = [((x_obstacle - x_ego) - (desired_dist_comfort)) / (v_ego + 10.),
-           x_ego,
-           v_ego,
-           a_ego,
-           a_ego - prev_a,
-           j_ego]
+  # cost_y: [dist_error, x, v, a, a-prev_a, j]
+  costs = [
+    ((x_obstacle - x_ego) - (desired_dist_comfort)) / (v_ego + 10.),
+    x_ego,
+    v_ego,
+    a_ego,
+    a_ego - prev_a,
+    j_ego
+  ]
   ocp.model.cost_y_expr = vertcat(*costs)
   ocp.model.cost_y_expr_e = vertcat(*costs[:-1])
 
-  # Constraints:
-  constraints = vertcat(v_ego,
-                        (a_ego - a_min),
-                        (a_max - a_ego),
-                        ((x_obstacle - x_ego) - lead_danger_factor * (desired_dist_comfort)) / (v_ego + 10.))
+  # slack constraints:
+  # 0) v_ego >= 0  -> v_ego
+  # 1) a_ego >= a_min -> (a_ego - a_min)
+  # 2) a_ego <= a_max -> (a_max - a_ego)
+  # 3) keep distance -> ((x_obs-x_ego) - lead_danger_factor*desired_dist)/(...)
+
+  constraints = vertcat(
+    v_ego,
+    (a_ego - a_min),
+    (a_max - a_ego),
+    ((x_obstacle - x_ego) - lead_danger_factor * (desired_dist_comfort)) / (v_ego + 10.)
+  )
   ocp.model.con_h_expr = constraints
 
   x0 = np.zeros(X_DIM)
   ocp.constraints.x0 = x0
-  ocp.parameter_values = np.array([ACCEL_MIN_FALLBACK, ACCEL_MAX_FALLBACK, 0.0, 0.0, get_T_FOLLOW(), LEAD_DANGER_FACTOR])
 
-  # slack cost weights (runtime set)
+  # 初始參數值（runtime 會覆蓋）
+  ocp.parameter_values = np.array([ACCEL_MIN, ACCEL_MAX, 0.0, 0.0, 1.0, LEAD_DANGER_FACTOR], dtype=float)
+
+  # slack cost weights：runtime 再 set
   cost_weights = np.zeros(CONSTR_DIM)
   ocp.cost.zl = cost_weights
   ocp.cost.Zl = cost_weights
@@ -260,7 +262,6 @@ def gen_long_ocp():
   ocp.constraints.uh = 1e4 * np.ones(CONSTR_DIM)
   ocp.constraints.idxsh = np.arange(CONSTR_DIM)
 
-  # solver options
   ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
   ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
   ocp.solver_options.integrator_type = 'ERK'
@@ -270,13 +271,16 @@ def gen_long_ocp():
   ocp.solver_options.qp_solver_iter_max = 10
   ocp.solver_options.qp_tol = 1e-3
 
-  # set prediction horizon
   ocp.solver_options.tf = Tf
   ocp.solver_options.shooting_nodes = T_IDXS
 
   ocp.code_export_directory = EXPORT_DIR
   return ocp
 
+
+# ============================================================
+# LongitudinalMpc class
+# ============================================================
 
 class LongitudinalMpc:
   def __init__(self, mode='acc', dt=DT_MDL):
@@ -288,26 +292,23 @@ class LongitudinalMpc:
 
   def reset(self):
     self.solver.reset()
-    self.v_solution = np.zeros(N + 1)
-    self.a_solution = np.zeros(N + 1)
+
+    self.v_solution = np.zeros(N+1)
+    self.a_solution = np.zeros(N+1)
     self.prev_a = np.array(self.a_solution)
     self.j_solution = np.zeros(N)
 
-    self.yref = np.zeros((N + 1, COST_DIM))
+    self.yref = np.zeros((N+1, COST_DIM))
     for i in range(N):
       self.solver.cost_set(i, "yref", self.yref[i])
     self.solver.cost_set(N, "yref", self.yref[N][:COST_E_DIM])
 
-    self.x_sol = np.zeros((N + 1, X_DIM))
+    self.x_sol = np.zeros((N+1, X_DIM))
     self.u_sol = np.zeros((N, 1))
 
-    # params：讓 planner 可以在外部先寫入 a_min/a_max（例如 DTSC 或 SNG guard）
-    self.params = np.zeros((N + 1, PARAM_DIM))
-    # 給一個合理預設，避免“全 0”時造成 constraint 不合理
-    self.params[:, 0] = ACCEL_MIN_FALLBACK
-    self.params[:, 1] = ACCEL_MAX_FALLBACK
-
-    for i in range(N + 1):
+    # params: (N+1, PARAM_DIM) = [a_min, a_max, x_obs, prev_a, t_follow, lead_danger]
+    self.params = np.zeros((N+1, PARAM_DIM))
+    for i in range(N+1):
       self.solver.set(i, 'x', np.zeros(X_DIM))
 
     self.last_cloudlog_t = 0
@@ -315,227 +316,192 @@ class LongitudinalMpc:
     self.crash_cnt = 0.0
     self.solution_status = 0
 
-    # timers
+    # timings
     self.solve_time = 0.0
     self.time_qp_solution = 0.0
     self.time_linearization = 0.0
     self.time_integrator = 0.0
 
     self.x0 = np.zeros(X_DIM)
+
     self.set_weights()
 
   def set_cost_weights(self, cost_weights, constraint_cost_weights):
+    """設定 cost matrix 與 slack cost（constraint 的 L2 代價）"""
     W = np.asfortranarray(np.diag(cost_weights))
     for i in range(N):
-      # reduce the cost on (a-a_prev) later in the horizon.
+      # (a - prev_a) 的 cost 在後段衰減，避免 horizon 後段過度抑制加速度變化
       W[4, 4] = cost_weights[4] * np.interp(T_IDXS[i], [0.0, 1.0, 2.0], [1.0, 1.0, 0.0])
       self.solver.cost_set(i, 'W', W)
+
+    # terminal cost（沒有 jerk 那一項）
     self.solver.cost_set(N, 'W', np.copy(W[:COST_E_DIM, :COST_E_DIM]))
 
-    Zl = np.array(constraint_cost_weights)
+    Zl = np.array(constraint_cost_weights, dtype=float)
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
   def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
+    """依 mode/personality 設定成本權重"""
     jerk_factor = get_jerk_factor(personality)
+
     if self.mode == 'acc':
       a_change_cost = A_CHANGE_COST if prev_accel_constraint else 0
-      cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST,
-                      jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
+      cost_weights = [
+        X_EGO_OBSTACLE_COST,
+        X_EGO_COST,
+        V_EGO_COST,
+        A_EGO_COST,
+        jerk_factor * a_change_cost,
+        jerk_factor * J_EGO_COST
+      ]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
+
     elif self.mode == 'blended':
       a_change_cost = 40.0 if prev_accel_constraint else 0
       cost_weights = [0., 0.1, 0.2, 5.0, a_change_cost, 1.0]
       constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
+
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner cost set')
+
     self.set_cost_weights(cost_weights, constraint_cost_weights)
 
   def set_cur_state(self, v, a):
+    """設定當前狀態（x0）"""
     v_prev = self.x0[1]
     self.x0[1] = v
     self.x0[2] = a
+    # 大跳變時，用同一個初始 guess 幫助收斂
     if abs(v_prev - v) > 2.:
-      for i in range(N + 1):
+      for i in range(N+1):
         self.solver.set(i, 'x', self.x0)
 
   @staticmethod
   def extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau):
-    """
-    注意：這裡的 a_lead_tau 在你目前公式下，是“衰減強度係數”
-      a_traj = a0 * exp(-a_lead_tau * t^2 / 2)
-    → a_lead_tau 越大，衰減越快（越快回到 0）
-    """
+    """前車軌跡外推（a 指數衰減）"""
     a_lead_traj = a_lead * np.exp(-a_lead_tau * (T_IDXS ** 2) / 2.)
     v_lead_traj = np.clip(v_lead + np.cumsum(T_DIFFS * a_lead_traj), 0.0, 1e8)
     x_lead_traj = x_lead + np.cumsum(T_DIFFS * v_lead_traj)
-    lead_xv = np.column_stack((x_lead_traj, v_lead_traj))
-    return lead_xv
-
-  def _sng_brake_sense_active(self, v_ego, x_lead, a_lead, model_prob) -> bool:
-    """
-    判斷是否啟用 “SNG 煞車敏感化”（只在低速近距離且 lead 可信且在煞）
-    """
-    if not MPC_SNG_BRAKE_SENSE_ENABLE:
-      return False
-    if v_ego > MPC_SNG_VEGO_MAX:
-      return False
-    if x_lead > MPC_SNG_DREL_MAX:
-      return False
-    if model_prob < MPC_SNG_MODELPROB_MIN:
-      return False
-    return (a_lead < MPC_LEAD_BRAKE_A_THRESH)
-
-  def _get_brake_eff(self, a_lead, model_prob) -> float:
-    """
-    依 lead 的負加速度決定等效煞車強度（用於 stopped-equivalence）
-    - a_lead 越負 → brake_eff 越大 → 等效距離越小（更保守）
-    """
-    if model_prob < MPC_SNG_MODELPROB_MIN:
-      return COMFORT_BRAKE
-    if a_lead >= MPC_LEAD_BRAKE_A_THRESH:
-      return COMFORT_BRAKE
-    b = float(np.clip((-a_lead) * LEAD_BRAKE_EFF_GAIN, COMFORT_BRAKE, LEAD_BRAKE_EFF_MAX))
-    return b
-
-  def _get_lead_fields(self, lead, v_ego):
-    """
-    取出 lead 欄位；若無 lead 則回傳一組“假的遠前車”，讓 MPC 保持可解
-    """
-    if lead is not None and lead.status:
-      x_lead = float(lead.dRel)
-      v_lead = float(lead.vLead)
-      a_lead = float(lead.aLeadK)
-      a_lead_tau = float(lead.aLeadTau)
-      model_prob = float(getattr(lead, "modelProb", 0.0))
-      return x_lead, v_lead, a_lead, a_lead_tau, model_prob
-
-    # Fake a fast lead car, so mpc can keep running in the same mode
-    x_lead = 50.0
-    v_lead = v_ego + 10.0
-    a_lead = 0.0
-    a_lead_tau = _LEAD_ACCEL_TAU
-    model_prob = 0.0
-    return x_lead, v_lead, a_lead, a_lead_tau, model_prob
+    return np.column_stack((x_lead_traj, v_lead_traj))
 
   def process_lead(self, lead):
-    """
-    lead → 產生 lead_xv（x,v trajectory）
-    並在 SNG/煞車時做兩個“只增強負向反應”的調整：
-      1) a_lead_tau 變小 → 負加速度衰減更慢（更保守）
-      2) stopped-equivalence 用更大的 brake_eff → 障礙更近（更保守）
-    """
-    v_ego = float(self.x0[1])
-
-    x_lead, v_lead, a_lead, a_lead_tau, model_prob = self._get_lead_fields(lead, v_ego)
-
-    # MPC will not converge if immediate crash is expected
-    # Clip lead distance to what is still possible to brake for
-    min_x_lead = ((v_ego + v_lead) / 2) * (v_ego - v_lead) / (-ACCEL_MIN * 2)
-    x_lead = float(np.clip(x_lead, min_x_lead, 1e8))
-    v_lead = float(np.clip(v_lead, 0.0, 1e8))
-    a_lead = float(np.clip(a_lead, -10., 5.))
-
-    # === SNG 煞車敏感化：減速時讓 a_lead_tau 變小（衰減慢） ===
-    if self._sng_brake_sense_active(v_ego, x_lead, a_lead, model_prob):
-      a_lead_tau = float(np.clip(a_lead_tau * MPC_A_LEAD_TAU_SCALE_BRAKE, MPC_A_LEAD_TAU_MIN, MPC_A_LEAD_TAU_MAX))
+    """把 leadOne/leadTwo 轉成可用的 lead trajectory"""
+    v_ego = self.x0[1]
+    if lead is not None and lead.status:
+      x_lead = lead.dRel
+      v_lead = lead.vLead
+      a_lead = lead.aLeadK
+      a_lead_tau = lead.aLeadTau
     else:
-      a_lead_tau = float(np.clip(a_lead_tau, MPC_A_LEAD_TAU_MIN, MPC_A_LEAD_TAU_MAX))
+      # 沒有 lead 時，用一台遠且更快的假車，避免模式跳來跳去
+      x_lead = 50.0
+      v_lead = v_ego + 10.0
+      a_lead = 0.0
+      a_lead_tau = _LEAD_ACCEL_TAU
 
-    lead_xv = self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau)
+    # 避免 MPC 在「立即撞上」情境崩潰：夾住到仍可煞停的最小距離
+    min_x_lead = ((v_ego + v_lead) / 2) * (v_ego - v_lead) / (-ACCEL_MIN * 2)
+    x_lead = np.clip(x_lead, min_x_lead, 1e8)
 
-    # === stopped-equivalence 的等效煞車強度（給 update 產生 obstacle 用） ===
-    brake_eff = self._get_brake_eff(a_lead, model_prob)
+    v_lead = np.clip(v_lead, 0.0, 1e8)
+    a_lead = np.clip(a_lead, -10., 5.)
 
-    return lead_xv, brake_eff, model_prob, x_lead, a_lead
+    return self.extrapolate_lead(x_lead, v_lead, a_lead, a_lead_tau)
 
-  def _ensure_accel_limits(self):
+  def _to_stage_array(self, val, default, name: str):
     """
-    確保 self.params[:,0/1]（a_min/a_max）合理：
-    - 若 caller 沒寫（全 0），整段回填 fallback
-    - 若 caller 有寫，但某些點出現 a_max<=a_min：只修壞掉的點（不要整段覆蓋）
+    將輸入參數轉成 (N+1,) stage array
+    - val 可為：
+      1) None -> default
+      2) scalar -> broadcast (N+1,)
+      3) array/list (N+1,) -> 使用
     """
-    a_min = self.params[:, 0].copy()
-    a_max = self.params[:, 1].copy()
+    if val is None:
+      val = default
 
-    # 1) caller 完全沒寫（常見：全 0）
-    if np.allclose(a_min, 0.0) and np.allclose(a_max, 0.0):
-      self.params[:, 0] = ACCEL_MIN_FALLBACK
-      self.params[:, 1] = ACCEL_MAX_FALLBACK
-      return
+    arr = np.asarray(val, dtype=float)
+    if arr.ndim == 0:
+      return np.full(N+1, float(arr), dtype=float)
 
-    # 2) 逐點清理：限制到 fallback 範圍內（可選，但建議）
-    a_min = np.clip(a_min, ACCEL_MIN_FALLBACK, ACCEL_MAX_FALLBACK)
-    a_max = np.clip(a_max, ACCEL_MIN_FALLBACK, ACCEL_MAX_FALLBACK)
+    if arr.shape == (N+1,):
+      return arr.astype(float, copy=True)
 
-    # 3) 逐點修復不合法：只修壞掉的 stage
-    bad = a_max <= (a_min + 1e-3)
-    if np.any(bad):
-      # 用 fallback 修壞點，或用 “擴開一點點” 的方式也可
-      a_min[bad] = ACCEL_MIN_FALLBACK
-      a_max[bad] = ACCEL_MAX_FALLBACK
+    raise ValueError(f"[long_mpc] {name} shape must be scalar or (N+1,), got {arr.shape}")
 
-    self.params[:, 0] = a_min
-    self.params[:, 1] = a_max
+  def update(self, radarstate, v_cruise, x, v, a, j,
+             personality=log.LongitudinalPersonality.standard,
+             a_min=None, a_max=None):
+    """
+    方法B：由 Planner 明確傳入 a_min/a_max（可 scalar 或 (N+1,)）
+    - 這個 a_min/a_max 會在 ACC 與 blended 都生效（因此 blended 也能套用 A_CRUISE_MAX）
+    """
 
-  def update(self, radarstate, v_cruise, x, v, a, j, personality=log.LongitudinalPersonality.standard):
-    v_ego = float(self.x0[1])
+    v_ego = self.x0[1]
+    t_follow = get_T_FOLLOW(v_ego, personality)
 
-    # 先確保 a_min/a_max 合理（避免覆蓋 caller 的限制）
-    self._ensure_accel_limits()
-
-    # t_follow：在 SNG/煞車時微加一點（非常小即可）
-    t_follow_base = float(get_T_FOLLOW(personality))
-    t_follow = t_follow_base
-
-    # lead 狀態
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
-    lead_xv_0, brake_eff_0, prob_0, x0_now, a0_now = self.process_lead(radarstate.leadOne)
-    lead_xv_1, brake_eff_1, prob_1, x1_now, a1_now = self.process_lead(radarstate.leadTwo)
+    lead_xv_0 = self.process_lead(radarstate.leadOne)
+    lead_xv_1 = self.process_lead(radarstate.leadTwo)
 
-    # 若 lead0 在 SNG/煞車敏感化條件內，微加 t_follow（讓距離更保守一點）
-    if self._sng_brake_sense_active(v_ego, x0_now, a0_now, prob_0):
-      t_follow = float(t_follow_base + MPC_T_FOLLOW_SNG_ADD)
+    # moving lead -> equivalent stopped obstacle distance
+    lead_0_obstacle = lead_xv_0[:, 0] + get_stopped_equivalence_factor(lead_xv_0[:, 1], v_ego)
+    lead_1_obstacle = lead_xv_1[:, 0] + get_stopped_equivalence_factor(lead_xv_1[:, 1], v_ego)
 
-    # moving lead → obstacle：用 brake_eff 產生“更真實”的等效停止距離
-    lead_0_obstacle = lead_xv_0[:, 0] + get_stopped_equivalence_factor(lead_xv_0[:, 1], brake_eff_0)
-    lead_1_obstacle = lead_xv_1[:, 0] + get_stopped_equivalence_factor(lead_xv_1[:, 1], brake_eff_1)
+    # ========= 核心：吃進 Planner 給的 a_min/a_max =========
+    a_min_arr = self._to_stage_array(a_min, ACCEL_MIN, "a_min")
+    a_max_arr = self._to_stage_array(a_max, ACCEL_MAX, "a_max")
 
-    # ============ ACC / blended ============
+    # 防呆：確保 a_min <= a_max
+    eps = 1e-3
+    a_max_arr = np.maximum(a_max_arr, a_min_arr + eps)
+
+    self.params[:, 0] = a_min_arr
+    self.params[:, 1] = a_max_arr
+    # =====================================================
+
     if self.mode == 'acc':
-      # lead_danger_factor：平時用 LEAD_DANGER_FACTOR；SNG/煞車時提升到 1.0（更保守）
-      danger_factor = LEAD_DANGER_FACTOR
-      if self._sng_brake_sense_active(v_ego, x0_now, a0_now, prob_0):
-        danger_factor = max(danger_factor, MPC_LEAD_DANGER_FACTOR_SNG)
-      self.params[:, 5] = float(danger_factor)
+      self.params[:, 5] = LEAD_DANGER_FACTOR
 
-      # Fake an obstacle for cruise (smooth accel to set speed)
+      # cruise obstacle：建議尊重 a_max（避免 reference 假設能更大加速）
+      # 用 min(a_max_arr, CRUISE_MAX_ACCEL) 形成每個 stage 可達速度上界
+      a_upper_eff = np.minimum(a_max_arr, CRUISE_MAX_ACCEL)
+
       v_lower = v_ego + (T_IDXS * CRUISE_MIN_ACCEL * 1.05)
-      v_upper = v_ego + (T_IDXS * CRUISE_MAX_ACCEL * 1.05)
-      v_cruise_clipped = np.clip(v_cruise * np.ones(N + 1), v_lower, v_upper)
+      v_upper = v_ego + (T_IDXS * a_upper_eff * 1.05)
+
+      v_cruise_clipped = np.clip(v_cruise * np.ones(N+1), v_lower, v_upper)
 
       cruise_obstacle = np.cumsum(T_DIFFS * v_cruise_clipped) + get_safe_obstacle_distance(v_cruise_clipped, t_follow)
+
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
-      # These are not used in ACC mode
+      # ACC mode 不使用 model x/v/a/j reference
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
     elif self.mode == 'blended':
-      # blended：原本固定 1.0（保留），但若你想在 SNG/煞車更保守，也可抬到 >=1.0
-      danger_factor = 1.0
-      if self._sng_brake_sense_active(v_ego, x0_now, a0_now, prob_0):
-        danger_factor = max(danger_factor, MPC_LEAD_DANGER_FACTOR_SNG)
-      self.params[:, 5] = float(danger_factor)
+      self.params[:, 5] = 1.0
 
+      # blended：同樣讓 cruise_target 的「可達速度」尊重 a_max，
+      # 避免目標 x 走得太快，造成 MPC 必須靠 constraint 硬頂住（體感可能怪）
+      a_upper_eff = np.minimum(a_max_arr, CRUISE_MAX_ACCEL)
+      v_lower = v_ego + (T_IDXS * CRUISE_MIN_ACCEL * 1.05)
+      v_upper = v_ego + (T_IDXS * a_upper_eff * 1.05)
+      v_cruise_profile = np.clip(v_cruise * np.ones(N+1), v_lower, v_upper)
+
+      # 兩個 lead 的 obstacle（blended 下只用 lead）
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle])
 
-      cruise_target = T_IDXS * np.clip(v_cruise, v_ego - 2.0, 1e3) + x[0]
-      xforward = ((v[1:] + v[:-1]) / 2) * (T_IDXS[1:] - T_IDXS[:-1])
-      x = np.cumsum(np.insert(xforward, 0, x[0]))
+      # cruise_target：用「可達速度曲線」積分得到 x（比 T_IDXS*v_cruise 更一致）
+      cruise_target = np.cumsum(T_DIFFS * v_cruise_profile) + x[0]
 
-      x_and_cruise = np.column_stack([x, cruise_target])
+      # model x：從 v 積分回 x，讓 x 單調且一致
+      xforward = ((v[1:] + v[:-1]) / 2) * (T_IDXS[1:] - T_IDXS[:-1])
+      x_model = np.cumsum(np.insert(xforward, 0, x[0]))
+
+      x_and_cruise = np.column_stack([x_model, cruise_target])
       x = np.min(x_and_cruise, axis=1)
 
       self.source = 'e2e' if x_and_cruise[1, 0] < x_and_cruise[1, 1] else 'cruise'
@@ -543,7 +509,7 @@ class LongitudinalMpc:
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
 
-    # yref
+    # === 設定 yref（cost reference）===
     self.yref[:, 1] = x
     self.yref[:, 2] = v
     self.yref[:, 3] = a
@@ -552,21 +518,21 @@ class LongitudinalMpc:
       self.solver.set(i, "yref", self.yref[i])
     self.solver.set(N, "yref", self.yref[N][:COST_E_DIM])
 
-    # params
+    # === 設定 params（p）===
     self.params[:, 2] = np.min(x_obstacles, axis=1)
     self.params[:, 3] = np.copy(self.prev_a)
-    self.params[:, 4] = float(t_follow)
+    self.params[:, 4] = t_follow
 
     self.run()
 
-    # FCW logic（維持原本）
+    # === FCW heuristic（保留原邏輯）===
     if (np.any(lead_xv_0[FCW_IDXS, 0] - self.x_sol[FCW_IDXS, 0] < CRASH_DISTANCE) and
             radarstate.leadOne.modelProb > 0.9):
       self.crash_cnt += 1
     else:
       self.crash_cnt = 0
 
-    # Check if it got within lead comfort range (維持原本)
+    # blended 下：如果解出來已進入 lead 舒適距離內，標記 source
     if self.mode == 'blended':
       if any((lead_0_obstacle - get_safe_obstacle_distance(self.x_sol[:, 1], t_follow)) - self.x_sol[:, 0] < 0.0):
         self.source = 'lead0'
@@ -575,18 +541,22 @@ class LongitudinalMpc:
         self.source = 'lead1'
 
   def run(self):
-    for i in range(N + 1):
+    """把 params/states 餵進 solver，solve 後取解"""
+    for i in range(N+1):
       self.solver.set(i, 'p', self.params[i])
+
+    # 初始狀態 hard constraint
     self.solver.constraints_set(0, "lbx", self.x0)
     self.solver.constraints_set(0, "ubx", self.x0)
 
     self.solution_status = self.solver.solve()
+
     self.solve_time = float(self.solver.get_stats('time_tot')[0])
     self.time_qp_solution = float(self.solver.get_stats('time_qp')[0])
     self.time_linearization = float(self.solver.get_stats('time_lin')[0])
     self.time_integrator = float(self.solver.get_stats('time_sim')[0])
 
-    for i in range(N + 1):
+    for i in range(N+1):
       self.x_sol[i] = self.solver.get(i, 'x')
     for i in range(N):
       self.u_sol[i] = self.solver.get(i, 'u')
@@ -595,6 +565,7 @@ class LongitudinalMpc:
     self.a_solution = self.x_sol[:, 2]
     self.j_solution = self.u_sol[:, 0]
 
+    # prev_a：給下一輪 a_change cost 用
     self.prev_a = np.interp(T_IDXS + self.dt, T_IDXS, self.a_solution)
 
     t = time.monotonic()
