@@ -106,8 +106,9 @@ TRIGGER_CONFIRM_FRAMES = 3
 TREND_K = 4
 TREND_DX_MAX = 0.80          # m/step（越小越嚴格）
 
-# 末端距離觸發裕度（<1 會更早觸發）
-TRIGGER_MARGIN = 1.00
+# 停止線/紅燈（stopline）觸發距離門檻的倍率。
+# 更靈敏、更早切：1.05 ~ 1.20。更穩、更少誤觸：0.90 ~ 1.00
+TRIGGER_MARGIN = 1.20 #1.00
 
 # 強信號快速通道：更明顯要停 -> 1 幀觸發
 STRONG_STOP_MARGIN = 0.75
