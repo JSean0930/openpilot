@@ -60,10 +60,10 @@ E) lead gate（避免跟車時被 stopline 搶控）
 FAST_SWITCH_ENABLE = True
 
 # 觸發後先「硬覆蓋」blended 的時間（避免權重還在爬升，體感像猶豫）
-HARD_OVERRIDE_HOLD = 0.20   # s，0.15~0.30 常用
+HARD_OVERRIDE_HOLD = 0.4   # s，0.15~0.30 常用，0.2
 
 # 觸發後短時間內禁止再次觸發（避免模式來回抖動）
-RETRIGGER_BLOCK_TIME = 0.20 # s，0.15~0.40 常用
+RETRIGGER_BLOCK_TIME = 0.10 # s，0.15~0.40 常用，0.2
 
 
 # --- 0.1) 5~30kph 強制鎖定 Experimental Mode -------------------
@@ -89,7 +89,7 @@ COOLDOWN_V_BP = [0.0, 6.0, 14.0, 25.0]     # m/s
 COOLDOWN_V_VALS = [0.28, 0.50, 0.72, 0.95] # s
 
 # 權重大於這個值，就覆蓋成 blended（越小越容易覆蓋）
-W_MODE_OVERRIDE = 0.45
+W_MODE_OVERRIDE = 0.30 #0.45
 
 
 # --- 2) 停止線/紅燈判停距離（用模型末端距離判斷） -------------
@@ -120,7 +120,7 @@ STRONG_CONFIRM_FRAMES = 1
 RELEASE_MARGIN = 1.15
 
 # 最短保持時間：剛觸發後至少維持這麼久，避免瞬間解除造成抖
-MIN_ACTIVE_TIME = 0.18
+MIN_ACTIVE_TIME = 1.0 #0.18
 
 
 # --- 5) lead gate（避免 stopline 搶控） ------------------------
