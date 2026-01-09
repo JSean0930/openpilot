@@ -482,7 +482,7 @@ class LongitudinalMpc:
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
     elif self.mode == 'blended':
-      self.params[:, 5] = 1.0
+      self.params[:, 5] = LEAD_DANGER_FACTOR #1.0
 
       # blended：同樣讓 cruise_target 的「可達速度」尊重 a_max，
       # 避免目標 x 走得太快，造成 MPC 必須靠 constraint 硬頂住（體感可能怪）
