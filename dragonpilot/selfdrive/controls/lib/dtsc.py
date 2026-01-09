@@ -8,7 +8,7 @@ from openpilot.common.swaglog import cloudlog
 # ==============================
 
 COMFORT_LAT_G = 0.20          # 舒適側向加速度上限（g）
-SAFETY_FACTOR = 0.75          # 越小越保守（你目前很保守 OK）0.75
+SAFETY_FACTOR = 0.85          # 越小越保守（你目前很保守 OK）0.75
 
 AGGR_MIN = 0.5
 AGGR_MAX = 1.5
@@ -22,7 +22,7 @@ BRAKE_PREBUFFER_M = 18.0      # 提前鋪陳距離（越大越早開始）
 
 SAFE_SPEED_BOOST_MPS = 0.15   # ✅ 改小：避免把目標速度放太寬導致不煞
 
-MAX_COMFORT_DECEL = -1.2      # ✅ 稍微加強一點（你原本 -1.4 可能太柔）
+MAX_COMFORT_DECEL = -1.0      # ✅ 稍微加強一點（你原本 -1.4 可能太柔）
 DECEL_ENABLE_THRESHOLD = -0.12  # ✅ 讓較小的 req_decel 也會啟動（避免不動作）
 
 CURV_LPF_ALPHA = 0.35         # 曲率 horizon 低通濾波
@@ -33,7 +33,7 @@ MIN_ENTRY_DECEL = -0.25       # m/s^2（太大會「一觸發就煞」，太小�
 
 # ✅ 新增：確保 ramp 至少有一段時間，不要過短導致突然變很負
 RAMP_MIN_S = 0.8              # ramp 最短秒數
-RAMP_MAX_S = 3.0              # ramp 最長秒數（避免拉太久來不及煞）
+RAMP_MAX_S = 1.5              # ramp 最長秒數（避免拉太久來不及煞）3.0
 
 # ==============================
 # 物理常數
