@@ -8,7 +8,7 @@ from openpilot.common.swaglog import cloudlog
 # ==============================
 
 COMFORT_LAT_G = 0.20          # 舒適側向加速度上限（g）
-SAFETY_FACTOR = 0.65          # 越小越保守（你目前很保守 OK）0.75
+SAFETY_FACTOR = 0.75          # 越小越保守（你目前很保守 OK）0.75
 
 AGGR_MIN = 0.5
 AGGR_MAX = 1.5
@@ -16,13 +16,13 @@ AGGR_MAX = 1.5
 CURV_V_MIN = 2.0              # 曲率計算最小速度（m/s）
 MIN_CURVATURE = 0.0015        # 小於此曲率視為直線（避免雜訊觸發）
 
-EXCESS_SPEED_MPS = 0.4        # 超速門檻（m/s），降低一點更容易觸發煞車 0.6
-MIN_CURVE_DISTANCE = 4.0      # 太近不動作 8.0
+EXCESS_SPEED_MPS = 0.6        # 超速門檻（m/s），降低一點更容易觸發煞車 0.6
+MIN_CURVE_DISTANCE = 8.0      # 太近不動作 8.0
 BRAKE_PREBUFFER_M = 18.0      # 提前鋪陳距離（越大越早開始）
 
 SAFE_SPEED_BOOST_MPS = 0.15   # ✅ 改小：避免把目標速度放太寬導致不煞
 
-MAX_COMFORT_DECEL = -1.6      # ✅ 稍微加強一點（你原本 -1.4 可能太柔）
+MAX_COMFORT_DECEL = -1.2      # ✅ 稍微加強一點（你原本 -1.4 可能太柔）
 DECEL_ENABLE_THRESHOLD = -0.12  # ✅ 讓較小的 req_decel 也會啟動（避免不動作）
 
 CURV_LPF_ALPHA = 0.35         # 曲率 horizon 低通濾波
