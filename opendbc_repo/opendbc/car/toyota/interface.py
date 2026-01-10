@@ -48,7 +48,7 @@ class CarInterface(CarInterfaceBase):
     else:
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
-      ret.steerActuatorDelay = 0.12  # Default delay, Prius has larger delay，0.12
+      ret.steerActuatorDelay = 0.30  # Default delay, Prius has larger delay，0.12
       ret.steerLimitTimer = 0.4
 
     stop_and_go = candidate in TSS2_CAR
