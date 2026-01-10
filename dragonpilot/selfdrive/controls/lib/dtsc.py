@@ -8,7 +8,7 @@ from openpilot.common.swaglog import cloudlog
 # ==============================
 
 COMFORT_LAT_G = 0.20          # 舒適側向加速度上限（g）
-SAFETY_FACTOR = 0.90          # 越小越保守（你目前很保守 OK）
+SAFETY_FACTOR = 1.00          # 越小越保守（你目前很保守 OK）
 
 AGGR_MIN = 0.5
 AGGR_MAX = 1.5
