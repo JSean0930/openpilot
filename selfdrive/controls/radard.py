@@ -19,7 +19,7 @@ from openpilot.common.simple_kalman import KF1D
 #   - 低速時用較小 tau → 更敏感
 #   - 高速時用較大 tau → 穩定不晃
 LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]   # 速度分段 (m/s) ≈ [0, 30, 54, 108] km/h
-LEAD_ACCEL_TAU_V_EGO_V  = [0.4, 0.7,  1.6,  1.8]     # 對應 tau（秒）[0.4, 0.7,  1.2,  1.6]
+LEAD_ACCEL_TAU_V_EGO_V  = [0.4, 0.7,  1.7,  2.0]     # 對應 tau（秒）[0.4, 0.7,  1.2/1.6,  1.6/1.8]
 
 # aLead 被視為「幾乎零加速度」的門檻（m/s^2）
 LEAD_ACCEL_CONST_ACCEL_THRESH = 0.2 #0.1
