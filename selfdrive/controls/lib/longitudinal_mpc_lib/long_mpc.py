@@ -79,7 +79,7 @@ CRUISE_MAX_ACCEL = 1.6
 def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   """人格 -> jerk factor（影響 a_change / j 成本）"""
   if personality == log.LongitudinalPersonality.relaxed:
-    return 1.0
+    return 1.5 #1.0
   elif personality == log.LongitudinalPersonality.standard:
     return 1.0
   elif personality == log.LongitudinalPersonality.aggressive:
@@ -93,7 +93,7 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
   v_kph = float(v_ego * 3.6)
 
   if personality == log.LongitudinalPersonality.relaxed:
-    base = 1.0 + 0.0030 * v_kph
+    base = 1.0 + 0.0025 * v_kph #0.0030
   elif personality == log.LongitudinalPersonality.standard:
     base = 1.0 + 0.0025 * v_kph
   elif personality == log.LongitudinalPersonality.aggressive:
