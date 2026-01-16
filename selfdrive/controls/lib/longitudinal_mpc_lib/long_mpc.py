@@ -103,7 +103,7 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
 
   return base
 
-
+"""
 def get_stopped_equivalence_factor(v_lead, v_ego):
   """
   低速更積極縮短跟車距離（你原本版本，保留）
@@ -135,7 +135,7 @@ def get_stopped_equivalence_factor(v_lead, v_ego):
   v_diff_offset = np.clip(v_diff_offset, 0.0, cap)
 
   return (v_lead ** 2) / (2 * COMFORT_BRAKE) + v_diff_offset
-
+"""
 
 def get_safe_obstacle_distance(v_ego, t_follow):
   """安全距離：煞停距離 + 跟車時間 + 停車距離"""
