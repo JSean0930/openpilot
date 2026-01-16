@@ -103,6 +103,9 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
 
   return base
 
+def get_stopped_equivalence_factor(v_lead):
+  return (v_lead**2) / (2 * COMFORT_BRAKE)
+
 """
 def get_stopped_equivalence_factor(v_lead, v_ego):
 
