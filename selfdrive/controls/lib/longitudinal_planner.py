@@ -36,7 +36,7 @@ E2E_ONLY_EXIT_KPH  = 62.0   # 離開純E2E（> enter，做 hysteresis 防抖）
 # 目的：避免 ACM/DTSC/AEM 等介入，導致體感「不是純E2E」
 E2E_ONLY_BLOCK_ACM  = True  # True: 低速純E2E時，不套用 ACM 修飾
 E2E_ONLY_BLOCK_DTSC = True  # True: 低速純E2E時，不套用 DTSC 產生的 per-stage a_min/a_max
-E2E_ONLY_BLOCK_AEM  = False # True: 低速純E2E時，不讓 AEM 改 mode（通常可不擋，因為純E2E分支會覆蓋輸出）
+E2E_ONLY_BLOCK_AEM  = True  # True: 低速純E2E時，不讓 AEM 改 mode（通常可不擋，因為純E2E分支會覆蓋輸出）
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
 FAST_V_DESIRED_ENABLE = True
