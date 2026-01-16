@@ -105,9 +105,7 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
 
 """
 def get_stopped_equivalence_factor(v_lead, v_ego):
-  """
-  低速更積極縮短跟車距離（你原本版本，保留）
-  """
+
   v_lead = np.asarray(v_lead, dtype=float)
   v_ego = float(v_ego)
 
