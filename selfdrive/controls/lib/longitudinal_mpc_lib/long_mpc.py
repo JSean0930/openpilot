@@ -106,38 +106,6 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
 def get_stopped_equivalence_factor(v_lead):
   return (v_lead**2) / (2 * COMFORT_BRAKE)
 
-"""
-def get_stopped_equivalence_factor(v_lead, v_ego):
-
-  v_lead = np.asarray(v_lead, dtype=float)
-  v_ego = float(v_ego)
-
-  v10 = 10.0 * CV.KPH_TO_MS
-  v50 = 50.0 * CV.KPH_TO_MS
-  v60 = 60.0 * CV.KPH_TO_MS
-
-  delta = v_lead - v_ego
-
-  w_k     = np.clip(1.0 - (v_ego / v60), 0.0, 1.0)
-  w_quick = np.clip(1.0 - (v_ego / v50), 0.0, 1.0)
-  w_base  = np.clip(1.0 - (v_ego / v10), 0.0, 1.0)
-
-  k_low, k_high = 5.5, 3.5
-  k = k_high + (k_low - k_high) * w_k
-
-  quad_gain = 0.75
-  quick = quad_gain * (np.clip(delta, 0.0, 5.0) ** 2) * w_quick
-
-  base = k * np.maximum(delta, 0.0) * (0.6 + 0.4 * w_base) * w_base
-
-  v_diff_offset = base + quick
-  cap_low, cap_high = 8.0, 5.0
-  cap = cap_high + (cap_low - cap_high) * w_k
-  v_diff_offset = np.clip(v_diff_offset, 0.0, cap)
-
-  return (v_lead ** 2) / (2 * COMFORT_BRAKE) + v_diff_offset
-"""
-
 def get_safe_obstacle_distance(v_ego, t_follow):
   """安全距離：煞停距離 + 跟車時間 + 停車距離"""
   return (v_ego ** 2) / (2 * COMFORT_BRAKE) + t_follow * v_ego + STOP_DISTANCE
