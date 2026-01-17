@@ -42,8 +42,8 @@ E2E_ONLY_BLOCK_AEM  = True  # True: 低速純E2E時，不讓 AEM 改 mode（避�
 # 你目前問題：前車減速到停，有時 E2E 來不及煞車 -> 在 planner 端加「底線」保護
 """
 來不及煞：先把 E2E_TTC_BRAKE_START_S 調大（例如 2.6 → 3.0），會更早介入
-	•	煞不夠兇：把 E2E_TTC_BRAKE_MAX_DECEL 更負（例如 -3.2 → -3.8）
-	•	已經貼很近才反應：把 E2E_MIN_LEAD_DIST_HARD_BRAKE 更負（例如 -4.0 → -4.5），或把 E2E_MIN_LEAD_DIST_M 往上（5 → 6）
+煞不夠兇：把 E2E_TTC_BRAKE_MAX_DECEL 更負（例如 -3.2 → -3.8）
+已經貼很近才反應：把 E2E_MIN_LEAD_DIST_HARD_BRAKE 更負（例如 -4.0 → -4.5），或把 E2E_MIN_LEAD_DIST_M 往上（5 → 6）
 """
 E2E_TTC_GUARD_ENABLE = True
 
