@@ -312,12 +312,11 @@ class LongitudinalPlanner:
       return
 
     v_kph = v_ego * CV.MS_TO_KPH
-    if self.e2e_only_active:
-      if v_kph > E2E_ONLY_EXIT_KPH:
-        self.e2e_only_active = False
+    if (E2E_ONLY_ENTER_KPH < v_kph) and (v_kph < E2E_ONLY_EXIT_KPH):
+      self.e2e_only_active = True
     else:
-      if v_kph < E2E_ONLY_ENTER_KPH:
-        self.e2e_only_active = True
+      self.e2e_only_active = False
+
 
   def update(self, sm, dp_flags=0):
     # ------------------------------------------------------------
