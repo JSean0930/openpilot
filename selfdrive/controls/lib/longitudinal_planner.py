@@ -30,7 +30,7 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # --- 方案 5A：低速純 E2E（e2e_only_active 時不跑 mpc.update） ---
 E2E_ONLY_ENABLE = True
 E2E_ONLY_ENTER_KPH = 5.0   # 進入純E2E（建議 55~60）
-E2E_ONLY_EXIT_KPH  = 30.0   # 離開純E2E（> enter，做 hysteresis 防抖）
+E2E_ONLY_EXIT_KPH  = 25.0   # 離開純E2E（> enter，做 hysteresis 防抖）
 
 # --- 低速純E2E時，阻擋其他模組「改動輸出」的開關 ---
 # 目的：避免 ACM/DTSC/AEM 等介入，導致體感「不是純E2E」
