@@ -34,8 +34,8 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 #
 # 重要：W_MPC_AT_ENTER 會同時作為兩段的銜接點，避免 ENTER 處不連續。
 E2E_MPC_BLEND_ENABLE = True
-E2E_ONLY_ENTER_KPH = 5.0
-E2E_ONLY_EXIT_KPH  = 25.0
+E2E_ONLY_ENTER_KPH = 10.0
+E2E_ONLY_EXIT_KPH  = 30.0
 
 # 低速段端點權重（可調）
 W_MPC_AT_ZERO  = 0.85   # v=0 時 MPC 權重（越大越偏 MPC；建議 0.6~1.0）
