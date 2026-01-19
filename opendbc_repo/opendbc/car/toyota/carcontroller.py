@@ -41,7 +41,7 @@ from cereal import car
 
 # --- 橫向：扭力平滑（降低顆粒感） ---
 TORQUE_SMOOTH_ENABLE = True
-TORQUE_SMOOTH_TC = 0.12  # s
+TORQUE_SMOOTH_TC = 0.20  # s 0.12
 
 # --- 橫向：方向盤角速度門檻防抖（避免 apply_steer_req 反覆切換） ---
 STEER_RATE_FILTER_ENABLE = True
