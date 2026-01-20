@@ -38,7 +38,7 @@ E2E_ONLY_ENTER_KPH = 10.0
 E2E_ONLY_EXIT_KPH  = 30.0
 
 # 低速段端點權重（可調）
-W_MPC_AT_ZERO  = 0.85   # v=0 時 MPC 權重（越大越偏 MPC；建議 0.6~1.0）
+W_MPC_AT_ZERO  = 1.00   # v=0 時 MPC 權重（越大越偏 MPC；建議 0.6~1.0）
 W_MPC_AT_ENTER = 0.20   # v=ENTER 時 MPC 權重（銜接點；建議 0.0~0.4）
 
 # 混合曲線（t 的 gamma shaping）
