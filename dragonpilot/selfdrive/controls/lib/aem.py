@@ -71,7 +71,7 @@ FORCE_EXP_ENABLE = True
 
 # 只要速度落在此區間，就強制回 blended（experimental）
 FORCE_EXP_KPH_MIN = 5.0
-FORCE_EXP_KPH_MAX = 30.0
+FORCE_EXP_KPH_MAX = 25.0
 # 需求：離開區間要立刻解除 -> 下方會呼叫 _reset_state_immediate()
 
 
