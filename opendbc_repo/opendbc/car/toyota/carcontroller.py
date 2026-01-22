@@ -18,37 +18,26 @@ from cereal import car
 
 
 # ==============================================================================
-# 可調參數集中區（TSS2 扭力轉向顆粒感改善 + 起步更快）
-# 調整建議（先照建議值跑，再依體感微調）：
-# - 橫向顆粒感（扭力像一格一格）：
-#   1) TORQUE_SMOOTH_TC ↑ => 更滑但反應慢；↓ => 更跟手但可能顆粒感回來
-#      建議：0.10 ~ 0.16 s
-#   2) STEER_RATE_FILTER_TC ↑ => 門檻抖動更少；太大會讓保護反應變慢
-#      建議：0.06 ~ 0.10 s
-#   3) STEER_RATE_EXIT 比例越低 => 解除保護更晚（更保守但更不抖）
-#      建議：0.85 ~ 0.92 * MAX_STEER_RATE
+# 可調參數集中區（保留：縱向起步更快；回復：橫向原廠/原始版本）
 #
-# - 縱向起步不猶豫：
-#   1) ACCEL_WINDUP_LIMIT_LAUNCH ↑ => 起步/低速加速度爬升更快（更衝）
-#      建議：5.0~7.0 * DT_CTRL * 3（原本是 4.0 * DT_CTRL * 3）
-#   2) LAUNCH_BOOST_ACCEL ↑ => 起步更乾脆；太大可能有「一口氣」的感覺
-#      建議：0.20 ~ 0.35 m/s^2
-#   3) LAUNCH_BOOST_TIME ↑ => boost 撐更久；太久可能讓低速太積極
-#      建議：0.45 ~ 0.75 s
-#   4) PB_RELEASE_TH ↓ => permit_braking 更早放開（更敢走）；太低可能早放煞車權
-#      建議：0.20 ~ 0.24（PB_HOLD_TH 建議比它低 0.03~0.05）
+# 你要求「橫向 rollback 回原始版本」：
+# - 已移除：扭力平滑（TORQUE_SMOOTH_*）
+# - 已移除：steeringRate 濾波與 hysteresis 防抖（STEER_RATE_*）
+# - 已移除：相關的 filter state / high_steer_rate 旗標
+# - 已回復：new_torque 直接 round(actuators.torque * STEER_MAX)
+# - 已回復：common_fault_avoidance() 直接用 abs(steeringRateDeg) >= MAX_STEER_RATE
+#
+# 縱向仍保留「起步更快、不猶豫」的改動：
+# - 低速 windup 放寬（ACCEL_WINDUP_LIMIT_LAUNCH）
+# - 起步 boost（LAUNCH_*）
+# - permit_braking 更果斷解除（PB_*）
+#
+# 調整建議（縱向）：
+# 1) LAUNCH_BOOST_ACCEL（0.20~0.35）越大越乾脆；太大可能有「一口氣」的感覺
+# 2) LAUNCH_BOOST_TIME（0.45~0.75s）越長越積極；太久低速可能偏衝
+# 3) ACCEL_WINDUP_LIMIT_LAUNCH（5~7 * DT_CTRL * 3）越大起步爬升越快
+# 4) PB_RELEASE_TH（0.20~0.24）越小越早放開煞車權；PB_HOLD_TH 建議比它低 0.03~0.05
 # ==============================================================================
-
-# --- 橫向：扭力平滑（降低顆粒感） ---
-TORQUE_SMOOTH_ENABLE = True
-TORQUE_SMOOTH_TC = 0.20  # s 0.12
-
-# --- 橫向：方向盤角速度門檻防抖（避免 apply_steer_req 反覆切換） ---
-STEER_RATE_FILTER_ENABLE = True
-STEER_RATE_FILTER_TC = 0.08  # s
-# hysteresis：進入/解除門檻（ENTER=原門檻；EXIT=較低門檻避免抖動）
-# EXIT 建議用 0.90 左右（0.85~0.92）
-STEER_RATE_EXIT_RATIO = 0.90
 
 # --- 縱向：起步更快 ---
 LAUNCH_BOOST_ENABLE = True
@@ -60,6 +49,7 @@ ACCEL_WINDUP_LIMIT_LAUNCH = 6.0 * DT_CTRL * 3  # m/s^2/frame（低速上升更�
 # permit_braking 解除門檻（更果斷動起來）
 PB_RELEASE_TH = 0.22  # > 此值 => permit_braking=False（更早放開煞車權）
 PB_HOLD_TH = 0.18     # < 此值 => permit_braking=True
+
 
 # ==============================================================================
 # 原始常數/參數（保留）
@@ -147,13 +137,6 @@ class CarController(CarControllerBase):
     self.doors_locked = False
 
     # ==========================================================================
-    # 橫向顆粒感改善：扭力輸入平滑 + steeringRate 防抖（門檻 hysteresis）
-    # ==========================================================================
-    self.torque_des_f = FirstOrderFilter(0.0, TORQUE_SMOOTH_TC, DT_CTRL)
-    self.steer_rate_f = FirstOrderFilter(0.0, STEER_RATE_FILTER_TC, DT_CTRL)
-    self.high_steer_rate = False
-
-    # ==========================================================================
     # 縱向起步更快：起步 boost 計時（從 standstill -> moving 觸發）
     # ==========================================================================
     self.launch_start_t = None
@@ -192,45 +175,34 @@ class CarController(CarControllerBase):
 
     # ==========================================================================
     # *** steer torque（扭力轉向 / LKA）***
-    # - 顆粒感改善：先對欲輸出扭力做平滑，再進原本 Toyota 的扭力限幅/保護
+    # ★已 rollback：回到你最一開始提供的「原始橫向」實作
+    # - new_torque 直接 round(actuators.torque * STEER_MAX)
+    # - common_fault_avoidance() 直接用 abs(steeringRateDeg) >= MAX_STEER_RATE
     # ==========================================================================
-    desired_torque = float(actuators.torque) * self.params.STEER_MAX
-    if TORQUE_SMOOTH_ENABLE:
-      # 先濾波再 round 成 int，可明顯降低「一格一格」感
-      self.torque_des_f.update(desired_torque)
-      desired_torque = float(self.torque_des_f.x)
-
-    new_torque = int(round(desired_torque))
+    new_torque = int(round(actuators.torque * self.params.STEER_MAX))
     apply_torque = apply_meas_steer_torque_limits(new_torque, self.last_torque, CS.out.steeringTorqueEps, self.params)
 
-    # >100 deg/s steering fault prevention（加入濾波 + hysteresis 防抖）
-    steer_rate = abs(CS.out.steeringRateDeg)
-    if STEER_RATE_FILTER_ENABLE:
-      self.steer_rate_f.update(steer_rate)
-      steer_rate = float(self.steer_rate_f.x)
-
-    steer_rate_enter = MAX_STEER_RATE
-    steer_rate_exit = MAX_STEER_RATE * float(STEER_RATE_EXIT_RATIO)
-
-    # hysteresis：避免在門檻附近反覆切換 apply_steer_req，造成顆粒/頓挫
-    if not self.high_steer_rate:
-      self.high_steer_rate = steer_rate >= steer_rate_enter
-    else:
-      self.high_steer_rate = steer_rate >= steer_rate_exit
-
+    # >100 degree/sec steering fault prevention（原始版本）
     self.steer_rate_counter, apply_steer_req = common_fault_avoidance(
-      self.high_steer_rate, lat_active, self.steer_rate_counter, MAX_STEER_RATE_FRAMES
+      abs(CS.out.steeringRateDeg) >= MAX_STEER_RATE,
+      lat_active,
+      self.steer_rate_counter,
+      MAX_STEER_RATE_FRAMES
     )
 
     if not lat_active:
       apply_torque = 0
 
-    # *** steer angle（角度轉向 / LTA）***（保留原邏輯，TSS2 扭力車通常不走這段）
+    # *** steer angle（角度轉向 / LTA）***
     if self.CP.steerControlType == SteerControlType.angle:
+      # If using LTA control, disable LKA and set steering angle command
       apply_torque = 0
       apply_steer_req = False
       if self.frame % 2 == 0:
+        # EPS uses the torque sensor angle to control with, offset to compensate
         apply_angle = actuators.steeringAngleDeg + CS.out.steeringAngleOffsetDeg
+
+        # Angular rate limit based on speed
         self.last_angle = apply_std_steer_angle_limits(
           apply_angle, self.last_angle, CS.out.vEgoRaw,
           CS.out.steeringAngleDeg + CS.out.steeringAngleOffsetDeg,
@@ -239,9 +211,12 @@ class CarController(CarControllerBase):
 
     self.last_torque = apply_torque
 
-    # LKA command
+    # toyota can trace shows STEERING_LKA at 42Hz, with counter adding alternatively 1 and 2;
+    # sending it at 100Hz seem to allow a higher rate limit, as the rate limit seems imposed
+    # on consecutive messages
     steer_command = toyotacan.create_steer_command(self.packer, apply_torque, apply_steer_req)
     if self.CP.flags & ToyotaFlags.SECOC.value:
+      # TODO: check if this slow and needs to be done by the CANPacker
       steer_command = add_mac(self.secoc_key,
                               int(CS.secoc_synchronization['TRIP_CNT']),
                               int(CS.secoc_synchronization['RESET_CNT']),
@@ -250,15 +225,18 @@ class CarController(CarControllerBase):
       self.secoc_lka_message_counter += 1
     can_sends.append(steer_command)
 
-    # LTA command (TSS2)
+    # STEERING_LTA does not seem to allow more rate by sending faster, and may wind up easier
     if self.frame % 2 == 0 and self.CP.carFingerprint in TSS2_CAR:
       lta_active = lat_active and self.CP.steerControlType == SteerControlType.angle
+      # cut steering torque with TORQUE_WIND_DOWN when either EPS torque or driver torque is above
+      # the threshold, to limit max lateral acceleration and for driver torque blending respectively.
       full_torque_condition = (abs(CS.out.steeringTorqueEps) < self.params.STEER_MAX and
                                abs(CS.out.steeringTorque) < self.params.MAX_LTA_DRIVER_TORQUE_ALLOWANCE)
 
+      # TORQUE_WIND_DOWN at 0 ramps down torque at roughly the max down rate of 1500 units/sec
       torque_wind_down = 100 if lta_active and full_torque_condition else 0
       can_sends.append(toyotacan.create_lta_steer_command(self.packer, self.CP.steerControlType, self.last_angle,
-                                                         lta_active, self.frame // 2, torque_wind_down))
+                                                          lta_active, self.frame // 2, torque_wind_down))
 
       if self.CP.flags & ToyotaFlags.SECOC.value:
         lta_steer_2 = toyotacan.create_lta_steer_command_2(self.packer, self.frame // 2)
@@ -273,16 +251,23 @@ class CarController(CarControllerBase):
     # ==========================================================================
     # *** gas and brake（縱向）***
     # ==========================================================================
-    # standstill 維持請求（Toyota 特化）
+    # on entering standstill, send standstill request for older TSS-P cars that aren't designed to stay engaged at a stop
     if self.CP.carFingerprint not in NO_STOP_TIMER_CAR:
       if CS.out.standstill and not self.last_standstill:
         self.standstill_req = True
       if CS.pcm_acc_status != 8:
+        # pcm entered standstill or it's disabled
         self.standstill_req = False
+
     else:
+      # if user engages at a stop with foot on brake, PCM starts in a special cruise standstill mode. on resume press,
+      # brakes can take a while to ramp up causing a lurch forward. prevent resume press until planner wants to move.
+      # don't use CC.cruiseControl.resume since it is gated on CS.cruiseState.standstill which goes false for 3s after resume press
+      # TODO: hybrids do not have this issue and can stay stopped after resume press, whitelist them
       should_resume = actuators.accel > 0
       if should_resume:
         self.standstill_req = False
+
       if not should_resume and CS.out.cruiseState.standstill:
         self.standstill_req = True
 
@@ -298,14 +283,14 @@ class CarController(CarControllerBase):
 
     self.last_standstill = CS.out.standstill
 
-    # HUD / lead 狀態
+    # handle UI messages
     fcw_alert = hud_control.visualAlert == VisualAlert.fcw
     steer_alert = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw)
-    lead = hud_control.leadVisible or CS.out.vEgo < 12.
+    lead = hud_control.leadVisible or CS.out.vEgo < 12.  # at low speed we always assume the lead is present so ACC can be engaged
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % 3 == 0:
-        # distance button：把 PCM 車距 bars 調到 hud_control.leadDistanceBars
+        # Press distance button until we are at the correct bar length. Only change while enabled to avoid skipping startup popup
         if self.frame % 6 == 0 and self.CP.openpilotLongitudinalControl:
           desired_distance = 4 - hud_control.leadDistanceBars
           if CS.out.cruiseState.enabled and CS.pcm_follow_distance != desired_distance:
@@ -313,50 +298,53 @@ class CarController(CarControllerBase):
           else:
             self.distance_button = 0
 
-        # 低速起步：放寬 windup，上升更快、更不猶豫
+        # internal PCM gas command can get stuck unwinding from negative accel so we apply a generous rate limit
         pcm_accel_cmd = actuators.accel
         if CC.longActive:
+          # 低速起步：放寬 windup，上升更快、更不猶豫
           up_lim = ACCEL_WINDUP_LIMIT
           if LAUNCH_BOOST_ENABLE and CS.out.vEgo < LAUNCH_V_MAX:
             up_lim = ACCEL_WINDUP_LIMIT_LAUNCH
           pcm_accel_cmd = rate_limit(pcm_accel_cmd, self.prev_accel, ACCEL_WINDDOWN_LIMIT, up_lim)
         self.prev_accel = pcm_accel_cmd
 
-        # 下坡補償（只取 downhill，避免上坡誤判 permit_braking）
+        # calculate amount of acceleration PCM should apply to reach target, given pitch.
+        # clipped to only include downhill angles, avoids erroneously unsetting PERMIT_BRAKING when stopping on uphills
         accel_due_to_pitch = math.sin(min(self.pitch.x, 0.0)) * ACCELERATION_DUE_TO_GRAVITY
+        # TODO: on uphills this sometimes sets PERMIT_BRAKING low not considering the creep force
         net_acceleration_request = pcm_accel_cmd + accel_due_to_pitch
 
-        # GVC blending（非 SecOC）
+        # GVC does not overshoot ego acceleration when starting from stop, but still has a similar delay
         if not self.CP.flags & ToyotaFlags.SECOC.value:
           a_ego_blended = float(np.interp(CS.out.vEgo, [1.0, 2.0], [CS.gvc, CS.out.aEgo]))
         else:
           a_ego_blended = CS.out.aEgo
 
-        # jerk + 未來 a_ego 預估（降低 overshoot）
+        # wind down integral when approaching target for step changes and smooth ramps to reduce overshoot
         prev_aego = self.aego.x
         self.aego.update(a_ego_blended)
         j_ego = (self.aego.x - prev_aego) / (DT_CTRL * 3)
+
         future_t = float(np.interp(CS.out.vEgo, [2., 5.], [0.25, 0.5]))
         a_ego_future = a_ego_blended + j_ego * future_t
 
         if CC.longActive:
-          # 積分慢慢回退，避免暫時誤差殘留
+          # constantly slowly unwind integral to recover from large temporary errors
           self.long_pid.i -= ACCEL_PID_UNWIND * float(np.sign(self.long_pid.i))
+
           error_future = pcm_accel_cmd - a_ego_future
 
           if not stopping:
-            pitch_compensation = float(np.clip(
-              math.sin(self.pitch_hp.x) * ACCELERATION_DUE_TO_GRAVITY,
-              -MAX_PITCH_COMPENSATION, MAX_PITCH_COMPENSATION
-            ))
+            # Toyota's PCM slowly responds to changes in pitch. On change, we amplify our
+            # acceleration request to compensate for the undershoot and following overshoot
+            pitch_compensation = float(np.clip(math.sin(self.pitch_hp.x) * ACCELERATION_DUE_TO_GRAVITY,
+                                               -MAX_PITCH_COMPENSATION, MAX_PITCH_COMPENSATION))
             pcm_accel_cmd += pitch_compensation
 
-          pcm_accel_cmd = self.long_pid.update(
-            error_future,
-            speed=CS.out.vEgo,
-            feedforward=pcm_accel_cmd,
-            freeze_integrator=actuators.longControlState != LongCtrlState.pid
-          )
+          pcm_accel_cmd = self.long_pid.update(error_future,
+                                               speed=CS.out.vEgo,
+                                               feedforward=pcm_accel_cmd,
+                                               freeze_integrator=actuators.longControlState != LongCtrlState.pid)
         else:
           self.long_pid.reset()
 
@@ -368,17 +356,19 @@ class CarController(CarControllerBase):
             w = 1.0 - (dt_launch / LAUNCH_BOOST_TIME)
             pcm_accel_cmd += LAUNCH_BOOST_ACCEL * w
 
-        # permit_braking：更果斷解除（起步更乾脆）
+        # Along with rate limiting positive jerk above, this greatly improves gas response time
+        # Consider the net acceleration request that the PCM should be applying (pitch included)
         net_acceleration_request_min = min(actuators.accel + accel_due_to_pitch, net_acceleration_request)
+
+        # permit_braking：更果斷解除（起步更乾脆）
         if net_acceleration_request_min < PB_HOLD_TH or stopping or not CC.longActive:
           self.permit_braking = True
         elif net_acceleration_request_min > PB_RELEASE_TH:
           self.permit_braking = False
 
-        # 非 TSS2：不做 delay compensation（保留原行為）
+        # rick - do not do delay compensation for non-TSS2 vehicles (e.g. car with sDSU?), assign the value back to actuators.accel
         if not self.CP.carFingerprint in TSS2_CAR:
           pcm_accel_cmd = actuators.accel
-
         pcm_accel_cmd = float(np.clip(pcm_accel_cmd, self.params.ACCEL_MIN, self.params.ACCEL_MAX))
 
         main_accel_cmd = 0. if self.CP.flags & ToyotaFlags.SECOC.value else pcm_accel_cmd
@@ -397,27 +387,29 @@ class CarController(CarControllerBase):
         self.accel = pcm_accel_cmd
 
     else:
-      # lat-only 仍可 cancel 原車系統
+      # we can spam can to cancel the system even if we are using lat only control
       if pcm_cancel_cmd:
         if self.CP.carFingerprint in UNSUPPORTED_DSU_CAR:
           can_sends.append(toyotacan.create_acc_cancel_command(self.packer))
         else:
-          can_sends.append(toyotacan.create_accel_command(self.packer, 0, pcm_cancel_cmd, True, False, lead,
-                                                          CS.acc_type, False, self.distance_button))
+          can_sends.append(toyotacan.create_accel_command(self.packer, 0, pcm_cancel_cmd, True, False, lead, CS.acc_type, False, self.distance_button))
 
-    # ==========================================================================
-    # *** HUD UI ***
-    # ==========================================================================
+    # *** hud ui ***
     if self.CP.carFingerprint != CAR.TOYOTA_PRIUS_V:
+      # ui mesg is at 1Hz but we send asap if:
+      # - there is something to display
+      # - there is something to stop displaying
       send_ui = False
       if ((fcw_alert or steer_alert) and not self.alert_active) or \
          (not (fcw_alert or steer_alert) and self.alert_active):
         send_ui = True
         self.alert_active = not self.alert_active
       elif pcm_cancel_cmd:
+        # forcing the pcm to disengage causes a bad fault sound so play a good sound instead
         send_ui = True
 
       if self.frame % 20 == 0 or send_ui:
+        # dp - ALKA: use lat_active to show HUD when ALKA is active
         can_sends.append(toyotacan.create_ui_command(self.packer, steer_alert, pcm_cancel_cmd, hud_control.leftLaneVisible,
                                                      hud_control.rightLaneVisible, hud_control.leftLaneDepart,
                                                      hud_control.rightLaneDepart, lat_active, CS.lkas_hud))
@@ -429,14 +421,12 @@ class CarController(CarControllerBase):
     if self.frame % 20 == 0 and self.CP.flags & ToyotaFlags.DISABLE_RADAR.value and not self.CP.flags & ToyotaFlags.RADAR_FILTER.value:
       can_sends.append(make_tester_present_msg(0x750, 0, 0xF))
 
-    # 回填實際輸出（讓上層顯示/記錄一致）
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
     new_actuators.torqueOutputCan = apply_torque
     new_actuators.steeringAngleDeg = self.last_angle
     new_actuators.accel = self.accel
 
-    # 門鎖控制（選配）
     if self.CP.flags & ToyotaFlags.LOCK_CTRL.value:
       if not self.doors_locked and CS.out.gearShifter == DRIVE and CS.out.vEgo >= LOCK_SPEED:
         can_sends.append(CanData(LOCK_UNLOCK_CAN_ID, LOCK_CMD, 0))
