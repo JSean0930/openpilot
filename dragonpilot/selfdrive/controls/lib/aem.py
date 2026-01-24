@@ -62,7 +62,7 @@ RETRIGGER_BLOCK_TIME = 0.10 # s（你目前 0.10）
 # 2) 低速區間強制鎖定 blended（你原本的 FORCE_EXP）
 # ---------------------------------------------------------------------
 FORCE_EXP_ENABLE = True
-FORCE_EXP_KPH_MIN = 0.0
+FORCE_EXP_KPH_MIN = 5.0
 FORCE_EXP_KPH_MAX = 25.0
 # 離開區間：立刻解除（下方 _reset_state_immediate）
 
