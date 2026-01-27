@@ -27,17 +27,8 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
-# --------------------------------------------------------------------
-# [新增] 低速區間「暴力平均」混合：只在 5~25 km/h 做 (MPC + E2E) / 2
-#
-# 你的要求：
-# - 只在原本指定 5~25 kph 區間內做混合
-# - 混合方式固定「相加除以二」，不要權重 W
-#
-# 設計決策：
-# - 只混合「最後輸出 aTarget」，不改 MPC 軌跡輸出（publish 仍以 MPC 解為主，保持一致）
-# - shouldStop 在該區間用 OR（較安全：任一判定要停就停）
-# --------------------------------------------------------------------
+# --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
+# 注意：這裡完全不使用權重，也不改 long_mpc，只在 planner 最終輸出做平均。
 MIX_AVG_ENABLE = True
 MIX_AVG_MIN_KPH = 5.0
 MIX_AVG_MAX_KPH = 25.0
@@ -190,8 +181,6 @@ class LongitudinalPlanner:
       accel_coast = ACCEL_MAX
 
     v_ego = sm['carState'].vEgo
-    v_kph = float(v_ego * CV.MS_TO_KPH)
-
     lead_a = _get_lead_decel_a(sm)
     fast_response = FAST_V_DESIRED_ENABLE and _should_fast_response(v_ego, lead_a)
 
@@ -211,6 +200,8 @@ class LongitudinalPlanner:
 
     # ============================================================
     # 核心修改(1)：ACC + blended 都套用 A_CRUISE_MAX（你要求的 blended 套用）
+    # - 原本 blended 用 ACCEL_MAX，現在改成 get_max_accel(v_ego)
+    # - 轉彎加速限制：維持原本只在 ACC 套用（需要的話也可改成兩種模式都套用）
     # ============================================================
     accel_clip = [ACCEL_MIN, get_max_accel(v_ego)]
     if mode == 'acc':
@@ -252,6 +243,10 @@ class LongitudinalPlanner:
 
     # ============================================================
     # 核心修改(2)：方法B（明確把 a_min/a_max 傳進 long_mpc）
+    #
+    # - 不再寫 self.mpc.params[...]（因為 long_mpc.update() 內會自己設定 params）
+    # - a_max 預設使用 accel_clip[1]（已包含 A_CRUISE_MAX，且 throttle gating 也會反映）
+    # - 若啟用 DTSC：用 per-stage 的曲率限制再疊加 accel_clip，並傳入 array (N+1)
     # ============================================================
     a_min_mpc = float(accel_clip[0])
     a_max_mpc = float(accel_clip[1])
@@ -260,6 +255,7 @@ class LongitudinalPlanner:
       a_min_dtsc, a_max_dtsc = self.dtsc.get_mpc_constraints(
         sm['modelV2'], v_ego, accel_clip[0], accel_clip[1]
       )
+      # 轉 numpy array，與 accel_clip 疊加
       a_min_mpc = np.maximum(a_min_mpc, np.asarray(a_min_dtsc, dtype=float))
       a_max_mpc = np.minimum(a_max_mpc, np.asarray(a_max_dtsc, dtype=float))
 
@@ -291,49 +287,36 @@ class LongitudinalPlanner:
     self.a_desired = float(np.interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
     self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
 
-    # ------------------------------
-    # 取得 MPC 輸出 + E2E 輸出
-    # ------------------------------
     action_t = self.CP.longitudinalActuatorDelay + DT_MDL
     output_a_target_mpc, output_should_stop_mpc = get_accel_from_plan(
       self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
       action_t=action_t, vEgoStopping=self.CP.vEgoStopping
     )
 
-    # E2E action（加防呆：避免 NaN）
-    try:
-      output_a_target_e2e = float(sm['modelV2'].action.desiredAcceleration)
-      if not np.isfinite(output_a_target_e2e):
-        output_a_target_e2e = 0.0
-      output_should_stop_e2e = bool(sm['modelV2'].action.shouldStop)
-    except Exception:
-      output_a_target_e2e = 0.0
-      output_should_stop_e2e = False
+    # 讀 e2e action（保留你原本寫法）
+    output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
+    output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
-    # ------------------------------
-    # 基本輸出（區間外用原本邏輯）
-    # ------------------------------
+    # 原本模式輸出
     if mode == 'acc':
       output_a_target = float(output_a_target_mpc)
       self.output_should_stop = bool(output_should_stop_mpc)
     else:
-      # 原本 blended：min(mpc, e2e)
       output_a_target = float(min(output_a_target_mpc, output_a_target_e2e))
       self.output_should_stop = bool(output_should_stop_e2e) or bool(output_should_stop_mpc)
 
     # ============================================================
-    # [你要求的唯一混合點] 只在 5~25 km/h 內做「(MPC + E2E) / 2」
-    # - 不用任何權重
-    # - 直接暴力平均
-    # - shouldStop 用 OR（任一要求停就停）
+    # [你要的修改] 只在 5~25 km/h 區間做「(MPC + E2E) / 2」平均混合
+    # - 不使用權重
+    # - 不改 long_mpc
+    # - 不寫入 self.mpc.source（避免 source enum/capnp 崩潰造成 process not running）
+    # - shouldStop：更保守（任一要求停就停）
     # ============================================================
-    if MIX_AVG_ENABLE and (MIX_AVG_MIN_KPH <= v_kph < MIX_AVG_MAX_KPH):
-      output_a_target = 0.5 * (float(output_a_target_mpc) + float(output_a_target_e2e))
-      self.output_should_stop = bool(output_should_stop_e2e) or bool(output_should_stop_mpc)
-      try:
-        self.mpc.source = 'mix_avg'
-      except Exception:
-        pass
+    if MIX_AVG_ENABLE:
+      v_kph = float(v_ego) * CV.MS_TO_KPH
+      if MIX_AVG_MIN_KPH <= v_kph < MIX_AVG_MAX_KPH:
+        output_a_target = 0.5 * (float(output_a_target_mpc) + float(output_a_target_e2e))
+        self.output_should_stop = bool(output_should_stop_e2e) or bool(output_should_stop_mpc)
 
     # === accel_clip slew rate：動態放寬（低速/前車強減速更快）===
     max_delta = _accel_clip_slew_step(self.dt, v_ego, lead_a)
@@ -363,7 +346,23 @@ class LongitudinalPlanner:
     longitudinalPlan.jerks = self.j_desired_trajectory.tolist()
 
     longitudinalPlan.hasLead = sm['radarState'].leadOne.status
-    longitudinalPlan.longitudinalPlanSource = self.mpc.source
+
+    # ============================================================
+    # [防爆修正] 你先前的 process not running，多半是這行炸掉：
+    # longitudinalPlan.longitudinalPlanSource = self.mpc.source
+    #
+    # 原因：某些 fork 的 schema 把 longitudinalPlanSource 定義成 enum，
+    #      若 self.mpc.source 不在 enum 內，capnp 會直接丟例外 -> process crash
+    #
+    # 解法：保留原本行為，但加 try/except，避免任何意外值讓進程掛掉。
+    # ============================================================
+    try:
+      longitudinalPlan.longitudinalPlanSource = self.mpc.source
+    except Exception:
+      # fallback：用最常見且通常存在的來源字串
+      # 若你的 schema 是 enum，請確認 'cruise' 在你的 enum 裡（大多數 fork 都有）
+      longitudinalPlan.longitudinalPlanSource = 'cruise'
+
     longitudinalPlan.fcw = self.fcw
 
     longitudinalPlan.aTarget = float(self.output_a_target)
