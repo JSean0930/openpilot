@@ -306,7 +306,7 @@ class LongitudinalPlanner:
       self.output_should_stop = bool(output_should_stop_e2e) or bool(output_should_stop_mpc)
 
     # ============================================================
-    # [你要的修改] 只在 5~25 km/h 區間做「(MPC + E2E) / 2」平均混合
+    # [你要的修改] 只在  MIX_AVG_MIN_KPH <= v_kph < MIX_AVG_MAX_KPH 區間做「(MPC + E2E) / 2」平均混合
     # - 不使用權重
     # - 不改 long_mpc
     # - 不寫入 self.mpc.source（避免 source enum/capnp 崩潰造成 process not running）
