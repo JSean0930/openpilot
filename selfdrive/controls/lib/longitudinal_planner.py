@@ -31,14 +31,14 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # 注意：這裡完全不使用權重，也不改 long_mpc，只在 planner 最終輸出做平均。
 MIX_AVG_ENABLE = True
 MIX_AVG_MIN_KPH = 3.0 #5.0
-MIX_AVG_MAX_KPH = 35.0 #25.0
+MIX_AVG_MAX_KPH = 30.0 #25.0
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
 # 低速 or 前車明顯減速時，將 v_desired_filter.x 更快貼近 v_ego
 FAST_V_DESIRED_ENABLE = True
 FAST_V_DESIRED_LOW_SPEED_KPH = 35.0            # 低於此速就更敏感（km/h）
 FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.6        # leadOne.aLeadK 小於此值視為前車在明顯減速（m/s^2）
-FAST_V_DESIRED_BLEND = 0.65                    # 0~1，越大越快貼近 v_ego（建議 0.5~0.8）
+FAST_V_DESIRED_BLEND = 0.75                    # 0~1，越大越快貼近 v_ego（建議 0.5~0.8）/ 0.65
 
 # --- accel_clip slew rate（原本固定 0.05/step 太慢） ---
 # 改成「每秒可變化多少 m/s^2」，再乘上 dt → 每 step 的允許變化量
