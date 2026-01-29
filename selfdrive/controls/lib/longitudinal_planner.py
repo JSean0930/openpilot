@@ -46,10 +46,10 @@ FAST_V_DESIRED_BLEND = 0.75                    # 0~1，越大越快貼近 v_ego�
 # [B方案] 重要：這裡會搭配「上下不對稱 slew」
 # - 往更負（煞車方向）允許更快變化 -> 該煞就即時煞
 # - 往更正（油門方向）維持較保守 -> 避免油門抖、暴衝
-ACCEL_CLIP_SLEW_NORMAL_MPS2_PER_S = 1.0        # 原本 0.05@20Hz ≈ 1.0 m/s^2 per sec
-ACCEL_CLIP_SLEW_FAST_MPS2_PER_S = 2.5          # 低速/前車強減速時放寬（建議 2.0~3.5）
-ACCEL_CLIP_FAST_LOW_SPEED_KPH = 35.0           # 低於此速可放寬（km/h）
-ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.8       # 前車減速強於此值可放寬（m/s^2）
+ACCEL_CLIP_SLEW_NORMAL_MPS2_PER_S = 1.4        # 原本 0.05@20Hz ≈ 1.0 m/s^2 per sec 1.0
+ACCEL_CLIP_SLEW_FAST_MPS2_PER_S = 4.0          # 低速/前車強減速時放寬（建議 2.0~3.5）2.5
+ACCEL_CLIP_FAST_LOW_SPEED_KPH = 40.0           # 低於此速可放寬（km/h）35
+ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.5       # 前車減速強於此值可放寬（m/s^2）-0.8
 
 # --- Throttle gating（保留你原本設定） ---
 ALLOW_THROTTLE_THRESHOLD = 0.4
