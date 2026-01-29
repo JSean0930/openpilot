@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 import math
 import numpy as np
 
@@ -29,31 +27,25 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
+# --------------------------------------------------------------------
+# ✅ 你要的「2~3 個旋鈕」(更早介入版)
+# --------------------------------------------------------------------
+# EARLYNESS：越大越早介入（同時影響 fast_response + pre-brake 觸發門檻）
+# STRENGTH ：最大預煞強度（越負越兇）
+# SENS     ：觸發敏感度（越大越容易觸發、距離窗更大、a_req 門檻更寬鬆）
+EARLYNESS = 1.20   # 建議 0.8 ~ 1.6（你要更早介入 => 往上加）
+STRENGTH  = 1.10   # 建議 0.8 ~ 1.6（對應最大預煞強度）
+SENS      = 1.20   # 建議 0.8 ~ 1.6（越大越敏感）
+
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
 # 注意：這裡完全不使用權重，也不改 long_mpc，只在 planner 最終輸出做平均。
 MIX_AVG_ENABLE = True
 MIX_AVG_MIN_KPH = 3.0 #5.0
 MIX_AVG_MAX_KPH = 30.0 #25.0
 
-# --- [新增] TTC/相對速度/距離：追近停等車時，提早進入 fast + 提早煞車（避免最後一刻才急煞） ---
-# 你現在的問題：「高速遇到停等車 -> 先慢煞，最後殺很急」
-# 主要原因：只看 lead_a (aLeadK) 會漏掉「前車已慢/已停，但 aLeadK 不一定很負」的場景
-# 解法：加入 closing speed / dRel / TTC / required decel (a_req) 來判斷是否需要提早反應
-APPROACH_GUARD_ENABLE = True
-
-APPROACH_CLOSING_MIN_MPS = 0.5     # closing speed 小於此值不算真的追近（避免抖）
-APPROACH_TTC_FAST_S = 4.0          # TTC < 這個就強制視為 fast（提早開始柔和減速）
-APPROACH_TTC_FULL_S = 2.0          # TTC < 這個視為更緊急（用於 pre-brake 漸進）
-APPROACH_STOP_BUFFER_M = 6.0       # 計算 required decel 時預留距離（避免分母過小導致過兇）
-APPROACH_A_REQ_FAST = -1.2         # a_req < 這個（更負）視為需要 fast（代表已經必須較大減速）
-
-# --- [新增] pre-brake：只往更負方向壓輸出（不會把煞車變小），讓減速「更早開始、更平滑」---
-# 注意：這不是取代 MPC，只是在「追近停等車」時避免最後一刻才猛煞
-PREBRAKE_ENABLE = True
-PREBRAKE_MAX_DECEL = -2.5          # pre-brake 最多把 aTarget 壓到多負（越負越兇，建議 -2.0 ~ -3.0）
-
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
 # 低速 or 前車明顯減速時，將 v_desired_filter.x 更快貼近 v_ego
+# ✅ 重要：本版已把 fast_response 的觸發「統一」成同一套 approach_trigger（相對速度/距離/TTC）
 FAST_V_DESIRED_ENABLE = True
 FAST_V_DESIRED_LOW_SPEED_KPH = 35.0            # 低於此速就更敏感（km/h）
 FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.6        # leadOne.aLeadK 小於此值視為前車在明顯減速（m/s^2）
@@ -73,6 +65,42 @@ ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.4       # 前車減速強於此值可放�
 # --- Throttle gating（保留你原本設定） ---
 ALLOW_THROTTLE_THRESHOLD = 0.4
 MIN_ALLOW_THROTTLE_SPEED = 2.5
+
+# --------------------------------------------------------------------
+# ✅ 新增：TTC / 相對速度 / 相對距離 的「人性化判斷」(由旋鈕推導)
+# --------------------------------------------------------------------
+# 目標：你提到的「高速遇到停等車，會慢煞 + 最後急煞」=> 提前預煞
+# 核心依據：closing(相對速度) + dRel(距離) => TTC + 需求減速度 a_req
+# 注意：這些都是底層參數，通常只要動上面 3 個旋鈕就好
+
+# 最小距離硬底線（不可違反）
+HARD_MIN_LEAD_DIST_M = 5.0
+
+# 只有 closing_speed > 這個才算真的在追近（避免抖動/誤觸）
+CLOSING_MIN_MPS = 0.25
+
+# 用於估算 a_req 的距離緩衝（避免 dRel 很小時 a_req 爆炸）
+A_REQ_DIST_BUFFER_M = 2.0
+
+# 「預煞」作用距離窗（只在這範圍內才介入，避免遠距離一直點煞）
+# 距離窗會被 SENS 放大，也會被 EARLYNESS 稍微放大（更早介入）
+PREBRAKE_DIST_MIN_M = 6.0
+PREBRAKE_DIST_MAX_M_BASE = 55.0  # base，實際會乘上旋鈕推導
+
+# 只對「停等/慢車」更積極（避免你追近一台正常車速的車也被預煞）
+LEAD_SLOW_MPS_BASE = 9.0  # 約 32km/h，實際會被 EARLYNESS/SENS 推導
+
+# TTC 門檻（越早介入 => TTC_START 更大）
+TTC_START_BASE = 2.2
+TTC_FULL_BASE  = 1.2
+
+# a_req 門檻（越早介入 => 更不需要那麼大的 a_req 就觸發）
+A_REQ_START_BASE = -1.2
+A_REQ_FULL_BASE  = -2.6
+
+# 預煞最大減速度（由 STRENGTH 推導，越大越兇）
+PREBRAKE_MAX_DECEL_BASE = -1.6  # base（會乘 STRENGTH）
+
 
 # =======================================================================
 
@@ -128,7 +156,7 @@ def _get_lead_decel_a(sm) -> float:
 
 def _pick_closest_lead(radarstate):
   """
-  [新增] 選擇最需要注意的 lead（取 dRel 最小者）
+  選擇「最需要注意」的 lead（取 dRel 最小者）
   回傳 None 或 lead 物件（具備 dRel/vLead/status）
   """
   best = None
@@ -136,9 +164,8 @@ def _pick_closest_lead(radarstate):
   for lead in (radarstate.leadOne, radarstate.leadTwo):
     try:
       if lead is not None and lead.status and np.isfinite(lead.dRel):
-        d = float(lead.dRel)
-        if d < best_d:
-          best_d = d
+        if lead.dRel < best_d:
+          best_d = float(lead.dRel)
           best = lead
     except Exception:
       pass
@@ -147,47 +174,146 @@ def _pick_closest_lead(radarstate):
 
 def _lead_metrics(v_ego: float, radarstate):
   """
-  [新增] 回傳 (dRel, v_lead, closing, ttc, a_req)
-
+  由 lead 計算「相對距離/相對速度/TTC/需求減速度 a_req」
   - closing = v_ego - v_lead
-  - ttc：只有 closing 足夠大才有意義
-  - a_req：在剩餘距離內把 closing 消掉「所需的減速度」（負值）
-          用 buffer 預留距離，避免最後一刻才硬煞
+  - TTC = d_rel / closing（只在 closing > CLOSING_MIN_MPS 時計算）
+  - a_req：用能量法估算「要在剩餘距離內把 closing 消掉」的需求減速度（負值）
+          a_req ≈ -(closing^2) / (2*(d_rel - buffer))
   """
   lead = _pick_closest_lead(radarstate)
   if lead is None:
-    return float('inf'), v_ego, 0.0, float('inf'), 0.0
+    return None, float('inf'), v_ego, 0.0, float('inf'), 0.0
 
-  d = float(getattr(lead, 'dRel', 1e9))
+  d_rel = float(getattr(lead, 'dRel', 1e9))
   v_lead = float(getattr(lead, 'vLead', v_ego))
   closing = float(v_ego - v_lead)
 
-  if not np.isfinite(d) or d <= 0.0:
-    return 0.0, v_lead, closing, 0.0, -10.0
+  # TTC
+  if (not np.isfinite(d_rel)) or d_rel <= 0.0:
+    ttc = 0.0
+  elif closing <= CLOSING_MIN_MPS:
+    ttc = float('inf')
+  else:
+    ttc = d_rel / max(closing, 1e-3)
 
-  if closing <= APPROACH_CLOSING_MIN_MPS:
-    return d, v_lead, closing, float('inf'), 0.0
+  # a_req（需求減速度，負值才需要煞車）
+  d_eff = max(d_rel - A_REQ_DIST_BUFFER_M, 0.5)
+  if closing <= CLOSING_MIN_MPS:
+    a_req = 0.0
+  else:
+    a_req = - (closing * closing) / (2.0 * d_eff)
 
-  ttc = d / max(closing, 1e-3)
-
-  denom = max(d - APPROACH_STOP_BUFFER_M, 0.5)
-  a_req = -(closing * closing) / (2.0 * denom)
-  return d, v_lead, closing, float(ttc), float(a_req)
+  return lead, d_rel, v_lead, closing, float(ttc), float(a_req)
 
 
-def _should_fast_response(v_ego: float, lead_a: float) -> bool:
+def _derived_thresholds():
   """
-  決定是否啟用「更快反應」：
-  - 低速更敏感（壅塞/跟停）
-  - 前車明顯減速更敏感
+  把 3 個旋鈕推導成底層門檻（集中管理）
+  你要「更早介入」=> EARLYNESS 往上加
   """
-  v_kph = v_ego * CV.MS_TO_KPH
-  low_speed = v_kph < FAST_V_DESIRED_LOW_SPEED_KPH
-  lead_braking = lead_a < FAST_V_DESIRED_LEAD_DECEL_THRESH
-  return bool(low_speed or lead_braking)
+  # TTC 門檻：EARLYNESS 越大 => START/FULL 越大（更早開始、滿介入也更早）
+  ttc_start = TTC_START_BASE + 0.9 * (EARLYNESS - 1.0)
+  ttc_full  = TTC_FULL_BASE  + 0.5 * (EARLYNESS - 1.0)
+  ttc_start = float(np.clip(ttc_start, 1.6, 4.0))
+  ttc_full  = float(np.clip(ttc_full, 0.8, ttc_start - 0.2))
+
+  # a_req 門檻：EARLYNESS/SENS 越大 => 門檻更接近 0（更早觸發）
+  # 例：-1.2 -> -0.8（更早）
+  a_req_start = A_REQ_START_BASE + 0.7 * (EARLYNESS - 1.0) + 0.5 * (SENS - 1.0)
+  a_req_full  = A_REQ_FULL_BASE  + 0.5 * (EARLYNESS - 1.0) + 0.3 * (SENS - 1.0)
+  a_req_start = float(np.clip(a_req_start, -2.0, -0.3))
+  a_req_full  = float(np.clip(a_req_full,  -4.5, a_req_start - 0.3))
+
+  # 距離窗：SENS/EARLYNESS 越大 => 視為更早需要預煞的距離更遠
+  dist_max = PREBRAKE_DIST_MAX_M_BASE * (0.9 + 0.35 * (SENS - 1.0)) * (0.95 + 0.25 * (EARLYNESS - 1.0))
+  dist_max = float(np.clip(dist_max, 35.0, 110.0))
+
+  # 慢車門檻：EARLYNESS/SENS 越大 => 更常把「前方慢/停等」當作預煞目標
+  lead_slow_mps = LEAD_SLOW_MPS_BASE * (0.95 + 0.25 * (SENS - 1.0)) * (0.95 + 0.15 * (EARLYNESS - 1.0))
+  lead_slow_mps = float(np.clip(lead_slow_mps, 6.0, 14.0))
+
+  # 最大預煞強度：STRENGTH 越大 => 更負（更兇）
+  prebrake_max_decel = PREBRAKE_MAX_DECEL_BASE * STRENGTH
+  prebrake_max_decel = float(np.clip(prebrake_max_decel, -3.5, -0.8))
+
+  return ttc_start, ttc_full, a_req_start, a_req_full, dist_max, lead_slow_mps, prebrake_max_decel
 
 
-def _accel_clip_slew_step(dt: float, v_ego: float, lead_a: float) -> tuple[float, float]:
+def _approach_trigger(v_ego: float, radarstate):
+  """
+  ✅ 統一觸發：fast_response + pre-brake 共用同一組條件（相對速度/距離）
+  回傳：
+  - trigger: bool
+  - metrics: (lead, d_rel, v_lead, closing, ttc, a_req)
+  """
+  ttc_start, ttc_full, a_req_start, a_req_full, dist_max, lead_slow_mps, prebrake_max_decel = _derived_thresholds()
+
+  lead, d_rel, v_lead, closing, ttc, a_req = _lead_metrics(v_ego, radarstate)
+  if lead is None:
+    return False, (lead, d_rel, v_lead, closing, ttc, a_req)
+
+  # 只在距離窗內才考慮（避免太遠就開始抖）
+  in_dist_window = (np.isfinite(d_rel) and (PREBRAKE_DIST_MIN_M <= d_rel <= dist_max))
+
+  # 必須真的在追近
+  is_closing = closing > CLOSING_MIN_MPS
+
+  # 偏向停等/慢車：v_lead 很慢 或 d_rel 很近
+  slow_or_close = (v_lead <= lead_slow_mps) or (d_rel <= 18.0)
+
+  # TTC 或 a_req 觸發任一成立 => 觸發
+  ttc_trig = np.isfinite(ttc) and (ttc < ttc_start)
+  req_trig = (a_req < a_req_start)
+
+  trigger = bool(in_dist_window and is_closing and slow_or_close and (ttc_trig or req_trig))
+  return trigger, (lead, d_rel, v_lead, closing, ttc, a_req)
+
+
+def _prebrake_override(a_target: float, metrics):
+  """
+  依 approach_trigger 的同一套 metrics 來做「預煞」：提前把減速度往負推
+  - 只做「往更負」方向（不會把你煞車變小）
+  - TTC 越小 / a_req 越負 => 介入越大
+  """
+  ttc_start, ttc_full, a_req_start, a_req_full, dist_max, lead_slow_mps, prebrake_max_decel = _derived_thresholds()
+  lead, d_rel, v_lead, closing, ttc, a_req = metrics
+
+  a_new = float(a_target)
+
+  # 硬底線：距離不可低於 5m（不可違反）
+  if np.isfinite(d_rel) and d_rel < HARD_MIN_LEAD_DIST_M:
+    return float(min(a_new, prebrake_max_decel)), True
+
+  # 沒在追近就不介入
+  if closing <= CLOSING_MIN_MPS:
+    return a_new, False
+
+  # 介入權重：TTC
+  w_ttc = 0.0
+  if np.isfinite(ttc) and ttc < ttc_start:
+    w_ttc = (ttc_start - ttc) / max(ttc_start - ttc_full, 1e-3)
+    w_ttc = float(np.clip(w_ttc, 0.0, 1.0))
+
+  # 介入權重：a_req（需求減速度）
+  w_req = 0.0
+  if a_req < a_req_start:
+    w_req = (a_req_start - a_req) / max(a_req_start - a_req_full, 1e-3)
+    w_req = float(np.clip(w_req, 0.0, 1.0))
+
+  w = float(max(w_ttc, w_req))
+  if w <= 0.0:
+    return a_new, False
+
+  # 目標預煞減速度（越危險越接近 max_decel）
+  a_brake = float(prebrake_max_decel)
+
+  # 只往更負方向推
+  a_cmd = (1.0 - w) * a_new + w * a_brake
+  a_new = float(min(a_new, a_cmd))
+  return a_new, False
+
+
+def _accel_clip_slew_step(dt: float, v_ego: float, lead_a: float, trigger_approach: bool, ttc: float, a_req: float) -> tuple[float, float]:
   """
   [B方案 1)]
   回傳 (delta_down, delta_up)
@@ -195,12 +321,20 @@ def _accel_clip_slew_step(dt: float, v_ego: float, lead_a: float) -> tuple[float
   - delta_down：允許 accel_clip 更快往「更負」方向變化（煞車更即時）
   - delta_up  ：允許 accel_clip 往「更正」方向較慢變化（油門較穩、避免抖）
 
-  fast 條件維持你原本邏輯：
+  fast 條件：維持你原本邏輯 + ✅加入相對指標
   - 低於 ACCEL_CLIP_FAST_LOW_SPEED_KPH -> fast
   - lead_a < ACCEL_CLIP_FAST_LEAD_DECEL_THRESH -> fast
+  - approach_trigger / TTC 很小 / a_req 很負 -> fast
   """
   v_kph = v_ego * CV.MS_TO_KPH
-  fast = (v_kph < ACCEL_CLIP_FAST_LOW_SPEED_KPH) or (lead_a < ACCEL_CLIP_FAST_LEAD_DECEL_THRESH)
+
+  # 由旋鈕推導一個「fast」的 TTC/a_req 門檻（比 start 再更早一點）
+  ttc_start, ttc_full, a_req_start, a_req_full, dist_max, lead_slow_mps, prebrake_max_decel = _derived_thresholds()
+  ttc_fast = min(ttc_start + 0.4, 4.0)
+  a_req_fast = min(a_req_start + 0.3, -0.2)
+
+  fast_rel = bool(trigger_approach or (np.isfinite(ttc) and ttc < ttc_fast) or (a_req < a_req_fast))
+  fast = (v_kph < ACCEL_CLIP_FAST_LOW_SPEED_KPH) or (lead_a < ACCEL_CLIP_FAST_LEAD_DECEL_THRESH) or fast_rel
 
   # 上行（加速方向）保持較保守：用 NORMAL
   slew_up_per_s = ACCEL_CLIP_SLEW_NORMAL_MPS2_PER_S
@@ -274,24 +408,13 @@ class LongitudinalPlanner:
     lead_a = _get_lead_decel_a(sm)
 
     # ============================================================
-    # [新增] 追近停等車判斷：TTC / closing / dRel / a_req
-    # - 用來補強 fast_response（不再只看 lead_a）
+    # ✅ 統一觸發：fast_response + pre-brake 共用同一組條件（相對速度/距離/TTC）
     # ============================================================
-    if APPROACH_GUARD_ENABLE:
-      d_rel, v_lead, closing, ttc, a_req = _lead_metrics(v_ego, sm['radarState'])
-    else:
-      d_rel, v_lead, closing, ttc, a_req = (float('inf'), v_ego, 0.0, float('inf'), 0.0)
+    trigger_approach, metrics = _approach_trigger(v_ego, sm['radarState'])
+    _lead, _d_rel, _v_lead, _closing, _ttc, _a_req = metrics
 
-    fast_response = FAST_V_DESIRED_ENABLE and _should_fast_response(v_ego, lead_a)
-
-    # ============================================================
-    # [新增] fast_response 補強：
-    # - TTC 小（快追上） -> fast
-    # - required decel 很負（代表不提早煞會來不及） -> fast
-    # ============================================================
-    if APPROACH_GUARD_ENABLE:
-      if (np.isfinite(ttc) and (ttc < APPROACH_TTC_FAST_S)) or (a_req < APPROACH_A_REQ_FAST):
-        fast_response = True
+    # 保留你原本 low_speed / lead_a 的 fast_response 結構，但現在主要由 trigger_approach 驅動
+    fast_response = bool(FAST_V_DESIRED_ENABLE and (trigger_approach or (v_ego * CV.MS_TO_KPH < FAST_V_DESIRED_LOW_SPEED_KPH) or (lead_a < FAST_V_DESIRED_LEAD_DECEL_THRESH)))
 
     v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
@@ -325,6 +448,7 @@ class LongitudinalPlanner:
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
 
     # === 快速反應：縮短體感延遲（不改 FirstOrderFilter 結構，只做額外貼近）===
+    # ✅ 現在 fast_response 會隨「追近停等車」更早觸發，避免慢煞 + 最後急煞
     if fast_response:
       self.v_desired_filter.x = (1.0 - FAST_V_DESIRED_BLEND) * self.v_desired_filter.x + FAST_V_DESIRED_BLEND * v_ego
 
@@ -428,17 +552,14 @@ class LongitudinalPlanner:
         self.output_should_stop = bool(output_should_stop_e2e) or bool(output_should_stop_mpc)
 
     # ============================================================
-    # [新增] pre-brake：追近停等車時提早壓輸出（只會更負，不會把煞車變小）
-    # - 解決「高速遇停等 -> 先慢煞、最後殺很急」
-    # - 條件：TTC 進入 FAST 區間（且 closing 足夠大）
+    # ✅ 新增：pre-brake（提前預煞）— 與 fast_response 共用同一套 approach_trigger
+    # 目的：高速遇上停等車，不要慢煞到最後才急煞
     # ============================================================
-    if APPROACH_GUARD_ENABLE and PREBRAKE_ENABLE:
-      if np.isfinite(ttc) and (ttc < APPROACH_TTC_FAST_S) and (closing > APPROACH_CLOSING_MIN_MPS):
-        # ttc=FAST -> w=0；ttc=FULL -> w=1
-        w = (APPROACH_TTC_FAST_S - ttc) / max(APPROACH_TTC_FAST_S - APPROACH_TTC_FULL_S, 1e-3)
-        w = float(np.clip(w, 0.0, 1.0))
-        a_pre = (1.0 - w) * float(output_a_target) + w * float(PREBRAKE_MAX_DECEL)
-        output_a_target = float(min(output_a_target, a_pre))  # 只做更負方向介入
+    if trigger_approach:
+      output_a_target, hard_stop = _prebrake_override(output_a_target, metrics)
+      # 硬底線/極端危險 => shouldStop 更保守
+      if hard_stop:
+        self.output_should_stop = True
 
     # ============================================================
     # [B方案 2)]
@@ -446,7 +567,7 @@ class LongitudinalPlanner:
     # - 往更負（煞車方向）允許更快變化 -> 更即時
     # - 往更正（油門方向）維持較保守 -> 更穩
     # ============================================================
-    delta_down, delta_up = _accel_clip_slew_step(self.dt, v_ego, lead_a)
+    delta_down, delta_up = _accel_clip_slew_step(self.dt, v_ego, lead_a, trigger_approach, _ttc, _a_req)
     for idx in range(2):
       accel_clip[idx] = np.clip(
         accel_clip[idx],
