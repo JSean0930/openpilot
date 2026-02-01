@@ -33,7 +33,7 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # EARLYNESS：越大越早介入（同時影響 fast_response + pre-brake 觸發門檻）
 # STRENGTH ：最大預煞強度（越負越兇）
 # SENS     ：觸發敏感度（越大越容易觸發、距離窗更大、a_req 門檻更寬鬆）
-EARLYNESS = 1.20   # 建議 0.8 ~ 1.6（你要更早介入 => 往上加）
+EARLYNESS = 1.30   # 建議 0.8 ~ 1.6（你要更早介入 => 往上加）,1.2
 STRENGTH  = 1.10   # 建議 0.8 ~ 1.6（對應最大預煞強度）
 SENS      = 1.20   # 建議 0.8 ~ 1.6（越大越敏感）
 
