@@ -93,7 +93,7 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
   v_kph = float(v_ego * 3.6)
 
   if personality == log.LongitudinalPersonality.relaxed:
-    base = 1.0 + 0.0026 * v_kph #0.0030
+    base = 1.0 + 0.0030 * v_kph #0.0030
   elif personality == log.LongitudinalPersonality.standard:
     base = 1.0 + 0.0024 * v_kph #0.0025
   elif personality == log.LongitudinalPersonality.aggressive:
