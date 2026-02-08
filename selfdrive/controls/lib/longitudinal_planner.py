@@ -74,7 +74,7 @@ MIN_ALLOW_THROTTLE_SPEED = 2.5
 # 注意：這些都是底層參數，通常只要動上面 3 個旋鈕就好
 
 # 最小距離硬底線（不可違反）
-HARD_MIN_LEAD_DIST_M = 5.0
+HARD_MIN_LEAD_DIST_M = 6.0
 
 # 只有 closing_speed > 這個才算真的在追近（避免抖動/誤觸）
 CLOSING_MIN_MPS = 0.25
