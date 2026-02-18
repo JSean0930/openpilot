@@ -74,7 +74,7 @@ MIN_ALLOW_THROTTLE_SPEED = 2.5
 # 注意：這些都是底層參數，通常只要動上面 3 個旋鈕就好
 
 # 最小距離硬底線（不可違反）
-HARD_MIN_LEAD_DIST_M = 6.0
+HARD_MIN_LEAD_DIST_M = 3.0 #6.0
 
 # 只有 closing_speed > 這個才算真的在追近（避免抖動/誤觸）
 CLOSING_MIN_MPS = 0.25
@@ -84,7 +84,7 @@ A_REQ_DIST_BUFFER_M = 2.0
 
 # 「預煞」作用距離窗（只在這範圍內才介入，避免遠距離一直點煞）
 # 距離窗會被 SENS 放大，也會被 EARLYNESS 稍微放大（更早介入）
-PREBRAKE_DIST_MIN_M = 6.0
+PREBRAKE_DIST_MIN_M = 1.5 #6.0
 PREBRAKE_DIST_MAX_M_BASE = 55.0  # base，實際會乘上旋鈕推導
 
 # 只對「停等/慢車」更積極（避免你追近一台正常車速的車也被預煞）
