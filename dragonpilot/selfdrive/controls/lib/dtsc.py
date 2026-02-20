@@ -171,7 +171,7 @@ class DTSC:
     start_dist = min(start_dist_entry, start_dist_crit)
 
     # --- 計算所需等加速度 decel（讓 v0 在 critical_dist 附近降到 target_v）---
-    req_decel = (target_v * target_v - v0 * v0) / (2.0 * max(critical_dist, 1.0))
+    req_decel = (target_v * target_v - v0 * v0) / (2.0 * max(critical_dist, 5.0))
     req_decel = min(req_decel, 0.0)
     req_decel = max(req_decel, MAX_COMFORT_DECEL)
 
