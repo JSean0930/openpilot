@@ -29,8 +29,8 @@ CURV_LPF_ALPHA = 0.20         # 曲率 horizon 低通濾波 0.35
 LOG_EVERY_N = 20              # log 節流
 
 MIN_ENTRY_DECEL = -0.15       # 觸發後最小入彎減速（讓「一開始就有緩煞」）-0.25
-RAMP_MIN_S = 0.8              # ramp 最短秒數
-RAMP_MAX_S = 1.5              # ramp 最長秒數
+RAMP_MIN_S = 0.5              # ramp 最短秒數 0.8
+RAMP_MAX_S = 2.0              # ramp 最長秒數 1.5
 
 # ✅ 需求2：減速幅度最多就是「設定車速的 90%」
 DTSC_MIN_TARGET_RATIO = 0.90
