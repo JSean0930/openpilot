@@ -194,7 +194,7 @@ class DTSC:
       disc = B * B - 4.0 * A * C
       if disc <= 0.0:
         if a < -1e-3:
-            return -v0 / a
+          return -v0 / a
         else:
           return s / max(v0, 1e-3)
 
