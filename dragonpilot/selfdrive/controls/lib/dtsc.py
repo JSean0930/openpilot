@@ -7,28 +7,28 @@ from openpilot.common.swaglog import cloudlog
 # DTSC 可調參數（都在這裡）
 # ==============================
 
-COMFORT_LAT_G = 0.20          # 舒適側向加速度上限（g）
+COMFORT_LAT_G = 0.27          # 舒適側向加速度上限（g）0.20
 SAFETY_FACTOR = 1.00          # 越小越保守（你目前很保守 OK）
 
 AGGR_MIN = 0.5
 AGGR_MAX = 1.5
 
-CURV_V_MIN = 2.0              # 曲率計算最小速度（m/s）
+CURV_V_MIN = 5.0              # 曲率計算最小速度（m/s）2.0
 MIN_CURVATURE = 0.0015        # 彎道判定（主要用於「確定是彎」）
-ENTRY_CURVATURE = 0.0009      # 入彎入口判定（更早、更敏感）建議 < MIN_CURVATURE
+ENTRY_CURVATURE = 0.0011      # 入彎入口判定（更早、更敏感）建議 < MIN_CURVATURE 0.0009
 
 EXCESS_SPEED_MPS = 0.8        # 超速門檻（m/s）
 MIN_CURVE_DISTANCE = 8.0      # 太近不動作
 BRAKE_PREBUFFER_M = 18.0      # 提前鋪陳距離（相對 critical）
 
-SAFE_SPEED_BOOST_MPS = 0.15   # 避免 safe_v 太貼造成抖動（越大越不容易煞）
+SAFE_SPEED_BOOST_MPS = 0.50   # 避免 safe_v 太貼造成抖動（越大越不容易煞）0.15
 MAX_COMFORT_DECEL = -1.0      # 舒適減速度上限（越負=更強煞）
 DECEL_ENABLE_THRESHOLD = -0.12  # req_decel 沒超過這個（不夠負）就不啟動
 
-CURV_LPF_ALPHA = 0.35         # 曲率 horizon 低通濾波
+CURV_LPF_ALPHA = 0.20         # 曲率 horizon 低通濾波 0.35
 LOG_EVERY_N = 20              # log 節流
 
-MIN_ENTRY_DECEL = -0.25       # 觸發後最小入彎減速（讓「一開始就有緩煞」）
+MIN_ENTRY_DECEL = -0.15       # 觸發後最小入彎減速（讓「一開始就有緩煞」）-0.25
 RAMP_MIN_S = 0.8              # ramp 最短秒數
 RAMP_MAX_S = 1.5              # ramp 最長秒數
 
@@ -48,11 +48,11 @@ ENTRY_BRAKE_LEAD_M_CONST = 12.0
 # 直覺：車速越高 -> 提前越多，讓你「轉向前就開始緩減速」，更人性
 # 你可依體感調整：高速想更早就把後段 meters 拉高
 ENTRY_BRAKE_LEAD_V_BP = [0.0, 8.3, 16.7, 25.0, 33.3]   # 0, 30, 60, 90, 120 km/h
-ENTRY_BRAKE_LEAD_M_BP = [6.0, 10.0, 14.0, 18.0, 22.0]  # 對應提前距離（m）
+ENTRY_BRAKE_LEAD_M_BP = [6.0, 12.0, 18.0, 26.0, 35.0]  # 對應提前距離（m）[6.0, 10.0, 14.0, 18.0, 22.0]
 
 # 安全夾制（避免表格被改壞）
 ENTRY_BRAKE_LEAD_M_MIN = 4.0
-ENTRY_BRAKE_LEAD_M_MAX = 30.0
+ENTRY_BRAKE_LEAD_M_MAX = 40.0 #30.0
 
 # ==============================
 # 物理常數
