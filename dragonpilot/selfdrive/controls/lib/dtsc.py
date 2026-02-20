@@ -193,7 +193,10 @@ class DTSC:
       C = -s
       disc = B * B - 4.0 * A * C
       if disc <= 0.0:
-        return s / max(v0, 1e-3)
+        if a < -1e-3:
+            return -v0 / a
+        else:
+          return s / max(v0, 1e-3)
 
       sqrt_disc = float(np.sqrt(disc))
       t1 = (-B + sqrt_disc) / (2.0 * A)
