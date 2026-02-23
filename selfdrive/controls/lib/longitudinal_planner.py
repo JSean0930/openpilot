@@ -35,7 +35,7 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # SENS     ：觸發敏感度（越大越容易觸發、距離窗更大、a_req 門檻更寬鬆）
 EARLYNESS = 1.45   # 建議 0.8 ~ 1.6（你要更早介入 => 往上加）,1.2
 STRENGTH  = 1.25   # 建議 0.8 ~ 1.6（對應最大預煞強度）
-SENS      = 1.30   # 建議 0.8 ~ 1.6（越大越敏感）
+SENS      = 1.50   # 建議 0.8 ~ 1.6（越大越敏感）
 
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
 # 注意：這裡完全不使用權重，也不改 long_mpc，只在 planner 最終輸出做平均。
