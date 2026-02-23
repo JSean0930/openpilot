@@ -48,8 +48,8 @@ MIX_AVG_MAX_KPH = 30.0 #25.0
 # ✅ 重要：本版已把 fast_response 的觸發「統一」成同一套 approach_trigger（相對速度/距離/TTC）
 FAST_V_DESIRED_ENABLE = True
 FAST_V_DESIRED_LOW_SPEED_KPH = 35.0            # 低於此速就更敏感（km/h）
-FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.2        # leadOne.aLeadK 小於此值視為前車在明顯減速（m/s^2）/ -0.6
-FAST_V_DESIRED_BLEND = 0.75                    # 0~1，越大越快貼近 v_ego（建議 0.5~0.8）/ 0.65
+FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.25        # leadOne.aLeadK 小於此值視為前車在明顯減速（m/s^2）/ -0.6
+FAST_V_DESIRED_BLEND = 0.85                    # 0~1，越大越快貼近 v_ego（建議 0.5~0.8）/ 0.65
 
 # --- accel_clip slew rate（原本固定 0.05/step 太慢） ---
 # 改成「每秒可變化多少 m/s^2」，再乘上 dt → 每 step 的允許變化量
@@ -60,7 +60,7 @@ FAST_V_DESIRED_BLEND = 0.75                    # 0~1，越大越快貼近 v_ego�
 ACCEL_CLIP_SLEW_NORMAL_MPS2_PER_S = 1.4        # 原本 0.05@20Hz ≈ 1.0 m/s^2 per sec 1.0
 ACCEL_CLIP_SLEW_FAST_MPS2_PER_S = 5.0          # 低速/前車強減速時放寬（建議 2.0~3.5）2.5 / 4.0
 ACCEL_CLIP_FAST_LOW_SPEED_KPH = 40.0           # 低於此速可放寬（km/h）35
-ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.4       # 前車減速強於此值可放寬（m/s^2）-0.8
+ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.20       # 前車減速強於此值可放寬（m/s^2）-0.8
 
 # --- Throttle gating（保留你原本設定） ---
 ALLOW_THROTTLE_THRESHOLD = 0.4
