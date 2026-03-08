@@ -97,7 +97,7 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
   elif personality == log.LongitudinalPersonality.standard:
     base = 1.0 + 0.0024 * v_kph #0.0025
   elif personality == log.LongitudinalPersonality.aggressive:
-    base = 1.0 #+ 0.0022 * v_kph #0.0020
+    base = 1.1 #+ 0.0022 * v_kph #0.0020
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
