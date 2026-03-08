@@ -15,7 +15,7 @@ from openpilot.selfdrive.modeld.constants import ModelConstants
 # ============================================================
 
 # --- 0) 極低速防護門檻 ----------------------------------------
-MIN_ENGAGE_SPEED = 3.0        # km/h：低於此速度時已不需要 AEM 介入，避免靜止時亂跳
+MIN_ENGAGE_SPEED = 1.0        # km/h：低於此速度時已不需要 AEM 介入，避免靜止時亂跳
 
 # --- 1) 快速切換 / 防抖 ---------------------------------------
 FAST_SWITCH_ENABLE = True
