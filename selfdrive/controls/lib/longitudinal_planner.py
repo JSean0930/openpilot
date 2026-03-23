@@ -39,9 +39,9 @@ SENS      = 1.40   # 建議 0.8 ~ 1.6（越大越敏感）
 
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
 # 注意：這裡完全不使用權重，也不改 long_mpc，只在 planner 最終輸出做平均。
-MIX_AVG_ENABLE = False
-MIX_AVG_MIN_KPH = 3.0 #5.0
-MIX_AVG_MAX_KPH = 30.0 #25.0
+MIX_AVG_ENABLE = True
+MIX_AVG_MIN_KPH = 5.0
+MIX_AVG_MAX_KPH = 20.0
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
 # 低速 or 前車明顯減速時，將 v_desired_filter.x 更快貼近 v_ego
