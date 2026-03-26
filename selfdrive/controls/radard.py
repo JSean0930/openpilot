@@ -19,7 +19,7 @@ from openpilot.common.simple_kalman import KF1D
 #   - 速度分段 (m/s) ≈ [0, 15, 35, 60, 108] km/h
 LEAD_ACCEL_TAU_V_EGO_BP = [0.0,  4.17, 9.72, 16.67, 30.0]   
 #   - 對應 tau（秒）: 低速極敏捷，高速極平穩
-LEAD_ACCEL_TAU_V_EGO_V  = [0.15, 0.30, 0.80, 1.50,  2.00]     
+LEAD_ACCEL_TAU_V_EGO_V  = [0.25, 0.30, 0.80, 1.50,  2.00]     
 
 # aLead 被視為「幾乎零加速度」的門檻（m/s^2）
 # 若前車加減速超過此數值，tau 將瞬間歸零 (0.0) 以發動最快反應
