@@ -15,14 +15,15 @@ from openpilot.common.simple_kalman import KF1D
 
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
-# 1) 前車加速度時間常數（aLeadTau）速度相依調整
-#   - 低速時用較小 tau → 更敏感
-#   - 高速時用較大 tau → 穩定不晃
-LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 8.33, 15.0, 30.0]   # 速度分段 (m/s) ≈ [0, 30, 54, 108] km/h
-LEAD_ACCEL_TAU_V_EGO_V  = [0.4, 0.7,  1.7,  2.0]     # 對應 tau（秒）[0.4, 0.7,  1.2/1.6,  1.6/1.8]
+# 1) 前車加速度時間常數（aLeadTau）速度相依調整 (專為市區塞車與高速巡航優化)
+#   - 速度分段 (m/s) ≈ [0, 15, 35, 60, 108] km/h
+LEAD_ACCEL_TAU_V_EGO_BP = [0.0,  4.17, 9.72, 16.67, 30.0]   
+#   - 對應 tau（秒）: 低速極敏捷，高速極平穩
+LEAD_ACCEL_TAU_V_EGO_V  = [0.15, 0.30, 0.80, 1.50,  2.00]     
 
 # aLead 被視為「幾乎零加速度」的門檻（m/s^2）
-LEAD_ACCEL_CONST_ACCEL_THRESH = 0.2 #0.1
+# 若前車加減速超過此數值，tau 將瞬間歸零 (0.0) 以發動最快反應
+LEAD_ACCEL_CONST_ACCEL_THRESH = 0.25 # 從 0.2 稍微放寬，避免塞車微調油門時過度觸發 0.0 造成頓挫
 
 # 2) 視覺 / 雷達 覆蓋邏輯（集中在上方方便日後調整）
 VISION_PROB_MIN = 0.35
@@ -32,19 +33,19 @@ RADAR_OVERRIDE_PROB = 0.60
 LOW_SPEED_VISION_ONLY = True
 
 # 3) 平滑過渡區間 (Blending) - 取代原本非黑即白的 SPEED_SWITCH_KMH
-# 在此區間內，視覺與雷達的數據會進行平滑加權融合，避免 60km/h 切換瞬間的頓挫
 SPEED_BLEND_MIN_KMH = 55.0 
 SPEED_BLEND_MAX_KMH = 65.0
 SPEED_BLEND_MIN_MS = SPEED_BLEND_MIN_KMH / 3.6
 SPEED_BLEND_MAX_MS = SPEED_BLEND_MAX_KMH / 3.6
 
 # 4) 視覺濾波器參數 (過濾 Vision 產生的神經質高頻抖動)
-VISION_V_REL_TAU = 0.15
-VISION_A_LEAD_TAU = 0.20
+# 稍微降低視覺延遲，配合塞車高反應需求
+VISION_V_REL_TAU = 0.10 
+VISION_A_LEAD_TAU = 0.15 
 
 # 5) 視覺鎖定磁滯區間 (Hysteresis) - 防止 prob 邊緣閃爍造成的幽靈煞車
-VISION_PROB_LOCK = 0.40   # 抓到前車需要的最低機率
-VISION_PROB_UNLOCK = 0.20 # 丟失前車的機率門檻
+VISION_PROB_LOCK = 0.40   
+VISION_PROB_UNLOCK = 0.20 
 # =======================================================================
 
 
