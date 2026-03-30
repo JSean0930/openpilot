@@ -114,15 +114,15 @@ def get_stopped_equivalence_factor(v_lead, v_ego, a_lead, d_rel):
   a_lead = np.asarray(a_lead, dtype=float)
   d_rel = np.asarray(d_rel, dtype=float)
 
-  v10 = 10.0 * CV.KPH_TO_MS
-  v50 = 50.0 * CV.KPH_TO_MS
-  v60 = 60.0 * CV.KPH_TO_MS
+  v_low = 5.0 * CV.KPH_TO_MS
+  v_mid = 50.0 * CV.KPH_TO_MS
+  v_high = 60.0 * CV.KPH_TO_MS
 
   delta = v_lead - v_ego
 
-  w_k     = np.clip(1.0 - (v_ego / v60), 0.0, 1.0)
-  w_quick = np.clip(1.0 - (v_ego / v50), 0.0, 1.0)
-  w_base  = np.clip(1.0 - (v_ego / v10), 0.0, 1.0)
+  w_k     = np.clip(1.0 - (v_ego / v_high), 0.0, 1.0)
+  w_quick = np.clip(1.0 - (v_ego / v_mid), 0.0, 1.0)
+  w_base  = np.clip(1.0 - (v_ego / v_low), 0.0, 1.0)
 
   k_low, k_high = 5.5, 3.5
   k = k_high + (k_low - k_high) * w_k
