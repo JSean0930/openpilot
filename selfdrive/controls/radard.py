@@ -23,7 +23,7 @@ LEAD_ACCEL_TAU_V_EGO_V  = [0.30, 0.40, 1.50,  2.00]
 
 # aLead 被視為「幾乎零加速度」的門檻（m/s^2）
 # 若前車加減速超過此數值，tau 將瞬間歸零 (0.0) 以發動最快反應
-LEAD_ACCEL_CONST_ACCEL_THRESH = 0.25 # 從 0.2 稍微放寬，避免塞車微調油門時過度觸發 0.0 造成頓挫
+LEAD_ACCEL_CONST_ACCEL_THRESH = 0.35 # 從 0.2 稍微放寬，避免塞車微調油門時過度觸發 0.0 造成頓挫, 0.25
 
 # 2) 視覺 / 雷達 覆蓋邏輯（集中在上方方便日後調整）
 VISION_PROB_MIN = 0.35
