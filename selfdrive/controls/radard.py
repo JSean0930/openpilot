@@ -228,7 +228,7 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
 
     # === 靜止鎖定邏輯 (Standstill Lock) ===
     # 當本車時速極低 (< 1.5 m/s，約 5.4 km/h) 且前車也幾乎靜止時 (絕對速度 < 0.8 m/s)
-    is_standstill = (v_ego < 1.0) and (abs(v_ego + vision_state.v_rel_filter.x) < 0.8)
+    is_standstill = (v_ego < 1.5) and (abs(v_ego + vision_state.v_rel_filter.x) < 0.8)
     
     if is_standstill:
       # 強制壓制視覺雜訊，避免引發蠕行或暴衝
