@@ -34,14 +34,14 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # STRENGTH ：最大預煞強度（越負越兇）
 # SENS     ：觸發敏感度（越大越容易觸發、距離窗更大、a_req 門檻更寬鬆）
 EARLYNESS = 1.55   # 讓 TTC 門檻更寬，提早更遠就進入預煞車準備狀態
-STRENGTH  = 0.85   # 大幅下調，搭配二次函數曲線讓系統「溫柔含著煞車」
-SENS      = 1.40   # 保持對前車相對速度的高度敏銳
+STRENGTH  = 0.85   # 大幅下調，搭配二次函數曲線讓系統「溫柔含著煞車」,0.85
+SENS      = 1.50   # 保持對前車相對速度的高度敏銳,1.4
 
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
 # 注意：這裡完全不使用權重，也不改 long_mpc，只在 planner 最終輸出做平均。
 MIX_AVG_ENABLE = True
 MIX_AVG_MIN_KPH = 2.0
-MIX_AVG_MAX_KPH = 60.0 #20.0
+MIX_AVG_MAX_KPH = 35.0 #60.0
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
 # 低速 or 前車明顯減速時，將 v_desired_filter.x 更快貼近 v_ego
