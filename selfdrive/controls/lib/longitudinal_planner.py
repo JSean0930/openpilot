@@ -39,9 +39,10 @@ SENS      = 1.50   # 保持對前車相對速度的高度敏銳,1.4
 
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
 # 注意：這裡完全不使用權重，也不改 long_mpc，只在 planner 最終輸出做平均。
+# 優化：降回 25.0，讓中高速域完全由反應精準的 MPC 接管，避免 E2E 拖累高速煞車
 MIX_AVG_ENABLE = True
 MIX_AVG_MIN_KPH = 2.0
-MIX_AVG_MAX_KPH = 35.0 #60.0
+MIX_AVG_MAX_KPH = 25.0 
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
 # 低速 or 前車明顯減速時，將 v_desired_filter.x 更快貼近 v_ego
@@ -300,25 +301,26 @@ def _prebrake_override(a_target: float, metrics):
     w_req = (a_req_start - a_req) / max(a_req_start - a_req_full, 1e-3)
     w_req = float(np.clip(w_req, 0.0, 1.0))
 
-  # === 改寫開始：加入平滑緩煞曲線 ===
+  # === 改寫開始：加入動態平滑緩煞曲線與緊急保命機制 ===
   w_linear = float(max(w_ttc, w_req))
   if w_linear <= 0.0:
     return a_new, False
 
-  # 【關鍵修改 1】將線性權重轉為二次函數 (Ease-in Curve)
-  # 效果：剛觸發時 w 很小 (例如 0.2 的平方變 0.04)，只會微含煞車；
-  # 隨著距離逼近，煞車力道才會以拋物線平順加重，消除突兀點頭感。
-  w_smooth = w_linear ** 2.0 
+  # 【優化 1】動態曲線 (Dynamic Curve)
+  # 若速差 (closing) 很大 (>10m/s，約36km/h的速差)，指數會逼近 1.0 (線性，馬上重煞)
+  # 若速差很小，指數逼近 2.0 (二次方，維持低速平順緩煞)
+  curve_exponent = float(np.clip(2.0 - (closing / 10.0), 1.0, 2.0))
+  w_smooth = w_linear ** curve_exponent 
 
-  # 【關鍵修改 2】動態放寬 a_brake 的極限值
-  # 因為我們上面把 STRENGTH 調得很軟 (0.85)，為了防止遇到真正緊急狀況煞不住，
-  # 我們讓系統在危險度極高 (w_linear > 0.8) 時，動態把最大煞車力道還原回去。
+  # 【優化 2】動態保命極限 (Dynamic Panic Decel)
   dynamic_max_decel = float(prebrake_max_decel)
   if w_linear > 0.8:
-      # 當極度危險時，允許煞車力道突破 STRENGTH 的限制，再往下深踩 30% 保命
-      dynamic_max_decel = dynamic_max_decel * 1.3 
+      # 當危險度極高時，依據「速差」進一步放大緊急煞車力道
+      # 速差越大，允許系統踩煞車的深度越深 (最大可放寬到設定值的 2.5 倍)
+      panic_multiplier = 1.3 + max(0.0, (closing - 5.0) * 0.15)
+      dynamic_max_decel = dynamic_max_decel * min(panic_multiplier, 2.5) 
 
-  # 只往更負方向推 (套用平滑權重與動態極限)
+  # 只往更負方向推 (套用動態權重與動態極限)
   a_cmd = (1.0 - w_smooth) * a_new + w_smooth * dynamic_max_decel
   a_new = float(min(a_new, a_cmd))
   return a_new, False
@@ -631,4 +633,3 @@ class LongitudinalPlanner:
     longitudinalPlan.allowThrottle = bool(self.allow_throttle)
 
     pm.send('longitudinalPlan', plan_send)
-
