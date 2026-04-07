@@ -33,7 +33,7 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # EARLYNESS：越大越早介入（同時影響 fast_response + pre-brake 觸發門檻）
 # STRENGTH ：最大預煞強度（越負越兇）
 # SENS     ：觸發敏感度（越大越容易觸發、距離窗更大、a_req 門檻更寬鬆）
-EARLYNESS = 1.55   # 讓 TTC 門檻更寬，提早更遠就進入預煞車準備狀態
+EARLYNESS = 1.45   # 讓 TTC 門檻更寬，提早更遠就進入預煞車準備狀態
 STRENGTH  = 0.85   # 大幅下調，搭配二次函數曲線讓系統「溫柔含著煞車」,0.85
 SENS      = 1.50   # 保持對前車相對速度的高度敏銳,1.4
 
