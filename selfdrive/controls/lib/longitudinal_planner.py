@@ -42,7 +42,7 @@ SENS      = 1.50   # 保持對前車相對速度的高度敏銳,1.4
 # 優化：降回 25.0，讓中高速域完全由反應精準的 MPC 接管，避免 E2E 拖累高速煞車
 MIX_AVG_ENABLE = True
 MIX_AVG_MIN_KPH = 2.0
-MIX_AVG_MAX_KPH = 30.0
+MIX_AVG_MAX_KPH = 20.0
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
 # 低速 or 前車明顯減速時，將 v_desired_filter.x 更快貼近 v_ego
