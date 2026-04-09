@@ -81,8 +81,27 @@ class LongControl:
 
     else:  # LongCtrlState.pid
       error = a_target - CS.aEgo
-      output_accel = self.pid.update(error, speed=CS.vEgo,
-                                     feedforward=a_target)
+
+      # ============================================================
+      # ✅ 新增優化：低速起步 PI 預煞車釋放 (Zeroing Negative Integral)
+      # ============================================================
+      # 當車速極低 (小於 1.0 m/s，約 3.6 km/h)，且目標加速度大於 0.01（前車已起步）時
+      if CS.vEgo < 1.0 and a_target > 0.01:
+        # 1. 瞬間清除保持靜止時累積的負向積分，避免起步遲滯
+        if self.pid.error_integral < 0.0:
+          self.pid.error_integral = 0.0
+        
+        # 2. 給予一個微小的起步前饋，克服靜止摩擦力 (Stiction Kick)
+        # 這能讓車子瞬間解除煞車並微微蠕行，隨後交由正常的 PID 接手
+        error += 0.15 
+      # ============================================================
+
+      out_accel = self.pid.update(error, speed=CS.vEgo,
+                                  feedforward=a_target,
+                                  freeze_integrator=CS.cruiseState.standstill)
+
+    self.pid.neg_limit = accel_limits[0]
+    self.pid.pos_limit = accel_limits[1]
 
     self.last_output_accel = np.clip(output_accel, accel_limits[0], accel_limits[1])
     return self.last_output_accel
