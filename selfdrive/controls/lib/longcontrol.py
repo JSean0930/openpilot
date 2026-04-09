@@ -96,7 +96,7 @@ class LongControl:
         error += 0.15 
       # ============================================================
 
-      output_accel = self.pid.update(error, speed=CS.vEgo,feedforward=a_target,freeze_integrator=CS.cruiseState.standstill)
+      output_accel = self.pid.update(error, speed=CS.vEgo, feedforward=a_target, freeze_integrator=CS.cruiseState.standstill)
       
     self.pid.neg_limit = accel_limits[0]
     self.pid.pos_limit = accel_limits[1]
