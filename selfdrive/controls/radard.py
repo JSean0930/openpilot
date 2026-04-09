@@ -30,7 +30,7 @@ VISION_PROB_MIN = 0.35
 RADAR_OVERRIDE_PROB = 0.60
 
 # ====================== 本次修改重點：低速純視覺優化區 ======================
-LOW_SPEED_VISION_ONLY = False
+LOW_SPEED_VISION_ONLY = True
 
 # 3) 平滑過渡區間 (Blending) - 取代原本非黑即白的 SPEED_SWITCH_KMH
 SPEED_BLEND_MIN_KMH = 55.0 
