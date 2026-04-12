@@ -24,7 +24,7 @@ class AEM:
     if v_kph <= 0.1:
       self._is_starting_up = True
     # 當時速超過 3.0 km/h，起步階段結束，解除狀態
-    elif v_kph > 3.0:
+    elif v_kph > 10.0:
       self._is_starting_up = False
 
     # ==========================================
