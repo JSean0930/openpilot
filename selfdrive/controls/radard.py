@@ -17,7 +17,7 @@ from openpilot.common.simple_kalman import KF1D
 
 # 1) 前車加速度時間常數（aLeadTau）速度相依調整
 LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 5.0, 10.0, 30.0]
-LEAD_ACCEL_TAU_V_EGO_V  = [1.20, 0.60, 1.50, 2.00]
+LEAD_ACCEL_TAU_V_EGO_V  = [0.3, 0.60, 1.50, 2.00]
 
 LEAD_ACCEL_CONST_ACCEL_THRESH = 0.25 
 
