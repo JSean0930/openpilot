@@ -39,7 +39,7 @@ SENS      = 1.50   # 保持對前車相對速度的高度敏銳,1.4
 
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
 MIX_AVG_ENABLE = True
-MIX_AVG_MIN_KPH = 2.0
+MIX_AVG_MIN_KPH = 10.0
 MIX_AVG_MAX_KPH = 20.0
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
