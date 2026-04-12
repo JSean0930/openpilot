@@ -17,9 +17,11 @@ from openpilot.common.simple_kalman import KF1D
 
 # 1) 前車加速度時間常數（aLeadTau）速度相依調整 (專為市區塞車與高速巡航優化)
 #   - 速度分段 (m/s) ≈ [0, 35, 60, 108] km/h
-LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 9.72, 16.67, 30.0]   
+#LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 9.72, 16.67, 30.0]
+LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 5.0, 10.0, 30.0]
 #   - 對應 tau（秒）: 低速極敏捷，高速極平穩
-LEAD_ACCEL_TAU_V_EGO_V  = [0.10, 0.25, 1.50,  2.00]     
+#LEAD_ACCEL_TAU_V_EGO_V  = [0.10, 0.25, 1.50,  2.00]
+LEAD_ACCEL_TAU_V_EGO_V  = [1.20, 0.60, 1.50, 2.00]
 
 # aLead 被視為「幾乎零加速度」的門檻（m/s^2）
 # 若前車加減速超過此數值，tau 將瞬間歸零 (0.0) 以發動最快反應
@@ -30,7 +32,7 @@ VISION_PROB_MIN = 0.35
 RADAR_OVERRIDE_PROB = 0.60
 
 # ====================== 本次修改重點：低速純視覺優化區 ======================
-LOW_SPEED_VISION_ONLY = False
+LOW_SPEED_VISION_ONLY = True
 
 # 3) 平滑過渡區間 (Blending) - 取代原本非黑即白的 SPEED_SWITCH_KMH
 SPEED_BLEND_MIN_KMH = 55.0 
