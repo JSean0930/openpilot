@@ -21,7 +21,7 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # ====================================================================
 # 調參提示（僅註解）
 # - 低速跟停還想更敏感：FAST_V_DESIRED_BLEND 往上加到 0.75~0.8
-# - 若覺得偶爾有點「急」：ACCEL_SLEW_RATE_BP 第一項往下調到 2.0
+# - 若覺得偶爾有點「急」：ACCEL_SLEW_RATE_BP 第一項往下調到 1.5
 # - 若你主要想改善「前車一煞立刻反應」：FAST_V_DESIRED_LEAD_DECEL_THRESH 從 -0.6 改 -0.5
 # ====================================================================
 
@@ -30,56 +30,53 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # --------------------------------------------------------------------
 # ✅ 你要的「2~3 個旋鈕」(早發現、平順緩煞版)
 # --------------------------------------------------------------------
-# EARLYNESS：越大越早介入（同時影響 fast_response + pre-brake 觸發門檻）
-# STRENGTH ：最大預煞強度（越負越兇）
-# SENS     ：觸發敏感度（越大越容易觸發、距離窗更大、a_req 門檻更寬鬆）
-EARLYNESS = 1.45   # 讓 TTC 門檻更寬，提早更遠就進入預煞車準備狀態
-STRENGTH  = 0.85   # 大幅下調，搭配二次函數曲線讓系統「溫柔含著煞車」,0.85
-SENS      = 1.50   # 保持對前車相對速度的高度敏銳,1.4
+EARLYNESS = 1.45   
+STRENGTH  = 0.85   
+SENS      = 1.50   
 
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
 MIX_AVG_ENABLE = True
-MIX_AVG_MIN_KPH = 10.0
+MIX_AVG_MIN_KPH = 2.0
 MIX_AVG_MAX_KPH = 20.0
 
 # --- v_desired_filter 反應加速（減少體感慢半拍） ---
 FAST_V_DESIRED_ENABLE = True
-FAST_V_DESIRED_LOW_SPEED_KPH = 30.0            # 低於此速就更敏感（km/h）
-FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.25       # 只要前車有微弱減速 -0.25，立刻觸發快速反應
-FAST_V_DESIRED_BLEND = 0.85                    # 反應力道加大，更快貼近當前車速
+FAST_V_DESIRED_LOW_SPEED_KPH = 30.0            
+FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.25       
+FAST_V_DESIRED_BLEND = 0.85                    
 
 # ============================================================
-# ✅ 新增優化：動態 Slew Rate 插值表 (達成高速求穩、低速求敏)
+# ✅ 新增優化：動態 Slew Rate 插值表 (起步敏捷，高速求穩)
 # ============================================================
 # 車速節點 (m/s) [0, 40km/h, 80km/h, 120km/h]
 SLEW_V_BP = [0., 11.1, 22.2, 33.3] 
 
-# 加速變化率上限 (m/s^3)：將低速的 2.5 降為 1.2，避免第一腳油門踹太深 (塞車防暴衝)
-ACCEL_SLEW_RATE_BP = [1.2, 1.4, 0.9, 0.6] 
+# 加速變化率上限 (m/s^3)：將第一點恢復為 2.0，釋放起步油門的踩踏速度！
+ACCEL_SLEW_RATE_BP = [2.0, 1.4, 0.9, 0.6] 
 
 # 減速變化率下限 (m/s^3)：全速域保持敏捷，低速(2.5)應對塞車，高速(1.5)平穩降速
 DECEL_SLEW_RATE_BP = [2.5, 2.0, 1.8, 1.5]
 
-ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       # 只要前車有煞車跡象，立刻放寬系統踩煞車的限制
+ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
 
-# --- Throttle gating（保留你原本設定） ---
+# --- Throttle gating ---
 ALLOW_THROTTLE_THRESHOLD = 0.4
 MIN_ALLOW_THROTTLE_SPEED = 2.5
 
 # --------------------------------------------------------------------
 # ✅ 新增：TTC / 相對速度 / 相對距離 的「人性化判斷」(由旋鈕推導)
 # --------------------------------------------------------------------
-HARD_MIN_LEAD_DIST_M = 3.0 # 硬底線縮短：距離低於3米且前車急煞時，直接給最大煞車
+HARD_MIN_LEAD_DIST_M = 3.0 
 CLOSING_MIN_MPS = 0.25
 A_REQ_DIST_BUFFER_M = 2.0
-PREBRAKE_DIST_MIN_M = 1.5 # 將預煞作用的最小距離縮短到 1.5 米，消除市區跟車盲區
-PREBRAKE_DIST_MAX_M_BASE = 55.0  # base，實際會乘上旋鈕推導
-LEAD_SLOW_MPS_BASE = 9.0  # 約 32km/h，實際會被 EARLYNESS/SENS 推導
+PREBRAKE_DIST_MIN_M = 1.5 
+PREBRAKE_DIST_MAX_M_BASE = 55.0  
+LEAD_SLOW_MPS_BASE = 9.0  
 TTC_START_BASE = 2.2
 TTC_FULL_BASE  = 1.2
 A_REQ_START_BASE = -1.2
 A_REQ_FULL_BASE  = -2.6
-PREBRAKE_MAX_DECEL_BASE = -1.6  # base（會乘 STRENGTH）
+PREBRAKE_MAX_DECEL_BASE = -1.6  
 
 # =======================================================================
 
@@ -243,9 +240,6 @@ def _prebrake_override(a_target: float, metrics):
 
 
 def _accel_clip_slew_step(dt: float, v_ego: float, lead_a: float, trigger_approach: bool, ttc: float, a_req: float) -> tuple[float, float]:
-  """
-  ✅ 優化 3: 結合動態車速插值與緊急狀態解鎖
-  """
   base_slew_up = float(np.interp(v_ego, SLEW_V_BP, ACCEL_SLEW_RATE_BP))
   base_slew_down = float(np.interp(v_ego, SLEW_V_BP, DECEL_SLEW_RATE_BP))
 
@@ -347,14 +341,14 @@ class LongitudinalPlanner:
       accel_clip = limit_accel_in_turns(v_ego, steer_angle_without_offset, accel_clip, self.CP)
 
     # ============================================================
-    # ✅ 新增優化：塞車走走停停防暴衝機制 (Stop-and-Go Surge Prevention)
+    # ✅ 修正版：動態彈性跟車 (只防極慢速暴衝，前車開走瞬間解除封印)
     # ============================================================
     if _lead is not None and np.isfinite(_d_rel):
-      # 觸發條件：自身車速 < 18km/h，前車車速 < 14km/h，且相對距離 < 15公尺
-      if v_ego < 5.0 and _v_lead < 4.0 and _d_rel < 15.0:
-        # 強制將最大允許加速度「死扣」在 0.35 m/s^2 (極度溫和)
-        # 即使視覺雷達產生雜訊、誤判前車急加速，系統也只會用極慢的蠕行速度跟上，徹底杜絕暴衝
-        accel_clip[1] = min(accel_clip[1], 0.35)
+      # 只有當我們很慢(<10km/h)，且前車真的「極慢速蠕動 (< 5.4 km/h)」，且距離小於 8 公尺時，才稍微限制
+      if v_ego < 3.0 and _v_lead < 1.5 and _d_rel < 8.0:
+        # 動態上限：前車越慢，油門上限越小；前車一旦加速，上限跟著放寬 (最低保障 0.5 m/s^2)
+        dynamic_max = max(0.5, _v_lead * 0.8)
+        accel_clip[1] = min(accel_clip[1], dynamic_max)
     # ============================================================
 
     if reset_state:
