@@ -35,7 +35,7 @@ STRENGTH  = 0.85
 SENS      = 1.50   
 
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
-MIX_AVG_ENABLE = True
+MIX_AVG_ENABLE = False
 MIX_AVG_MIN_KPH = 2.0
 MIX_AVG_MAX_KPH = 20.0
 
