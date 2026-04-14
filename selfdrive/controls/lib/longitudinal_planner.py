@@ -448,6 +448,19 @@ class LongitudinalPlanner:
         self.prev_accel_clip[idx] + delta_up     
       )
 
+        # ============================================================
+    # 🌟 進階優化：塞車滑行死區 (Coasting Deadband)
+    # ============================================================
+    if v_ego < 5.5:  # 時速低於 20 km/h 的塞車情境
+      # 當 MPC 要求的加速度在一個極微小的範圍內 (沒有急煞或急加速需求)
+      if -0.25 < output_a_target < 0.15:
+        # 如果前車距離大於 4 公尺，且相對速度很小（前車沒跑遠也沒急停）
+        if _lead is not None and np.isfinite(_d_rel) and _d_rel > 4.0 and abs(_closing) < 0.5:
+          # 將微小的加減速指令抹平，強制輸出一個極柔和的滑行阻力 (模擬怠速滑行)
+          # 這樣 PID 就不會在極小的正負值之間來回切換，消除拉扯感
+          output_a_target = -0.05
+    # ============================================================
+    
     self.output_a_target = float(np.clip(output_a_target, accel_clip[0], accel_clip[1]))
     self.prev_accel_clip = accel_clip
 
