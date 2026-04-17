@@ -52,10 +52,10 @@ FAST_V_DESIRED_BLEND = 0.85
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
 
 # 加速變化率上限 (m/s^3)：將第一點恢復為 2.0，釋放起步油門的踩踏速度！
-ACCEL_SLEW_RATE_BP = [1.2, 1.2, 0.8, 0.4] 
+ACCEL_SLEW_RATE_BP = [1.5, 1.2, 0.8, 0.4] 
 
 # 減速變化率下限 (m/s^3)：全速域保持敏捷，低速(2.5)應對塞車，高速(1.5)平穩降速
-DECEL_SLEW_RATE_BP = [2.5, 2.0, 1.8, 1.5]
+DECEL_SLEW_RATE_BP = [2.0, 2.0, 1.8, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
 
