@@ -31,7 +31,7 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # ✅ 你要的「2~3 個旋鈕」(早發現、平順緩煞版)
 # --------------------------------------------------------------------
 EARLYNESS = 1.45   
-STRENGTH  = 0.75
+STRENGTH  = 0.65
 SENS      = 1.50   
 
 # --- [新增] 只在指定區間做「暴力平均」混合： (MPC + E2E) / 2 ---
