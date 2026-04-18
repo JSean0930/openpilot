@@ -52,7 +52,7 @@ FAST_V_DESIRED_BLEND = 0.85
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
 
 # 加速變化率上限 (m/s^3)：將第一點恢復為 2.0，釋放起步油門的踩踏速度！
-ACCEL_SLEW_RATE_BP = [1.5, 1.2, 0.8, 0.4] 
+ACCEL_SLEW_RATE_BP = [2.0, 1.2, 0.8, 0.4] 
 
 # 減速變化率下限 (m/s^3)：全速域保持敏捷，低速(2.5)應對塞車，高速(1.5)平穩降速
 DECEL_SLEW_RATE_BP = [2.0, 2.0, 1.8, 1.5]
@@ -82,9 +82,9 @@ PREBRAKE_MAX_DECEL_BASE = -1.6
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 
-A_CRUISE_MAX_VALS = [0.7, 1.00, 0.805, 0.644, 0.441, 0.245, 0.198]
+A_CRUISE_MAX_VALS = [0.6, 0.75, 0.805, 0.644, 0.441, 0.198]
 #A_CRUISE_MAX_VALS = [1.00, 1.085, 0.805, 0.644, 0.441, 0.245, 0.198]
-A_CRUISE_MAX_BP   = [0.0,  8.33,  15.0,  20.0,  25.0,  30.0,  36.11]
+A_CRUISE_MAX_BP   = [0.0,  8.33,  15.0,  20.0,  25.0,  30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
