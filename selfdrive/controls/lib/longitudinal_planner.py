@@ -449,10 +449,9 @@ class LongitudinalPlanner:
         self.prev_accel_clip[idx] + delta_up     
       )
 
-    
     # ============================================================
-    # 🌟 終極優化：全速域老司機「橡皮筋滑行」 (Veteran Driver Elastic Coasting)
-    # 目的：停止神經質的微調距離，容許安全範圍內的距離浮動，換取極致的平順感
+    # 🌟 終極優化修正版：全速域老司機「橡皮筋滑行」 (平滑無縫版)
+    # 目的：解決騎馬感！使用「平滑死區(Soft Deadband)」取代一刀切，不再與大腦打架
     # ============================================================
     if _lead is not None and np.isfinite(_d_rel):
       # 條件 1：前車動態穩定 (相對速度差小於 4.3 km/h，且前車沒有明顯的急加/減速)
@@ -460,21 +459,33 @@ class LongitudinalPlanner:
       
       # 條件 2：處於安全跟車範圍內 (距離大於 5 米，且 TTC 碰撞時間大於 1.8 秒)
       is_safe_distance = _d_rel > 5.0 and _ttc > 1.8
-      
-      # 條件 3：系統原先只打算「微調」 (MPC 算出的加速度在微踩油門與微踩煞車之間)
-      mpc_is_micro_managing = -0.35 < output_a_target < 0.25
 
-      if lead_is_stable and is_safe_distance and mpc_is_micro_managing:
-        # 核心魔法：捨棄 MPC 對完美距離的強求，改為老司機的「放踏板」策略
-        # 依據車速給予不同的滑行體感 (向 PID 請求維持等速或微弱的自然減速)
+      if lead_is_stable and is_safe_distance:
+        # 依據車速設定我們理想的「滑行基準點」
         if v_ego < 5.5:
-          coast_accel = -0.05  # 低速塞車時，給予極微弱的蠕行阻力
+          coast_accel = -0.05  # 低速塞車蠕行阻力
         elif v_ego < 15.0:
-          coast_accel = -0.02  # 中低速市區，模擬幾乎無阻力的空檔滑行
+          coast_accel = -0.02  # 中低速市區空檔滑行
         else:
-          coast_accel = 0.0    # 高速巡航時，請求 0 加速度 (維持當前車速不變，任由前車距離自然微幅收縮或拉長)
+          coast_accel = 0.0    # 高速巡航等速滑行
 
-        output_a_target = coast_accel
+        # 計算 MPC 原本想給的加速度，與我們滑行基準點的「落差」
+        accel_diff = output_a_target - coast_accel
+
+        # 設定容忍的微操範圍 (死區寬度)
+        deadband_pos = 0.25  # 容忍的正向微踩油門範圍
+        deadband_neg = 0.35  # 容忍的負向微踩煞車範圍
+
+        # 核心魔法：平滑過渡 (Smooth Blending) - 徹底消除騎馬感！
+        # 若大腦的指令落在微操範圍內，我們給予平滑削弱；若超出範圍，則無縫還給大腦控制權
+        if 0 < accel_diff < deadband_pos:
+            # 二次方衰減：越靠近中心點，削弱得越狠；越靠近邊緣，越接近大腦原本的指令
+            blend_ratio = (accel_diff / deadband_pos) ** 2
+            output_a_target = coast_accel + (accel_diff * blend_ratio)
+            
+        elif -deadband_neg < accel_diff <= 0:
+            blend_ratio = (abs(accel_diff) / deadband_neg) ** 2
+            output_a_target = coast_accel + (accel_diff * blend_ratio)
     # ============================================================
 
     self.output_a_target = float(np.clip(output_a_target, accel_clip[0], accel_clip[1]))
