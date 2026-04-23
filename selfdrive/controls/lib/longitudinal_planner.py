@@ -428,7 +428,7 @@ class LongitudinalPlanner:
       self.output_should_stop = bool(output_should_stop_mpc)
     else:
       # ============================================================
-      # ✅ 實驗模式 (e2e) 終極融合版：MPC 負責起步加速，e2e 負責絲滑煞車
+      # ✅ 實驗模式 (e2e) 終極融合版：MPC 負責加速與巡航，e2e 負責絲滑煞車與紅綠燈
       # ============================================================
       mpc_a = float(output_a_target_mpc)
       e2e_a = float(output_a_target_e2e)
@@ -444,13 +444,21 @@ class LongitudinalPlanner:
           output_a_target = min(mpc_a, e2e_a)
           
       else:
-        # 【情境 2：無前車 (例如排頭等紅綠燈、看 Stop Sign)】
-        if e2e_a > 0.0:
-          # 綠燈起步：放大 e2e 油門 40%，解決發呆問題
-          output_a_target = min(mpc_a, e2e_a * 1.40)
-        else:
-          # 紅燈煞停：完全享受 e2e 看紅綠燈的絲滑煞停
+        # 【情境 2：無前車 (空曠道路巡航、排頭等紅綠燈)】
+        # 判斷 e2e 是否「真的」打算煞停 (看到紅燈/Stop Sign，或前方大彎道)
+        e2e_is_stopping = bool(output_should_stop_e2e) or (e2e_a < -0.4)
+
+        if e2e_is_stopping:
+          # 準備停紅燈或過大彎：完全享受 e2e 看紅綠燈的絲滑減速
           output_a_target = min(mpc_a, e2e_a)
+        else:
+          # 正常巡航 或 綠燈起步
+          if v_ego < 3.0 and e2e_a > 0.0:
+            # 綠燈起步：放大 e2e 油門 40%，解決發呆問題
+            output_a_target = min(mpc_a, e2e_a * 1.40)
+          else:
+            # 空曠巡航：徹底無視 e2e 看到黑影時的「神經質猶豫」！
+            output_a_target = mpc_a
 
       self.output_should_stop = bool(output_should_stop_e2e) or bool(output_should_stop_mpc)
       # ============================================================
