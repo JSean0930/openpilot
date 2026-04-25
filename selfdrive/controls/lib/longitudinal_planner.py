@@ -64,7 +64,7 @@ ALLOW_THROTTLE_THRESHOLD = 0.4
 MIN_ALLOW_THROTTLE_SPEED = 2.5
 
 # --------------------------------------------------------------------
-# ✅ 新增：TTC / 相對速度 / 相對距離 的「人性化判斷」(由旋鈕推導)
+# ✅ 新增：TTC / 相 হৃদয়速度 / 相對距離 的「人性化判斷」(由旋鈕推導)
 # --------------------------------------------------------------------
 HARD_MIN_LEAD_DIST_M = 3.0 
 CLOSING_MIN_MPS = 0.25
@@ -317,6 +317,15 @@ class LongitudinalPlanner:
       accel_coast = ACCEL_MAX
 
     v_ego = sm['carState'].vEgo
+
+    # ============================================================
+    # ✅ 高速強制切回 ACC 模式 (High-Speed ACC Fallback)
+    # 時速 >= 70 km/h 時，徹底封印 e2e 模型的幽靈煞車，回歸穩如泰山的純雷達 MPC
+    # ============================================================
+    if v_ego * CV.MS_TO_KPH >= 70.0:
+      mode = 'acc'
+    # ============================================================
+
     lead_a = _get_lead_decel_a(sm)
 
     trigger_approach, metrics = _approach_trigger(v_ego, sm['radarState'])
