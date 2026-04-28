@@ -82,7 +82,7 @@ PREBRAKE_MAX_DECEL_BASE = -1.4 #1.6
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
 
-A_CRUISE_MAX_VALS = [1.3,  0.9,   0.8,   0.805, 0.644, 0.441, 0.198]
+A_CRUISE_MAX_VALS = [1.5,  1.0,   0.8,   0.805, 0.644, 0.441, 0.198]
 #A_CRUISE_MAX_VALS = [1.00, 1.085, 0.805, 0.644, 0.441, 0.245, 0.198]
 A_CRUISE_MAX_BP   = [0.0,  2.78,  8.33,  15.0,  20.0,  25.0,  30.0]
 
