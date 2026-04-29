@@ -423,8 +423,8 @@ class LongitudinalMpc:
 
     # moving lead -> equivalent stopped obstacle distance
     # 將外推的位置 lead_xv_X[:, 0] 作為實際相對距離 d_rel 傳入
-    lead_0_obstacle = lead_xv_0[:, 0] + get_stopped_equivalence_factor(lead_xv_0[:, 1], v_ego, a_lead_0, lead_xv_0[:, 0])
-    lead_1_obstacle = lead_xv_1[:, 0] + get_stopped_equivalence_factor(lead_xv_1[:, 1], v_ego, a_lead_1, lead_xv_1[:, 0])
+    lead_0_obstacle = lead_xv_0[:, 0] + get_stopped_equivalence_factor(lead_xv_0[:, 1])
+    lead_1_obstacle = lead_xv_1[:, 0] + get_stopped_equivalence_factor(lead_xv_1[:, 1])
 
     # ========= 核心：吃進 Planner 給的 a_min/a_max =========
     a_min_arr = self._to_stage_array(a_min, ACCEL_MIN, "a_min")
