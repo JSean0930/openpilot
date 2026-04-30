@@ -76,7 +76,7 @@ TTC_START_BASE = 2.2
 TTC_FULL_BASE  = 1.2
 A_REQ_START_BASE = -1.2
 A_REQ_FULL_BASE  = -2.6
-PREBRAKE_MAX_DECEL_BASE = -1.0 #1.4
+PREBRAKE_MAX_DECEL_BASE = -0.8 #1.0
 
 # =======================================================================
 
@@ -357,7 +357,7 @@ class LongitudinalPlanner:
       # 只有當我們很慢(<10km/h)，且前車真的「極慢速蠕動 (< 5.4 km/h)」，且距離小於 8 公尺時，才稍微限制
       if v_ego < 3.0 and _v_lead < 1.5 and _d_rel < 8.0:
         # 動態上限：前車越慢，油門上限越小；前車一旦加速，上限跟著放寬 (最低保障 0.5 m/s^2)
-        dynamic_max = max(0.5, _v_lead * 0.8)
+        dynamic_max = max(0.2, _v_lead * 0.8)
         accel_clip[1] = min(accel_clip[1], dynamic_max)
     # ============================================================
 
