@@ -524,8 +524,8 @@ class LongitudinalPlanner:
     if _lead is not None and np.isfinite(_d_rel):
       
       # 1. 計算各項條件的「安全分數」(0.0 ~ 1.0 之間平滑漸變)
-      # 距離：4米以下完全退出，6米以上完全滑行
-      w_dist = np.clip((_d_rel - 4.0) / 2.0, 0.0, 1.0)
+      # 距離：2.5米以下完全退出，4.5米以上完全滑行
+      w_dist = np.clip((_d_rel - 2.5) / 2.0, 0.0, 1.0)
       
       # 碰撞時間：1.5秒以下完全退出，2.0秒以上完全滑行
       w_ttc = np.clip((_ttc - 1.5) / 0.5, 0.0, 1.0)
