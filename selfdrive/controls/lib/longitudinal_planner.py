@@ -518,42 +518,78 @@ class LongitudinalPlanner:
       )
 
     # ============================================================
-    # 🌟 終極優化修正版：全速域老司機「橡皮筋滑行」 (平滑無縫版)
-    # 目的：解決騎馬感！使用「平滑死區(Soft Deadband)」取代一刀切，不再與大腦打架
+    # 🌟 終極優化終極版：全速域老司機「橡皮筋滑行」(Fuzzy 無縫淡出版)
+    # 目的：用連續權重取代「硬切換」，徹底解決滑行模式退出時的急煞與暴衝
     # ============================================================
     if _lead is not None and np.isfinite(_d_rel):
-      # 條件 1：前車動態穩定 (相對速度差小於 4.3 km/h，且前車沒有明顯的急加/減速)
-      lead_is_stable = abs(_closing) < 1.2 and abs(lead_a) < 0.5
       
-      # 條件 2：處於安全跟車範圍內 (距離大於 5 米，且 TTC 碰撞時間大於 1.8 秒)
-      is_safe_distance = _d_rel > 5.0 and _ttc > 1.8
+      # 1. 計算各項條件的「安全分數」(0.0 ~ 1.0 之間平滑漸變)
+      # 距離：4米以下完全退出，6米以上完全滑行
+      w_dist = np.clip((_d_rel - 4.0) / 2.0, 0.0, 1.0)
+      
+      # 碰撞時間：1.5秒以下完全退出，2.0秒以上完全滑行
+      w_ttc = np.clip((_ttc - 1.5) / 0.5, 0.0, 1.0)
+      
+      # 速度差：大於 1.5 m/s 完全退出，小於 1.0 m/s 完全滑行
+      w_close = np.clip((1.5 - abs(_closing)) / 0.5, 0.0, 1.0)
+      
+      # 前車加減速：大於 0.8 完全退出，小於 0.5 完全滑行
+      w_accel = np.clip((0.8 - abs(lead_a)) / 0.3, 0.0, 1.0)
 
-      if lead_is_stable and is_safe_distance:
-        # 依據車速設定我們理想的「滑行基準點」
+      # 綜合安全權重 (只要有一項開始危險，權重就會平滑下降)
+      coast_weight = w_dist * w_ttc * w_close * w_accel
+
+      # 只要權重不是 0，就計算滑行力道進行平滑混合
+      if coast_weight > 0.0:
+        
+        # 🌟 老司機細節 2：坡度感知智能滑行 (Pitch-Aware Coasting)
+        # accel_coast 是系統利用陀螺儀算出的「當前坡度自然加速度」
+        # 我們擷取其中的 60% 作為重力補償 (避免補償過度)
+        gravity_comp = accel_coast * 0.60
+        
+        # 依據車速設定基礎滑行阻力，並加上重力補償
         if v_ego < 5.5:
-          coast_accel = -0.05  # 低速塞車蠕行阻力
+          coast_accel = -0.05 + gravity_comp  # 塞車蠕行 (上坡自動補微油門，下坡自動帶微煞)
         elif v_ego < 15.0:
-          coast_accel = -0.02  # 中低速市區空檔滑行
+          coast_accel = -0.02 + gravity_comp  # 市區空檔滑行
         else:
-          coast_accel = 0.0    # 高速巡航等速滑行
+          coast_accel = 0.0 + gravity_comp    # 高速巡航
+          
+        # 防止過度補償引發暴衝或急煞，把最終滑行目標限制在合理範圍內
+        coast_accel = float(np.clip(coast_accel, -0.35, 0.25))
 
-        # 計算 MPC 原本想給的加速度，與我們滑行基準點的「落差」
         accel_diff = output_a_target - coast_accel
+        deadband_pos = 0.25
+        deadband_neg = 0.35
 
-        # 設定容忍的微操範圍 (死區寬度)
-        deadband_pos = 0.25  # 容忍的正向微踩油門範圍
-        deadband_neg = 0.35  # 容忍的負向微踩煞車範圍
+        target_coast = output_a_target # 預設為原本 MPC 指令
 
-        # 核心魔法：平滑過渡 (Smooth Blending) - 徹底消除騎馬感！
-        # 若大腦的指令落在微操範圍內，我們給予平滑削弱；若超出範圍，則無縫還給大腦控制權
+        # 滑行死區二次方平滑
         if 0 < accel_diff < deadband_pos:
-            # 二次方衰減：越靠近中心點，削弱得越狠；越靠近邊緣，越接近大腦原本的指令
             blend_ratio = (accel_diff / deadband_pos) ** 2
-            output_a_target = coast_accel + (accel_diff * blend_ratio)
-            
+            target_coast = coast_accel + (accel_diff * blend_ratio)
         elif -deadband_neg < accel_diff <= 0:
             blend_ratio = (abs(accel_diff) / deadband_neg) ** 2
-            output_a_target = coast_accel + (accel_diff * blend_ratio)
+            target_coast = coast_accel + (accel_diff * blend_ratio)
+
+        # 核心魔法：根據安全分數，動態調配「MPC 原始指令」與「滑行指令」的比例！
+        # 當前車接近，coast_weight 會像調光旋鈕一樣慢慢歸零，無段式退回 MPC 控制
+        output_a_target = (1.0 - coast_weight) * output_a_target + coast_weight * target_coast
+    # ============================================================
+
+    # ============================================================
+    # 🌟 老司機細節 1：煞停防點頭機制 (Anti-Nod Soft Stop)
+    # ============================================================
+    if self.output_should_stop and v_ego < 1.5 and output_a_target < -0.2:
+      # 當準備煞停，且車速低於 1.5 m/s (約 5.4 km/h) 時介入
+      # 隨著車速越來越接近 0，計算出一個「煞車釋放補償值」
+      # 車速為 1.5 時釋放 0，車速為 0 時釋放 0.4 m/s^2 的煞車力道
+      nod_relief = (1.5 - v_ego) / 1.5 * 0.40
+      
+      output_a_target += nod_relief
+      
+      # 設立底線：確保至少保留 -0.15 的微弱煞車，防止在微下坡時不小心往前溜車
+      output_a_target = min(output_a_target, -0.15)
     # ============================================================
 
     self.output_a_target = float(np.clip(output_a_target, accel_clip[0], accel_clip[1]))
@@ -588,4 +624,3 @@ class LongitudinalPlanner:
     longitudinalPlan.allowThrottle = bool(self.allow_throttle)
 
     pm.send('longitudinalPlan', plan_send)
-
