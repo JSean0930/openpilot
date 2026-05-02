@@ -41,7 +41,7 @@ FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.25
 FAST_V_DESIRED_BLEND = 0.85                    
 
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
-ACCEL_SLEW_RATE_BP = [3.0, 3.0, 1.0, 0.4] 
+ACCEL_SLEW_RATE_BP = [3.0, 3.0, 2.0, 0.4] 
 DECEL_SLEW_RATE_BP = [2.0, 2.0, 1.8, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
@@ -50,7 +50,7 @@ ALLOW_THROTTLE_THRESHOLD = 0.4
 MIN_ALLOW_THROTTLE_SPEED = 2.5
 
 HARD_MIN_LEAD_DIST_M = 3.0 
-CLOSING_MIN_MPS = 1.0 #0.25 /0.55-0.8
+CLOSING_MIN_MPS = 0.6 #0.25 /0.55-0.8
 A_REQ_DIST_BUFFER_M = 2.0
 PREBRAKE_DIST_MIN_M = 1.5 
 PREBRAKE_DIST_MAX_M_BASE = 30.0  
@@ -304,7 +304,11 @@ class LongitudinalPlanner:
     _lead, _d_rel, _v_lead, _closing, _ttc, _a_req = metrics
     has_lead = (_lead is not None and np.isfinite(_d_rel))
 
-    fast_response = bool(FAST_V_DESIRED_ENABLE and (trigger_approach or (v_ego * CV.MS_TO_KPH < FAST_V_DESIRED_LOW_SPEED_KPH) or (lead_a < FAST_V_DESIRED_LEAD_DECEL_THRESH)))
+    #fast_response = bool(FAST_V_DESIRED_ENABLE and (trigger_approach or (v_ego * CV.MS_TO_KPH < FAST_V_DESIRED_LOW_SPEED_KPH) or (lead_a < FAST_V_DESIRED_LEAD_DECEL_THRESH)))
+    # 判斷前車是否正在加速拉開距離 (速差大於 0.2 m/s 且前車也在加速)
+    lead_is_pulling_away = has_lead and _closing < -0.2 and lead_a > 0.0
+    # 如果前車正在跑，強制關閉 fast_response，讓理想速度瞬間衝出去帶動油門！
+    fast_response = bool(FAST_V_DESIRED_ENABLE and not lead_is_pulling_away and (trigger_approach or (v_ego * CV.MS_TO_KPH < FAST_V_DESIRED_LOW_SPEED_KPH) or (lead_a < FAST_V_DESIRED_LEAD_DECEL_THRESH)))
 
     v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
