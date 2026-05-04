@@ -104,7 +104,7 @@ def get_coast_accel(pitch):
 def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
   a_total_max = np.interp(v_ego, _A_TOTAL_MAX_BP, _A_TOTAL_MAX_V)
   a_y = v_ego ** 2 * angle_steers * CV.DEG_TO_RAD / (CP.steerRatio * CP.wheelbase)
-  a_x_allowed = math.sqrt(max(a_total_max ** 2 - a_y ** 2, 0.))
+  a_x_allowed = math.sqrt(max(a_total_max ** 2 - a_y ** 2, 0.0))
   return [a_target[0], min(a_target[1], a_x_allowed)]
 
 
@@ -434,10 +434,10 @@ class LongitudinalPlanner:
 
     # =========================================================
     # 🌟 [狀態三] 主動追擊防發呆 (Active Pursuit)
-    # 解決急減速後，前車已加速但 MPC 還在等距離拉開而不敢給油的問題
+    # 加入 70 km/h 速限封印：避免高速巡航時無視定速上限暴衝
     # =========================================================
-    elif has_lead and _closing < -0.25 and lead_a > 0.15:
-      # 條件達成：前車正在加速 (lead_a > 0.15) 且 正在拉開距離 (速差大於 0.9 km/h)
+    elif has_lead and _closing < -0.25 and lead_a > 0.15 and (v_ego * CV.MS_TO_KPH < 70.0):
+      # 條件達成：時速低於 70、前車加速 (lead_a > 0.15) 且 正在拉開距離 (速差大於 0.9 km/h)
       
       # 1. 複製油門：借用前車 85% 的加速度當作我們的起步推力
       pursuit_accel = float(np.clip(lead_a * 0.85, 0.2, 1.5)) 
@@ -522,4 +522,3 @@ class LongitudinalPlanner:
     longitudinalPlan.allowThrottle = bool(self.allow_throttle)
 
     pm.send('longitudinalPlan', plan_send)
-
