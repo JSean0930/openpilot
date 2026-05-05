@@ -296,7 +296,7 @@ class LongitudinalPlanner:
     v_ego = sm['carState'].vEgo
 
     # 高速強制回歸 ACC
-    if v_ego * CV.MS_TO_KPH >= 40.0:
+    if v_ego * CV.MS_TO_KPH >= 20.0:
       mode = 'acc'
 
     lead_a = _get_lead_decel_a(sm)
