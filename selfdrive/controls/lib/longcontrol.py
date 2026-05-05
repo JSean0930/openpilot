@@ -89,7 +89,7 @@ class LongControl:
       # 當車速極低 (< 1.0 m/s) 且系統要求加速 (> 0.01) 時，給予平滑推力
       if CS.vEgo < 1.0 and a_target > 0.01:
         #stiction_boost = 0.15 * (1 - CS.vEgo)
-        stiction_boost = 0.25 * (2.7 - CS.vEgo) / 2.7
+        stiction_boost = 0.20 * (2.7 - CS.vEgo) / 2.7
         a_target_adjusted += stiction_boost
         
       error = a_target_adjusted - CS.aEgo
