@@ -40,7 +40,7 @@ VISION_PROB_UNLOCK = 0.20
 
 
 # Default lead acceleration decay
-_LEAD_ACCEL_TAU = 1.5
+_LEAD_ACCEL_TAU = 0.8 #1.5
 
 # radar tracks
 SPEED, ACCEL = 0, 1
