@@ -459,7 +459,7 @@ class LongitudinalMpc:
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
 
     elif self.mode == 'blended':
-      self.params[:, 5] = LEAD_DANGER_FACTOR #1.0
+      self.params[:, 5] = LEAD_DANGER_FACTOR * 0.95
 
       # blended：同樣讓 cruise_target 的「可達速度」尊重 a_max，
       # 避免目標 x 走得太快，造成 MPC 必須靠 constraint 硬頂住（體感可能怪）
@@ -467,6 +467,8 @@ class LongitudinalMpc:
       v_lower = v_ego + (T_IDXS * CRUISE_MIN_ACCEL * 1.05)
       v_upper = v_ego + (T_IDXS * a_upper_eff * 1.05)
       v_cruise_profile = np.clip(v_cruise * np.ones(N+1), v_lower, v_upper)
+      
+      t_follow = t_follow * 0.85
 
       # 兩個 lead 的 obstacle（blended 下只用 lead）
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle])
