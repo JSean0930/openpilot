@@ -50,7 +50,7 @@ X_EGO_COST = 0.
 V_EGO_COST = 0.
 A_EGO_COST = 0.
 J_EGO_COST = 5.0
-A_CHANGE_COST = 200.
+A_CHANGE_COST = 60. #200.
 DANGER_ZONE_COST = 100.
 CRASH_DISTANCE = .25
 LEAD_DANGER_FACTOR = 0.75
@@ -70,8 +70,8 @@ T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 # =========================
 # 物理/限制設定
 # =========================
-COMFORT_BRAKE = 2.5
-STOP_DISTANCE = 5.0 #6.0
+COMFORT_BRAKE = 3.0 #2.5
+STOP_DISTANCE = 4.0 #6.0
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
 
@@ -93,7 +93,7 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
   v_kph = float(v_ego * 3.6)
 
   if personality == log.LongitudinalPersonality.relaxed:
-    base = 1.0 + 0.0030 * v_kph #0.0026
+    base = 1.0 + 0.0042 * v_kph #0.0030
   elif personality == log.LongitudinalPersonality.standard:
     base = 1.0 + 0.0024 * v_kph #0.0025
   elif personality == log.LongitudinalPersonality.aggressive:
