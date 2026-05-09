@@ -457,47 +457,7 @@ class LongitudinalMpc:
 
       # ACC mode 不使用 model x/v/a/j reference
       x[:], v[:], a[:], j[:] = 0.0, 0.0, 0.0, 0.0
-
-    elif self.mode == 'blended':
-      # 🌟 優化 1：拆除低速無形防撞牆
-      self.params[:, 5] = LEAD_DANGER_FACTOR * 0.95
-
-      a_upper_eff = np.minimum(a_max_arr, CRUISE_MAX_ACCEL)
-      v_lower = v_ego + (T_IDXS * CRUISE_MIN_ACCEL * 1.05)
-      v_upper = v_ego + (T_IDXS * a_upper_eff * 1.05)
-      v_cruise_profile = np.clip(v_cruise * np.ones(N+1), v_lower, v_upper)
-      
-      # 🌟 優化 2：治癒 MPC 的距離焦慮症
-      t_follow = t_follow * 0.85
-
-      x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle])
-
-      optimized_v_profile = np.clip(v_cruise_profile, v_ego - 1.0, 1e3)
-      cruise_target = np.cumsum(T_DIFFS * optimized_v_profile) + x[0]
-
-      xforward = ((v[1:] + v[:-1]) / 2) * (T_IDXS[1:] - T_IDXS[:-1])
-      x_model = np.cumsum(np.insert(xforward, 0, x[0]))
-
-      x_and_cruise = np.column_stack([x_model, cruise_target])
-      
-      # ========================================================
-      # 🌟 優化 3：您的神級「動態脫鉤」寫法 (起步底薪進化版)
-      # ========================================================
-      v_start_thr = 40.0 / 3.6  # 我們低速域的上限是 40 km/h
-      
-      # ⚠️ 關鍵進化：加入 0.25 的底薪。讓靜止起步瞬間也能掙脫神經網路的束縛！
-      w_raw = 0.25 + 0.75 * (v_ego / v_start_thr)
-      w = float(np.clip(w_raw, 0.0, 1.0))
-
-      # 將神經網路的保守預測 (min) 與定速的積極推力 (max) 進行混血
-      x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
-      x = x_mixed
-      
-      self.source = 'e2e' if x_and_cruise[1, 0] < x_and_cruise[1, 1] else 'cruise'
-
-    else:
-      raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
-"""    
+    
     elif self.mode == 'blended':
       # 🌟 優化 1：拆除低速無形防撞牆 (放寬危險係數)
       # 放棄原廠死板的 1.0，讓神經網路在塞車時能更平滑地貼近前車
@@ -536,7 +496,7 @@ class LongitudinalMpc:
 
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
-"""
+
     # === 設定 yref（cost reference）===
     self.yref[:, 1] = x
     self.yref[:, 2] = v
