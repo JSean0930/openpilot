@@ -492,7 +492,11 @@ class LongitudinalMpc:
       # 將神經網路的保守預測 (min) 與定速的積極推力 (max) 進行混血
       x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
       x = x_mixed
+      
+      self.source = 'e2e' if x_and_cruise[1, 0] < x_and_cruise[1, 1] else 'cruise'
 
+    else:
+      raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
 """    
     elif self.mode == 'blended':
       # 🌟 優化 1：拆除低速無形防撞牆 (放寬危險係數)
@@ -527,12 +531,12 @@ class LongitudinalMpc:
 
       x_and_cruise = np.column_stack([x_model, cruise_target])
       x = np.min(x_and_cruise, axis=1)
-"""
+
       self.source = 'e2e' if x_and_cruise[1, 0] < x_and_cruise[1, 1] else 'cruise'
 
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
-
+"""
     # === 設定 yref（cost reference）===
     self.yref[:, 1] = x
     self.yref[:, 2] = v
