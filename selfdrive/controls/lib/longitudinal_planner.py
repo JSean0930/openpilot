@@ -422,13 +422,31 @@ class LongitudinalPlanner:
         final_a_target = min(base_a_target + nod_relief, -0.15)
 
     # [狀態三] 主動追擊防發呆
-    elif has_lead and _closing < -0.25 and lead_a > 0.15 and (v_ego * CV.MS_TO_KPH < 70.0):
-      pursuit_accel = float(np.clip(lead_a * 0.85, 0.2, 1.5)) 
+        # [狀態三] 黏腳追擊防發呆 (起步與跟車平順升級版)
+    elif has_lead and _closing < -0.15 and (v_ego * CV.MS_TO_KPH < 70.0):
+      # 【破除雷達延遲】：不再死等 lead_a，加入真實速差 (abs(_closing)) 作為雙重判斷
+      # 前車加速快我們跟上，前車只靠怠速滑開我們也用速差補油 (確保數值平順，不暴衝)
+      pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.6 + abs(_closing) * 0.35, 0.2, 1.2)) 
+      
       if base_a_target < pursuit_accel:
-        w_pursuit = float(np.clip((abs(_closing) - 0.25) / 1.5, 0.0, 1.0))
-        w_safe = float(np.clip((_d_rel - 4.0) / 3.0, 0.0, 1.0))
+        # 【提高速差敏銳度】：只要拉開 0.15m/s (約0.5km/h) 就開始介入，不等到 0.25
+        w_pursuit = float(np.clip((abs(_closing) - 0.15) / 0.85, 0.0, 1.0))
+        
+        # 【破除距離封印】：原本 4m 內強制不追擊，現在縮短到 2.0m 就允許微量介入，3.5m 達滿效
+        w_safe = float(np.clip((_d_rel - 2.0) / 1.5, 0.0, 1.0))
+        
         final_w = w_pursuit * w_safe
         final_a_target = (1.0 - final_w) * base_a_target + final_w * pursuit_accel
+
+    # [狀態三.五] 前車轉彎消失 / 前方突然淨空快速補油
+    elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
+      # 當前車左右轉離開車道，has_lead 瞬間變 False，此時底層 MPC 往往會猶豫幾秒才爬升
+      # 我們在這裡給予一個溫和且果斷的起步底薪 (Base Thrust)
+      # 速度越慢 (0~18km/h) 給的底薪越多 (0.65)，速度上來了就自然退場交給 MPC
+      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.65, 0.4, 0.0])
+      if base_a_target < clear_boost:
+        # 平滑托高目標加速度的下限，讓補油不突兀但很迅速
+        final_a_target = clear_boost
 
     # [狀態四] 安全跟隨滑行 (平滑升級版)
     elif has_lead:
