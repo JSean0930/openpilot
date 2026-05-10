@@ -388,14 +388,14 @@ class LongitudinalMpc:
       j.fill(0.0)
 
     elif self.mode == 'blended':
-      self.params[:, 5] = LEAD_DANGER_FACTOR * 0.95
+      self.params[:, 5] = LEAD_DANGER_FACTOR #* 0.95
 
       a_upper_eff = np.minimum(a_max_arr, CRUISE_MAX_ACCEL)
       v_lower = v_ego + (T_IDXS * CRUISE_MIN_ACCEL * 1.05)
       v_upper = v_ego + (T_IDXS * a_upper_eff * 1.05)
       v_cruise_profile = np.clip(v_cruise * np.ones(N+1), v_lower, v_upper)
       
-      t_follow = t_follow * 0.85
+      t_follow = t_follow #* 0.85
 
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle])
 
