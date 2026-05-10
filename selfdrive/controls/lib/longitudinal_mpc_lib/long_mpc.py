@@ -415,7 +415,8 @@ class LongitudinalMpc:
       w_raw = 0.25 + 0.75 * (v_ego / v_start_thr)
       w = float(np.clip(w_raw, 0.0, 1.0))
 
-      x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
+      #x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
+      x_mixed = 0.5 * np.min(x_and_cruise, axis=1) + 0.5 * np.max(x_and_cruise, axis=1)
       x = x_mixed
       
       self.source = 'e2e' if x_and_cruise[1, 0] < x_and_cruise[1, 1] else 'cruise'
