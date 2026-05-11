@@ -26,6 +26,7 @@ from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 # ====================================================================
 
 # ====================== 可調參數區（TUNING PARAMS） ======================
+e2e_switch = 25.0
 
 EARLYNESS = 1.0   
 STRENGTH  = 0.65
@@ -295,7 +296,7 @@ class LongitudinalPlanner:
     accel_coast = get_coast_accel(sm['carControl'].orientationNED[1]) if len(sm['carControl'].orientationNED) == 3 else ACCEL_MAX
     v_ego = sm['carState'].vEgo
 
-    if v_ego * CV.MS_TO_KPH >= 40.0:
+    if v_ego * CV.MS_TO_KPH >= e2e_switch:
       mode = 'acc'
 
     # 🌟 核心同步：將判定好的 mode 傳遞給底層的精算師 (MPC)
