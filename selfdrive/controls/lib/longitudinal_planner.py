@@ -297,7 +297,7 @@ class LongitudinalPlanner:
     accel_coast = get_coast_accel(sm['carControl'].orientationNED[1]) if len(sm['carControl'].orientationNED) == 3 else ACCEL_MAX
     v_ego = sm['carState'].vEgo
 
-    if v_ego * CV.MS_TO_KPH >= e2e_switch:
+    if v_ego * CV.MS_TO_KPH >= 25.0:
       mode = 'acc'
 
     # 🌟 核心同步：將判定好的 mode 傳遞給底層的精算師 (MPC)
