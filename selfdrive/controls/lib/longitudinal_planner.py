@@ -448,50 +448,51 @@ class LongitudinalPlanner:
         # 平滑托高目標加速度的下限，讓補油不突兀但很迅速
         final_a_target = clear_boost
 
-    # [狀態四] 安全跟隨滑行 (平滑升級版)
+    # [狀態四] 安全跟隨滑行 (徹底消滅騎馬感：訊號熨斗升級版)
     elif has_lead:
-      w_dist = np.clip((_d_rel - 2.5) / 2.0, 0.0, 1.0)
-      w_ttc = np.clip((_ttc - 1.5) / 0.5, 0.0, 1.0)
-      w_close = np.clip((1.5 - abs(_closing)) / 0.5, 0.0, 1.0)
-      w_accel = np.clip((0.8 - abs(lead_a)) / 0.3, 0.0, 1.0)
-      raw_coast_weight = w_dist * w_ttc * w_close * w_accel
+      # 🌟 優化 1：廢除連乘，改用寬容的基礎條件，防止權重閃爍
+      # 距離大於 3 米、速差小於 2 m/s 就可以準備進入舒適區
+      w_dist = float(np.clip((_d_rel - 3.0) / 4.0, 0.0, 1.0))
+      w_close = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
+      
+      # 取兩者的最小值作為基礎權重，這樣只要其中一個條件不滿足，就會平滑退出
+      raw_coast_weight = min(w_dist, w_close)
 
-      # 🌟 核心優化 1：導入時間濾波器 (EMA Filter)
-      # 避免雷達跳動導致權重瞬間歸零。進入滑行稍慢(求穩)，退出滑行略快(保命)但依然平滑
+      # 如果前車有明顯加減速，一票否決，瞬間準備退出滑行
+      if abs(lead_a) > 0.6:
+        raw_coast_weight = 0.0
+
+      # 🌟 優化 2：極端平滑的 EMA 濾波
+      # 進入滑行極慢 (防突波)，退出滑行極快 (防追尾)
       if raw_coast_weight > self.smooth_coast_weight:
-        self.smooth_coast_weight += 0.05 * (raw_coast_weight - self.smooth_coast_weight)
+        self.smooth_coast_weight += 0.02 * (raw_coast_weight - self.smooth_coast_weight)
       else:
-        self.smooth_coast_weight += 0.15 * (raw_coast_weight - self.smooth_coast_weight)
+        self.smooth_coast_weight += 0.20 * (raw_coast_weight - self.smooth_coast_weight)
 
-      # 只有當平滑權重真的大於零時，才計算滑行介入
+      # 當平滑權重生效時，啟動「訊號熨斗」
       if self.smooth_coast_weight > 0.01:
-        gravity_comp = accel_coast * 0.60
+        # 計算最自然的微弱滑行阻力 (加上您的坡度補償)
+        natural_coast = float(np.clip(accel_coast * 0.60 - 0.02, -0.25, 0.1))
+
+        # 計算 MPC 想做的加速度，與自然滑行的差距
+        diff = base_a_target - natural_coast
         
-        # 🌟 核心優化 2：連續平滑阻力
-        # 放棄 if/else，用 S 型曲線讓滑行阻力隨著車速無縫變換
-        base_coast_accel = smooth_interp(v_ego, [0.0, 5.5, 15.0], [-0.05, -0.02, 0.0])
-        coast_accel = float(np.clip(base_coast_accel + gravity_comp, -0.35, 0.25))
+        # 🌟 核心優化 3：拋物線引力場 (Parabolic Attraction)
+        # 廢除 if/else 死區！我們允許 diff 在 +- 0.45 內被平滑吸附
+        zone = 0.45
+        if abs(diff) < zone:
+          # 當 diff 越接近 0，ratio 呈平方級別暴跌 (越靠近中心吸力越強)
+          # 這保證了函數的絕對連續性，MPC 的微小躁動會被完美吃掉，不會有斷層拉扯
+          ratio = (abs(diff) / zone) ** 2
+          smoothed_a = natural_coast + diff * ratio
+        else:
+          smoothed_a = base_a_target
 
-        accel_diff = base_a_target - coast_accel
-        target_coast = base_a_target
-        
-        # 🌟 核心優化 3：擴大且柔化的 S 型死區
-        deadband_pos = 0.35
-        deadband_neg = 0.45
-
-        if 0 < accel_diff < deadband_pos:
-          # 放棄生硬的二次方，改用平滑的餘弦過渡 (smooth_interp)
-          blend_ratio = smooth_interp(accel_diff, [0.0, deadband_pos], [0.0, 1.0])
-          target_coast = coast_accel + (accel_diff * blend_ratio)
-        elif -deadband_neg < accel_diff <= 0:
-          blend_ratio = smooth_interp(abs(accel_diff), [0.0, deadband_neg], [0.0, 1.0])
-          target_coast = coast_accel + (accel_diff * blend_ratio)
-
-        # 動態無縫淡出
-        final_a_target = (1.0 - self.smooth_coast_weight) * base_a_target + self.smooth_coast_weight * target_coast
+        # 最終輸出：將熨平後的訊號與原始訊號進行權重混血
+        final_a_target = (1.0 - self.smooth_coast_weight) * base_a_target + self.smooth_coast_weight * smoothed_a
     else:
-      # 如果根本沒有前車了，讓滑行權重快速平滑歸零，別讓車子突然往前衝
-      self.smooth_coast_weight *= 0.8
+      # 前車消失時，極速平滑歸零，將控制權無縫交還給巡航系統
+      self.smooth_coast_weight *= 0.6
 
     # [狀態五] 正常巡航
     delta_down, delta_up = _accel_clip_slew_step(self.dt, v_ego, lead_a, trigger_approach, _ttc, _a_req)
