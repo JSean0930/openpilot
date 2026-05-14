@@ -113,23 +113,28 @@ class CarInterface(CarInterfaceBase):
           break
 
     # ==============================================================================
-    # 🌟 新增：Corolla TSS2 橫向平滑調校 (消除階梯感)
+    # 🌟 新增：Corolla TSS2 橫向動態絲滑調校 (解決階梯感 + 防止直線畫龍)
     # ==============================================================================
     elif candidate == CAR.TOYOTA_COROLLA_TSS2:
       ret.lateralTuning.init('pid')
-      ret.lateralTuning.pid.kiBP = [0.0]
-      ret.lateralTuning.pid.kpBP = [0.0]
       
-      # 降低 P 值：消滅方向盤對微小誤差的過度神經質反應
-      ret.lateralTuning.pid.kpV = [0.06]
+      # 啟用車速分段 (Breakpoints)，單位為 m/s。
+      # [0.0, 15.0, 30.0] 分別代表時速 0 km/h, 54 km/h, 108 km/h
+      ret.lateralTuning.pid.kpBP = [0.0, 15.0, 30.0]
+      ret.lateralTuning.pid.kiBP = [0.0, 15.0, 30.0]
       
-      # I 值：維持極微量，用於抵抗側傾
-      ret.lateralTuning.pid.kiV = [0.02]
+      # 動態 P 值 (kpV)：
+      # 中低速維持 0.08~0.1 確保過彎無階梯感；高速直線拉高到 0.12 來穩住中線，防止偏航
+      ret.lateralTuning.pid.kpV = [0.06, 0.10, 0.12]
       
-      # 提高前饋 kf：讓視覺模型預測的平滑軌跡成為轉向主力，減少延遲與頓挫
-      ret.lateralTuning.pid.kf = 0.00008
+      # 動態 I 值 (kiV)：
+      # 高速時降到極低 (0.01)，避免誤差在直線上累積導致鐘擺效應 (畫龍)
+      ret.lateralTuning.pid.kiV = [0.02, 0.01, 0.005]
       
-      # 微調致動器延遲：讓模型的預測對齊實車馬達響應
+      # 前饋 (kf)：稍微降回 0.00005，避免模型在直線上的微小預測噪聲被放大
+      ret.lateralTuning.pid.kf = 0.00005
+      
+      # 致動器延遲：調回預設的 0.12。延遲過高是直線乒乓的主因！
       ret.steerActuatorDelay = 0.12
     # ==============================================================================
 
