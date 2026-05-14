@@ -419,19 +419,25 @@ class LongitudinalPlanner:
         nod_relief = (1.5 - v_ego) / 1.5 * 0.40
         final_a_target = min(base_a_target + nod_relief, -0.15)
 
-    # [狀態三] 黏腳追擊防發呆 (保留前車動態因子 + 絕對平緩上限版)
-    elif has_lead and _closing < -0.10 and (v_ego * CV.MS_TO_KPH < 70.0):
-      # 【降敏與限流】：前車加速度權重降至 0.3，速差權重 0.35
-      # 既保有對前車動態的物理感知，又將加速極限死死封印在 0.8 以保證舒適度
-      pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(_closing) * 0.35, 0.1, 0.6))
+    # [狀態三] 黏腳追擊防發呆 (加入高速平滑退場緩衝區)
+    elif has_lead and _closing < -0.10:
+      # 【高速無縫退場區間】：取代生硬的 < 70 開關，用 S 型曲線消滅邊界抖動
+      # 65 km/h 以下權重為 1.0 (全開)，65~70 之間逐漸淡出，70 以上權重歸零 (不介入)
+      w_speed = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
       
-      if base_a_target < pursuit_accel:
-        # 【平滑的介入曲線】：使用 smooth_interp 讓權重 S 型過渡
-        w_pursuit = smooth_interp(abs(_closing), [0.1, 1.2], [0.0, 1.0])
-        w_safe = smooth_interp(_d_rel, [4.0, 6.0], [0.0, 1.0])
+      # 只有速度權重還有剩 (未滿 70 km/h) 時，才執行追擊計算
+      if w_speed > 0.01:
+        # 【降敏與限流】：前車加速度權重降至 0.3，速差權重 0.35
+        pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(_closing) * 0.35, 0.1, 0.6))
         
-        final_w = w_pursuit * w_safe
-        final_a_target = (1.0 - final_w) * base_a_target + final_w * pursuit_accel
+        if base_a_target < pursuit_accel:
+          # 【平滑的介入曲線】：使用 smooth_interp 讓權重 S 型過渡
+          w_pursuit = smooth_interp(abs(_closing), [0.1, 1.2], [0.0, 1.0])
+          w_safe = smooth_interp(_d_rel, [4.0, 6.0], [0.0, 1.0])
+          
+          # 🌟 終極融合：將「速度權重」也乘進來
+          final_w = w_pursuit * w_safe * w_speed
+          final_a_target = (1.0 - final_w) * base_a_target + final_w * pursuit_accel
 
     # [狀態三.五] 前車轉彎消失 / 前方突然淨空快速補油
     elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
