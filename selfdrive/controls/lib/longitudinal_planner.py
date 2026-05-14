@@ -426,7 +426,7 @@ class LongitudinalPlanner:
     elif has_lead and _closing < -0.10 and (v_ego * CV.MS_TO_KPH < 70.0):
       # 【降敏與限流】：前車加速度權重降至 0.3，速差權重 0.35
       # 既保有對前車動態的物理感知，又將加速極限死死封印在 0.8 以保證舒適度
-      pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(_closing) * 0.35, 0.1, 0.7)) 
+      pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(_closing) * 0.35, 0.1, 0.6))
       
       if base_a_target < pursuit_accel:
         # 【平滑的介入曲線】：使用 smooth_interp 讓權重 S 型過渡
