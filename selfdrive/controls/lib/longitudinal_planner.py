@@ -422,25 +422,16 @@ class LongitudinalPlanner:
         final_a_target = min(base_a_target + nod_relief, -0.15)
 
     # [狀態三] 主動追擊防發呆
-    # [狀態三] 黏腳追擊防發呆 (極致平順版：按照自己的節奏)
+    # [狀態三] 黏腳追擊防發呆 (保留前車動態因子 + 絕對平緩上限版)
     elif has_lead and _closing < -0.10 and (v_ego * CV.MS_TO_KPH < 70.0):
-      # 【破除猛爆跟隨】：切斷對前車急加速的鏡像反應
-      # 前車大腳油門 (lead_a 很大) 時，我們最多只取 0.25 m/s² 的參考值，只作為起步信號，不隨之起舞
-      lead_a_comp = float(np.clip(lead_a * 0.25, 0.0, 0.25))
-      
-      # 【按照自己的節奏】：用平滑的 S 型曲線將速差轉換為「舒適的油門力度」
-      # 速差 0.5m/s 給 0.2，速差拉大到 2.0m/s 以上最多也只給 0.7 (約為非常溫和的市區加速上限)
-      closing_comp = smooth_interp(abs(_closing), [0.0, 0.5, 2.0], [0.05, 0.2, 0.7])
-      
-      # 將兩者相加，並設定一個絕對舒適的上限 (最高不超過 0.8 m/s²)
-      pursuit_accel = float(np.clip(closing_comp + lead_a_comp, 0.15, 0.8)) 
+      # 【降敏與限流】：前車加速度權重降至 0.3，速差權重 0.35
+      # 既保有對前車動態的物理感知，又將加速極限死死封印在 0.8 以保證舒適度
+      pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(_closing) * 0.35, 0.1, 0.8)) 
       
       if base_a_target < pursuit_accel:
-        # 【平滑的介入曲線】：放棄生硬的線性數學，改用 smooth_interp 柔化介入過程
-        # 只要有一點速差 (0.1m/s) 就開始偷偷給油，但要拉開到 1.2m/s 才會介入滿效
+        # 【平滑的介入曲線】：使用 smooth_interp 讓權重 S 型過渡
+        # 確保「目標加速度」雖然提高了，但「加過去的過程」是滑順不頓挫的
         w_pursuit = smooth_interp(abs(_closing), [0.1, 1.2], [0.0, 1.0])
-        
-        # 距離權重一樣用 S 型曲線柔化 (2.0m 開始微調，4.0m 給滿)
         w_safe = smooth_interp(_d_rel, [2.0, 4.0], [0.0, 1.0])
         
         final_w = w_pursuit * w_safe
