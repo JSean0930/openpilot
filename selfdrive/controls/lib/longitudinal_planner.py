@@ -450,8 +450,8 @@ class LongitudinalPlanner:
     # [狀態四] 安全跟隨滑行 (徹底消滅騎馬感：訊號熨斗升級版)
     elif has_lead:
       # 🌟 優化 1：廢除連乘，改用寬容的基礎條件，防止權重閃爍
-      # 距離大於 3 米、速差小於 2 m/s 就可以準備進入舒適區
-      w_dist = float(np.clip((_d_rel - 3.0) / 4.0, 0.0, 1.0))
+      # 距離大於 6 米、速差小於 2 m/s 就可以準備進入舒適區
+      w_dist = float(np.clip((_d_rel - 6.0) / 4.0, 0.0, 1.0))
       w_close = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
       
       # 取兩者的最小值作為基礎權重，這樣只要其中一個條件不滿足，就會平滑退出
