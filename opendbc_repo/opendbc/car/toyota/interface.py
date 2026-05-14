@@ -132,10 +132,10 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiV = [0.02, 0.01, 0.005]
       
       # 前饋 (kf)：稍微降回 0.00005，避免模型在直線上的微小預測噪聲被放大
-      ret.lateralTuning.pid.kf = 0.00005
+      ret.lateralTuning.pid.kf = 0.00008
       
       # 致動器延遲：調回預設的 0.12。延遲過高是直線乒乓的主因！
-      ret.steerActuatorDelay = 0.12
+      ret.steerActuatorDelay = 0.10
     # ==============================================================================
 
     elif candidate in (CAR.TOYOTA_CHR, CAR.TOYOTA_CAMRY, CAR.TOYOTA_SIENNA, CAR.LEXUS_CTH, CAR.LEXUS_NX):
