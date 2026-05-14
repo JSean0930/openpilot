@@ -59,7 +59,7 @@ TTC_START_BASE = 2.2
 TTC_FULL_BASE  = 1.2
 A_REQ_START_BASE = -1.2
 A_REQ_FULL_BASE  = -2.6
-PREBRAKE_MAX_DECEL_BASE = -0.8
+PREBRAKE_MAX_DECEL_BASE = -0.65 #0.8
 
 # =======================================================================
 
