@@ -294,8 +294,8 @@ class LongitudinalPlanner:
     v_ego = sm['carState'].vEgo
 
     # 🚫 高速強制回歸 ACC 的限制已解除，現在完全聽從 Experimental Mode 開關
-     if v_ego * CV.MS_TO_KPH >= 25.0:
-       mode = 'acc'
+    if v_ego * CV.MS_TO_KPH >= 25.0:
+      mode = 'acc'
 
     # 🌟 核心同步：將判定好的 mode 傳遞給底層的精算師 (MPC)
     self.mpc.mode = mode
