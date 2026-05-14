@@ -433,7 +433,7 @@ class LongitudinalPlanner:
         if base_a_target < pursuit_accel:
           # 【平滑的介入曲線】：使用 smooth_interp 讓權重 S 型過渡
           w_pursuit = smooth_interp(abs(_closing), [0.1, 1.2], [0.0, 1.0])
-          w_safe = smooth_interp(_d_rel, [4.0, 6.0], [0.0, 1.0])
+          w_safe = smooth_interp(_d_rel, [3.0, 6.0], [0.0, 1.0])
           
           # 🌟 終極融合：將「速度權重」也乘進來
           final_w = w_pursuit * w_safe * w_speed
