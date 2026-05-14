@@ -121,16 +121,16 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpBP = [0.0]
       
       # 降低 P 值：消滅方向盤對微小誤差的過度神經質反應
-      ret.lateralTuning.pid.kpV = [0.08]
+      ret.lateralTuning.pid.kpV = [0.06]
       
       # I 值：維持極微量，用於抵抗側傾
       ret.lateralTuning.pid.kiV = [0.02]
       
       # 提高前饋 kf：讓視覺模型預測的平滑軌跡成為轉向主力，減少延遲與頓挫
-      ret.lateralTuning.pid.kf = 0.00007
+      ret.lateralTuning.pid.kf = 0.00008
       
       # 微調致動器延遲：讓模型的預測對齊實車馬達響應
-      ret.steerActuatorDelay = 0.18
+      ret.steerActuatorDelay = 0.12
     # ==============================================================================
 
     elif candidate in (CAR.TOYOTA_CHR, CAR.TOYOTA_CAMRY, CAR.TOYOTA_SIENNA, CAR.LEXUS_CTH, CAR.LEXUS_NX):
