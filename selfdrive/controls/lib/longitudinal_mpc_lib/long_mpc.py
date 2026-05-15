@@ -426,7 +426,7 @@ class LongitudinalMpc:
         if closing < -0.10:
           # 【起步/追擊狀態】前車正在拉開
           # 借用 Planner 的人性化公式：計算「追擊意圖」 (轉化為 0~0.8 的權重加成)
-          pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(closing) * 0.35, 0.0, 0.8))
+          pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(closing) * 0.5, 0.0, 0.6))
           
           # 距離安全鎖：距離太近 (2.0m內) 不給加成，拉開到 6.0m 給滿
           # 注意：MPC 內通常不引用 smooth_interp，改用 numpy 原生的線性插值 np.interp
