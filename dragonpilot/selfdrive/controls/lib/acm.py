@@ -9,7 +9,7 @@ from openpilot.common.swaglog import cloudlog
 # ----------------------------------------------------
 # [高速宏觀] 軌跡抑制滑行參數 (Macro Coasting)
 # ----------------------------------------------------
-MIN_ACM_SPEED_KPH = 40.0   
+MIN_ACM_SPEED_KPH = 70.0   
 HIGH_SPEED_KPH    = 90.0   
 
 SPEED_RATIO_ON       = 0.985  
