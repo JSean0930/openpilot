@@ -410,50 +410,17 @@ class LongitudinalMpc:
       # ========================================================
       # 🌟 優化 3：動態脫鉤寫法 (起步底薪進化版)
       # ========================================================
-      # 獲取前車資訊
-      lead = radarstate.leadOne
-      has_lead = lead.status
-
-      # 基礎速度權重 (保留原本低速域的基本安全邏輯)
       v_start_thr = 25.0 / 3.6
-      w_base = 0.20 + 0.80 * (v_ego / v_start_thr)
       
-      if has_lead:
-        lead_a = lead.aLeadK
-        d_rel = lead.dRel
-        closing = v_ego - lead.vLead
-        
-        if closing < -0.10:
-          # 【起步/追擊狀態】前車正在拉開
-          # 借用 Planner 的人性化公式：計算「追擊意圖」 (轉化為 0~0.8 的權重加成)
-          pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(closing) * 0.5, 0.0, 0.6))
-          
-          # 距離安全鎖：距離太近 (2.0m內) 不給加成，拉開到 6.0m 給滿
-          # 注意：MPC 內通常不引用 smooth_interp，改用 numpy 原生的線性插值 np.interp
-          w_dist = float(np.interp(d_rel, [2.0, 6.0], [0.0, 1.0]))
-          
-          # 🌟 核心融合：將「追擊意圖」疊加到基礎權重上！
-          # 這會讓 MPC 在低速時，只要前車一走，就瞬間勇敢選擇 np.max (長軌跡)
-          w_raw = w_base + (pursuit_intent * w_dist)
-          
-        elif closing > 0.5 or lead_a < -0.5:
-          # 【逼近/減速狀態】前車煞車或我們逼近過快
-          # 強制壓低權重，剝奪滑行能力，逼迫 MPC 選擇 np.min (提早煞車的保守軌跡)
-          w_raw = w_base - 0.5
-        else:
-          w_raw = w_base
-      else:
-        # 無前車狀態，維持原廠的高低速平滑邏輯
-        w_raw = w_base
-
-      # 最終物理封印，確保權重只在 0.0 ~ 1.0 之間
+      w_raw = 0.20 + 0.80 * (v_ego / v_start_thr)
       w = float(np.clip(w_raw, 0.0, 1.0))
 
       x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
+     
       x = x_mixed
       
       self.source = 'e2e' if x_and_cruise[1, 0] < x_and_cruise[1, 1] else 'cruise'
-
+      
     else:
       raise NotImplementedError(f'Planner mode {self.mode} not recognized in planner update')
 
