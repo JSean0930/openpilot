@@ -475,21 +475,30 @@ class LongitudinalPlanner:
     # [狀態三.五] 前車轉彎消失 / 前方突然淨空快速補油
     elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
       # 當前車左右轉離開車道，has_lead 瞬間變 False，此時底層 MPC 往往會猶豫幾秒才爬升
-      # 我們在這裡給予一個溫和且果斷的起步底薪 (Base Thrust)
       # 速度越慢 (0~18km/h) 給的底薪越多 (0.65)，速度上來了就自然退場交給 MPC
       clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.65, 0.4, 0.0])
       if base_a_target < clear_boost:
         # 平滑托高目標加速度的下限，讓補油不突兀但很迅速
         final_a_target = clear_boost
+        
+      # 🌟 補洞：前車消失了，讓熨斗權重快速歸零
+      self.smooth_coast_weight *= 0.6
 
-    # [狀態五] 正常巡航
+    # [無車狀態的終極防線]
+    else:
+      # 🌟 補洞：如果是正常無車巡航，確保熨斗權重持續歸零，絕不殘留到下一次跟車
+      self.smooth_coast_weight *= 0.6
+
+    # ==========================================
+    # [狀態五] 正常巡航 (這段維持在最外面，不受 if/else 控制)
+    # ==========================================
     delta_down, delta_up = _accel_clip_slew_step(self.dt, v_ego, lead_a, trigger_approach, _ttc, _a_req)
     for idx in range(2):
       accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - delta_down, self.prev_accel_clip[idx] + delta_up)
 
     self.output_a_target = float(np.clip(final_a_target, accel_clip[0], accel_clip[1]))
     self.prev_accel_clip = accel_clip
-
+    
   def publish(self, sm, pm):
     plan_send = messaging.new_message('longitudinalPlan')
     plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'selfdriveState', 'radarState'])
