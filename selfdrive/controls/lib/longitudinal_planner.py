@@ -70,7 +70,7 @@ A_CRUISE_MAX_BP   = [0.0,  2.78,  8.33,  15.0,  20.0,  25.0,  30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
-_A_TOTAL_MAX_V = [1.7, 3.2]
+_A_TOTAL_MAX_V = [2.0, 3.8] #[1.7, 3.2]
 _A_TOTAL_MAX_BP = [20., 40.]
 
 
