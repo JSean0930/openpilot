@@ -429,9 +429,10 @@ class LongitudinalMpc:
         
         # 【平滑化 2：防禦扣減】
         brake_intent_close = float(np.interp(closing, [0.1, 0.8], [0.0, 0.5]))
-        brake_intent_lead = float(np.interp(lead_a, [-1.5, -0.5], [0.0, 0.5]))
+        # 🌟 修正：前車急煞(-1.5)給最大扣減(0.5)，前車輕煞(-0.5)給無扣減(0.0)
+        brake_intent_lead = float(np.interp(lead_a, [-1.5, -0.5], [0.5, 0.0]))
         defense_weight = max(brake_intent_close, brake_intent_lead)
-        
+                
         w_raw = w_base + pursuit_weight - defense_weight
       else:
         w_raw = w_base
