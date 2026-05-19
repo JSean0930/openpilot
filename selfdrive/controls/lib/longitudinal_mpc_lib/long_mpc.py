@@ -408,15 +408,37 @@ class LongitudinalMpc:
       x_and_cruise = np.column_stack([x_model, cruise_target])
       
       # ========================================================
-      # 🌟 優化 3：動態脫鉤寫法 (起步底薪進化版)
+      # 🌟 優化 3：動態脫鉤寫法 (無縫過渡防抖動版)
       # ========================================================
+      lead = radarstate.leadOne
+      has_lead = lead.status
+
       v_start_thr = 25.0 / 3.6
+      w_base = 0.20 + 0.80 * (v_ego / v_start_thr)
       
-      w_raw = 0.20 + 0.80 * (v_ego / v_start_thr)
-      w = float(np.clip(w_raw, 0.0, 0.8))
+      if has_lead:
+        lead_a = lead.aLeadK
+        d_rel = lead.dRel
+        closing = v_ego - lead.vLead
+        
+        # 【平滑化 1：追擊加成】
+        closing_pull = min(closing, 0.0) 
+        pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(closing_pull) * 0.35, 0.0, 0.8))
+        w_dist = float(np.interp(d_rel, [2.0, 6.0], [0.0, 1.0]))
+        pursuit_weight = pursuit_intent * w_dist
+        
+        # 【平滑化 2：防禦扣減】
+        brake_intent_close = float(np.interp(closing, [0.1, 0.8], [0.0, 0.5]))
+        brake_intent_lead = float(np.interp(lead_a, [-1.5, -0.5], [0.0, 0.5]))
+        defense_weight = max(brake_intent_close, brake_intent_lead)
+        
+        w_raw = w_base + pursuit_weight - defense_weight
+      else:
+        w_raw = w_base
+
+      w = float(np.clip(w_raw, 0.0, 1.0))
 
       x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
-     
       x = x_mixed
       
       self.source = 'e2e' if x_and_cruise[1, 0] < x_and_cruise[1, 1] else 'cruise'
