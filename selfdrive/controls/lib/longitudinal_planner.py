@@ -65,7 +65,7 @@ PREBRAKE_MAX_DECEL_BASE = -0.65 #0.8
 
 LON_MPC_STEP = 0.2
 
-A_CRUISE_MAX_VALS = [1.35,  1.25,   1.0,   0.7, 0.644, 0.441, 0.198] #[1.5,  1.0,   0.8,   0.7, 0.644, 0.441, 0.198]
+A_CRUISE_MAX_VALS = [1.25,  1.15,   1.05,   0.7, 0.644, 0.441, 0.198] #[1.5,  1.0,   0.8,   0.7, 0.644, 0.441, 0.198]
 A_CRUISE_MAX_BP   = [0.0,  2.78,  8.33,  15.0,  20.0,  25.0,  30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
@@ -432,7 +432,7 @@ class LongitudinalPlanner:
       # 擷取拉開的速差 (0.1 ~ 1.2 m/s 轉換為權重)
       w_pursuit = smooth_interp(_closing, [-1.2, -0.1], [1.0, 0.0]) 
       # 依照您的最新設定：3.0 ~ 6.0 米過渡
-      w_safe = smooth_interp(_d_rel, [3.0, 6.0], [0.0, 1.0])
+      w_safe = smooth_interp(_d_rel, [4.0, 8.0], [0.0, 1.0])
       
       final_w = w_pursuit * w_safe * w_speed
       
