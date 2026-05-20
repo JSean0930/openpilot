@@ -41,7 +41,7 @@ FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.25
 FAST_V_DESIRED_BLEND = 0.85                    
 
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
-ACCEL_SLEW_RATE_BP = [3.0, 3.0, 2.0, 0.4] 
+ACCEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 0.4] 
 DECEL_SLEW_RATE_BP = [2.0, 2.0, 1.8, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
@@ -446,7 +446,7 @@ class LongitudinalPlanner:
       # 第二站：[狀態四] 訊號熨斗 (全時柔化)
       # ==========================================
       # 廢除連乘，改用寬容的基礎條件
-      w_dist_iron = float(np.clip((_d_rel - 3.0) / 4.0, 0.0, 1.0))
+      w_dist_iron = float(np.clip((_d_rel - 7.0) / 4.0, 0.0, 1.0))
       w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
       raw_coast_weight = min(w_dist_iron, w_close_iron)
 
