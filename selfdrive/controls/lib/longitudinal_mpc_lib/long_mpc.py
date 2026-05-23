@@ -424,7 +424,7 @@ class LongitudinalMpc:
         # 【平滑化 1：追擊加成】
         closing_pull = min(closing, 0.0) 
         pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(closing_pull) * 0.35, 0.0, 0.8))
-        w_dist = float(np.interp(d_rel, [2.0, 6.0], [0.0, 1.0]))
+        w_dist = float(np.interp(d_rel, [4.0, 8.0], [0.0, 1.0]))
         pursuit_weight = pursuit_intent * w_dist
         
         # 【平滑化 2：防禦扣減】
