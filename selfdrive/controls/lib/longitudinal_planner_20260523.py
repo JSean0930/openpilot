@@ -41,7 +41,7 @@ FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.25
 FAST_V_DESIRED_BLEND = 0.85                    
 
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
-ACCEL_SLEW_RATE_BP = [3.0, 3.0, 2.0, 0.4] 
+ACCEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 0.4] 
 DECEL_SLEW_RATE_BP = [2.0, 2.0, 1.8, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
@@ -65,7 +65,7 @@ PREBRAKE_MAX_DECEL_BASE = -0.65 #0.8
 
 LON_MPC_STEP = 0.2
 
-A_CRUISE_MAX_VALS = [1.5,  1.25,   1.0,   0.7, 0.644, 0.441, 0.198] #[1.5,  1.0,   0.8,   0.7, 0.644, 0.441, 0.198]
+A_CRUISE_MAX_VALS = [1.25,  1.15,   1.05,   0.7, 0.644, 0.441, 0.198] #[1.5,  1.0,   0.8,   0.7, 0.644, 0.441, 0.198]
 A_CRUISE_MAX_BP   = [0.0,  2.78,  8.33,  15.0,  20.0,  25.0,  30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
@@ -422,90 +422,89 @@ class LongitudinalPlanner:
         final_a_target = min(base_a_target + nod_relief, -0.15)
 
     # [狀態三] 主動追擊防發呆
-    # [狀態三] 黏腳追擊防發呆 (加入高速平滑退場緩衝區)
-    elif has_lead and _closing < -0.10:
-      # 【高速無縫退場區間】：取代生硬的 < 70 開關，用 S 型曲線消滅邊界抖動
-      # 65 km/h 以下權重為 1.0 (全開)，65~70 之間逐漸淡出，70 以上權重歸零 (不介入)
+    # [有車狀態：追擊與滑行的「流水線融合」]
+    elif has_lead:
+      # ==========================================
+      # 第一站：[狀態三] 動態追擊疊加
+      # ==========================================
       w_speed = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
       
-      # 只有速度權重還有剩 (未滿 70 km/h) 時，才執行追擊計算
-      if w_speed > 0.01:
-        # 【降敏與限流】：前車加速度權重降至 0.3，速差權重 0.35
-        pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(_closing) * 0.35, 0.1, 0.6))
-        
-        if base_a_target < pursuit_accel:
-          # 【平滑的介入曲線】：使用 smooth_interp 讓權重 S 型過渡
-          w_pursuit = smooth_interp(abs(_closing), [0.1, 1.2], [0.0, 1.0])
-          w_safe = smooth_interp(_d_rel, [3.0, 6.0], [0.0, 1.0])
-          
-          # 🌟 終極融合：將「速度權重」也乘進來
-          final_w = w_pursuit * w_safe * w_speed
-          final_a_target = (1.0 - final_w) * base_a_target + final_w * pursuit_accel
-
-    # [狀態三.五] 前車轉彎消失 / 前方突然淨空快速補油
-    elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
-      # 當前車左右轉離開車道，has_lead 瞬間變 False，此時底層 MPC 往往會猶豫幾秒才爬升
-      # 我們在這裡給予一個溫和且果斷的起步底薪 (Base Thrust)
-      # 速度越慢 (0~18km/h) 給的底薪越多 (0.65)，速度上來了就自然退場交給 MPC
-      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.65, 0.4, 0.0])
-      if base_a_target < clear_boost:
-        # 平滑托高目標加速度的下限，讓補油不突兀但很迅速
-        final_a_target = clear_boost
-
-    # [狀態四] 安全跟隨滑行 (徹底消滅騎馬感：訊號熨斗升級版)
-    elif has_lead:
-      # 🌟 優化 1：廢除連乘，改用寬容的基礎條件，防止權重閃爍
-      # 距離大於 7 米、速差小於 2 m/s 就可以準備進入舒適區
-      w_dist = float(np.clip((_d_rel - 7.0) / 4.0, 0.0, 1.0))
-      w_close = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
+      # 擷取拉開的速差 (0.1 ~ 1.2 m/s 轉換為權重)
+      w_pursuit = smooth_interp(_closing, [-1.2, -0.1], [1.0, 0.0]) 
+      # 依照您的最新設定：4.0 ~ 8.0 米過渡
+      w_safe = smooth_interp(_d_rel, [4.0, 8.0], [0.0, 1.0])
       
-      # 取兩者的最小值作為基礎權重，這樣只要其中一個條件不滿足，就會平滑退出
-      raw_coast_weight = min(w_dist, w_close)
+      final_w = w_pursuit * w_safe * w_speed
+      
+      if final_w > 0.01:
+        # 計算追擊力度 (用 min(_closing, 0.0) 防止正速差干擾)
+        pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(min(_closing, 0.0)) * 0.35, 0.1, 0.6))
+        if final_a_target < pursuit_accel:
+          final_a_target = (1.0 - final_w) * final_a_target + final_w * pursuit_accel
 
-      # 如果前車有明顯加減速，一票否決，瞬間準備退出滑行
+      # ==========================================
+      # 第二站：[狀態四] 訊號熨斗 (全時柔化)
+      # ==========================================
+      # 🌟 新增：時速 65-70 高速平滑退場緩衝區
+      # 時速 65 以下為 1.0 (全開)，65~70 漸漸淡出，70 以上為 0.0 (徹底關閉熨斗)
+      w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
+
+      # 廢除連乘，改用寬容的基礎條件
+      w_dist_iron = float(np.clip((_d_rel - 5.0) / 4.0, 0.0, 1.0))
+      w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
+      
+      # 取兩者的最小值作為基礎權重，並【乘上高速緩衝權重】
+      raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
+
       if abs(lead_a) > 0.6:
         raw_coast_weight = 0.0
 
-      # 🌟 優化 2：極端平滑的 EMA 濾波
-      # 進入滑行極慢 (防突波)，退出滑行極快 (防追尾)
       if raw_coast_weight > self.smooth_coast_weight:
         self.smooth_coast_weight += 0.02 * (raw_coast_weight - self.smooth_coast_weight)
       else:
         self.smooth_coast_weight += 0.20 * (raw_coast_weight - self.smooth_coast_weight)
 
-      # 當平滑權重生效時，啟動「訊號熨斗」
       if self.smooth_coast_weight > 0.01:
-        # 計算最自然的微弱滑行阻力 (加上您的坡度補償)
         natural_coast = float(np.clip(accel_coast * 0.60 - 0.02, -0.25, 0.1))
-
-        # 計算 MPC 想做的加速度，與自然滑行的差距
-        diff = base_a_target - natural_coast
+        # 將剛剛第一站算出來的 final_a_target 拿來跟自然滑行比較
+        diff = final_a_target - natural_coast
         
-        # 🌟 核心優化 3：拋物線引力場 (Parabolic Attraction)
-        # 廢除 if/else 死區！我們允許 diff 在 +- 0.45 內被平滑吸附
         zone = 0.45
         if abs(diff) < zone:
-          # 當 diff 越接近 0，ratio 呈平方級別暴跌 (越靠近中心吸力越強)
-          # 這保證了函數的絕對連續性，MPC 的微小躁動會被完美吃掉，不會有斷層拉扯
           ratio = (abs(diff) / zone) ** 2
           smoothed_a = natural_coast + diff * ratio
         else:
-          smoothed_a = base_a_target
+          smoothed_a = final_a_target
 
-        # 最終輸出：將熨平後的訊號與原始訊號進行權重混血
-        final_a_target = (1.0 - self.smooth_coast_weight) * base_a_target + self.smooth_coast_weight * smoothed_a
-    else:
-      # 前車消失時，極速平滑歸零，將控制權無縫交還給巡航系統
+        final_a_target = (1.0 - self.smooth_coast_weight) * final_a_target + self.smooth_coast_weight * smoothed_a
+    
+    # [狀態三.五] 前車轉彎消失 / 前方突然淨空快速補油
+    elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
+      # 當前車左右轉離開車道，has_lead 瞬間變 False，此時底層 MPC 往往會猶豫幾秒才爬升
+      # 速度越慢 (0~18km/h) 給的底薪越多 (0.65)，速度上來了就自然退場交給 MPC
+      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.65, 0.4, 0.0])
+      if base_a_target < clear_boost:
+        # 平滑托高目標加速度的下限，讓補油不突兀但很迅速
+        final_a_target = clear_boost
+        
+      # 🌟 補洞：前車消失了，讓熨斗權重快速歸零
       self.smooth_coast_weight *= 0.6
 
-    # [狀態五] 正常巡航
+    # [無車狀態的終極防線]
+    else:
+      # 🌟 補洞：如果是正常無車巡航，確保熨斗權重持續歸零，絕不殘留到下一次跟車
+      self.smooth_coast_weight *= 0.6
+
+    # ==========================================
+    # [狀態五] 正常巡航 (這段維持在最外面，不受 if/else 控制)
+    # ==========================================
     delta_down, delta_up = _accel_clip_slew_step(self.dt, v_ego, lead_a, trigger_approach, _ttc, _a_req)
     for idx in range(2):
       accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - delta_down, self.prev_accel_clip[idx] + delta_up)
 
     self.output_a_target = float(np.clip(final_a_target, accel_clip[0], accel_clip[1]))
     self.prev_accel_clip = accel_clip
-
+    
   def publish(self, sm, pm):
     plan_send = messaging.new_message('longitudinalPlan')
     plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'selfdriveState', 'radarState'])
@@ -532,4 +531,3 @@ class LongitudinalPlanner:
     longitudinalPlan.allowThrottle = bool(self.allow_throttle)
 
     pm.send('longitudinalPlan', plan_send)
-
