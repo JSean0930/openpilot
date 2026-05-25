@@ -408,28 +408,35 @@ class LongitudinalMpc:
       x_and_cruise = np.column_stack([x_model, cruise_target])
       
       # ========================================================
-      # 🌟 優化 3：動態脫鉤寫法 (無縫過渡防抖動版)
+      # 🌟 優化 3：動態脫鉤寫法 (專屬 0-25 km/h 塞車柔和模式)
       # ========================================================
       lead = radarstate.leadOne
       has_lead = lead.status
 
-      v_start_thr = 25.0 / 3.6
-      w_base = 0.20 + 0.80 * (v_ego / v_start_thr)
+      # 【徹底重構 1：超低底薪曲線】
+      # 既然最高只到 25 km/h，我們讓 w_base 在低速域幾乎趴在地板上。
+      # 0~10 km/h: w=0.0~0.2 (純 e2e 蠕行，解決起步暴衝)
+      # 25 km/h: w=0.6 (到達切換邊界時，平滑過渡到 ACC 模式的力度)
+      v_kph = v_ego * 3.6
+      w_base = float(np.interp(v_kph, [0.0, 10.0, 25.0], [0.0, 0.20, 0.60]))
       
       if has_lead:
         lead_a = lead.aLeadK
         d_rel = lead.dRel
         closing = v_ego - lead.vLead
         
-        # 【平滑化 1：追擊加成】
+        # 【徹底重構 2：剝奪 MPC 的起步主導權】
+        # 起步加速已經交給 Planner [狀態三] 了，MPC 這裡的「追擊」只做微調，不搶戲。
         closing_pull = min(closing, 0.0) 
-        pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(closing_pull) * 0.35, 0.0, 0.8))
-        w_dist = float(np.interp(d_rel, [4.0, 8.0], [0.0, 1.0]))
+        # 乘數大幅降至 0.1，且將追擊權重加成的上限「死鎖」在 0.2
+        pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.10 + abs(closing_pull) * 0.10, 0.0, 0.20))
+        
+        # 距離過渡：近距離 (3米內) 絕對不疊加追擊權重
+        w_dist = float(np.interp(d_rel, [3.0, 8.0], [0.0, 1.0]))
         pursuit_weight = pursuit_intent * w_dist
         
-        # 【平滑化 2：防禦扣減】
+        # 【維持不變：防禦扣減 (安全底線)】
         brake_intent_close = float(np.interp(closing, [0.1, 0.8], [0.0, 0.5]))
-        # 🌟 修正：前車急煞(-1.5)給最大扣減(0.5)，前車輕煞(-0.5)給無扣減(0.0)
         brake_intent_lead = float(np.interp(lead_a, [-1.5, -0.5], [0.5, 0.0]))
         defense_weight = max(brake_intent_close, brake_intent_lead)
                 
@@ -437,7 +444,9 @@ class LongitudinalMpc:
       else:
         w_raw = w_base
 
-      w = float(np.clip(w_raw, 0.0, 0.65))
+      # 🌟 最終防線：因為是純市區模式，強制把物理上限壓制在 0.8
+      # 這樣就算前面算出來再高，車子也絕對不會用 100% 的長軌跡去衝刺
+      w = float(np.clip(w_raw, 0.0, 0.8))
 
       x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
       x = x_mixed
