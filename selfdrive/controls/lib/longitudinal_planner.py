@@ -450,7 +450,7 @@ class LongitudinalPlanner:
       w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
 
       # 廢除連乘，改用寬容的基礎條件
-      w_dist_iron = float(np.clip((_d_rel - 5.0) / 4.0, 0.0, 1.0))
+      w_dist_iron = float(np.clip((_d_rel - 2.0) / 4.0, 0.0, 1.0))
       w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
       
       # 取兩者的最小值作為基礎權重，並【乘上高速緩衝權重】
