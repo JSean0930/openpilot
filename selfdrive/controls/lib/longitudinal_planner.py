@@ -486,15 +486,21 @@ class LongitudinalPlanner:
     # [狀態三.五] 前車轉彎消失 / 前方突然淨空快速補油
     elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
       # 當前車左右轉離開車道，has_lead 瞬間變 False，此時底層 MPC 往往會猶豫幾秒才爬升
-      # 速度越慢 (0~18km/h) 給的底薪越多 (0.65)，速度上來了就自然退場交給 MPC
-      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.65, 0.4, 0.0])
+      
+      # 🌟 優化 1：降低絕對底薪 (消滅起跳踹感)
+      # 0km/h 極限值由 0.65 降至 0.45，18km/h 由 0.4 降至 0.25
+      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.45, 0.25, 0.0])
+      
       if base_a_target < clear_boost:
-        # 平滑托高目標加速度的下限，讓補油不突兀但很迅速
-        final_a_target = clear_boost
+        # 🌟 優化 2：無縫比例融合 (Soft Blending)
+        # 廢除生硬的直接覆蓋。改用 50/50 融合，這會把推力軟化。
+        # 若原本 MPC 給 0.0，這裡會算出 (0.0 + 0.45)/2 = 0.225，
+        # 產生一陣「立刻有感、但極度圓潤」的起步微風，給底層 MPC 充足的甦醒過渡時間。
+        final_a_target = 0.5 * base_a_target + 0.5 * clear_boost
         
       # 🌟 補洞：前車消失了，讓熨斗權重快速歸零
       self.smooth_coast_weight *= 0.6
-
+    
     # [無車狀態的終極防線]
     else:
       # 🌟 補洞：如果是正常無車巡航，確保熨斗權重持續歸零，絕不殘留到下一次跟車
