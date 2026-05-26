@@ -421,31 +421,36 @@ class LongitudinalPlanner:
         nod_relief = (1.5 - v_ego) / 1.5 * 0.40
         final_a_target = min(base_a_target + nod_relief, -0.15)
 
-    # [狀態三] 主動追擊防發呆
     # [有車狀態：追擊與滑行的「流水線融合」]
     elif has_lead:
       # ==========================================
-      # 第一站：[狀態三] 動態追擊疊加
+      # 第一站：[狀態三] 動態追擊疊加 (🌟 柔和高敏版)
       # ==========================================
       w_speed = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
       
-      # 擷取拉開的速差 (0.1 ~ 1.2 m/s 轉換為權重)
-      w_pursuit = smooth_interp(_closing, [-1.2, -0.1], [1.0, 0.0]) 
-      # 依照您的最新設定：4.0 ~ 8.0 米過渡
+      # 🌟 優化 1：拉長速差過渡區間，消滅油門突波！
+      # 啟動點延後至 -0.2 (防前車稍微蠕動就觸發)
+      # 滿載點延後至 -1.8 (約 6.5 km/h 的速差)，讓權重上升變成平緩的長坡，不急躁。
+      w_pursuit = smooth_interp(_closing, [-1.8, -0.2], [1.0, 0.0]) 
       w_safe = smooth_interp(_d_rel, [4.0, 8.0], [0.0, 1.0])
       
       final_w = w_pursuit * w_safe * w_speed
       
       if final_w > 0.01:
-        # 計算追擊力度 (用 min(_closing, 0.0) 防止正速差干擾)
-        pursuit_accel = float(np.clip(max(lead_a, 0.0) * 0.3 + abs(min(_closing, 0.0)) * 0.35, 0.1, 0.6))
+        # 🌟 優化 2：降低爆發乘數，並軟化上下限！
+        # - 前車加速度乘數 0.3 -> 0.15
+        # - 自身速差乘數 0.35 -> 0.20
+        # - 下限 0.1 -> 0.05 (消滅起跳踹感)
+        # - 上限 0.6 -> 0.45 (封印猛爆推力)
+        raw_pursuit = max(lead_a, 0.0) * 0.15 + abs(min(_closing, 0.0)) * 0.20
+        pursuit_accel = float(np.clip(raw_pursuit, 0.05, 0.45))
+        
         if final_a_target < pursuit_accel:
           final_a_target = (1.0 - final_w) * final_a_target + final_w * pursuit_accel
 
       # ==========================================
       # 第二站：[狀態四] 訊號熨斗 (全時柔化)
       # ==========================================
-      # 🌟 新增：時速 65-70 高速平滑退場緩衝區
       # 時速 65 以下為 1.0 (全開)，65~70 漸漸淡出，70 以上為 0.0 (徹底關閉熨斗)
       w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
 
