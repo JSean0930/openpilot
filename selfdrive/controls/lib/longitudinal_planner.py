@@ -432,7 +432,7 @@ class LongitudinalPlanner:
       # 啟動點延後至 -0.2 (防前車稍微蠕動就觸發)
       # 滿載點延後至 -1.8 (約 6.5 km/h 的速差)，讓權重上升變成平緩的長坡，不急躁。
       w_pursuit = smooth_interp(_closing, [-1.8, -0.2], [1.0, 0.0]) 
-      w_safe = smooth_interp(_d_rel, [4.0, 8.0], [0.0, 1.0])
+      w_safe = smooth_interp(_d_rel, [4.0, 12.0], [0.0, 1.0])
       
       final_w = w_pursuit * w_safe * w_speed
       
