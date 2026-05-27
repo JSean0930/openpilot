@@ -462,9 +462,9 @@ class LongitudinalPlanner:
       raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
 
       # 🌟 優化 3：動態煞車敏感度 (專治低速塞車的太晚煞車)
-      # 塞車極低速 (30km/h以內) 時，前車只要輕點煞車 (-0.25) 熨斗就立刻解除
+      # 塞車極低速 (30km/h以內) 時，前車只要輕點煞車 (-0.2) 熨斗就立刻解除
       # 時速拉高後 (50km/h以上)，容忍度放寬到 -0.6，避免高速稍微收油就頓挫
-      lead_brake_thr = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 50.0], [-0.25, -0.60])
+      lead_brake_thr = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 50.0], [-0.20, -0.60])
       
       # 分離判定：
       # 1. 前車減速超過動態門檻 (低速極敏感，高速較寬容)
