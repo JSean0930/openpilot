@@ -455,13 +455,21 @@ class LongitudinalPlanner:
       w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
 
       # 廢除連乘，改用寬容的基礎條件
-      w_dist_iron = float(np.clip((_d_rel - 10.0) / 4.0, 0.0, 1.0))
+      w_dist_iron = float(np.clip((_d_rel - 3.0) / 4.0, 0.0, 1.0))
       w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
       
       # 取兩者的最小值作為基礎權重，並【乘上高速緩衝權重】
       raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
 
-      if abs(lead_a) > 0.6:
+      # 🌟 優化 3：動態煞車敏感度 (專治低速塞車的太晚煞車)
+      # 塞車極低速 (30km/h以內) 時，前車只要輕點煞車 (-0.25) 熨斗就立刻解除
+      # 時速拉高後 (50km/h以上)，容忍度放寬到 -0.6，避免高速稍微收油就頓挫
+      lead_brake_thr = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 50.0], [-0.25, -0.60])
+      
+      # 分離判定：
+      # 1. 前車減速超過動態門檻 (低速極敏感，高速較寬容)
+      # 2. 前車大腳油門急加速 (> 0.8)，也解除熨斗準備衝刺
+      if lead_a < lead_brake_thr or lead_a > 0.8:
         raw_coast_weight = 0.0
 
       if raw_coast_weight > self.smooth_coast_weight:
