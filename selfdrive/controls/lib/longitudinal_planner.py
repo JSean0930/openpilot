@@ -443,7 +443,7 @@ class LongitudinalPlanner:
         # - 下限 0.1 -> 0.05 (消滅起跳踹感)
         # - 上限 0.6 -> 0.45 (封印猛爆推力)
         raw_pursuit = max(lead_a, 0.0) * 0.15 + abs(min(_closing, 0.0)) * 0.20
-        pursuit_accel = float(np.clip(raw_pursuit, 0.05, 0.45))
+        pursuit_accel = float(np.clip(raw_pursuit, 0.025, 0.45))
         
         if final_a_target < pursuit_accel:
           final_a_target = (1.0 - final_w) * final_a_target + final_w * pursuit_accel
