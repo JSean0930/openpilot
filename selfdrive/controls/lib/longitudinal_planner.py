@@ -18,30 +18,18 @@ from dragonpilot.selfdrive.controls.lib.acm import ACM
 from dragonpilot.selfdrive.controls.lib.aem import AEM
 from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 
-# ====================================================================
-# 調參提示（僅註解）
-# - 低速跟停還想更敏感：FAST_V_DESIRED_BLEND 往上加到 0.75~0.8
-# - 若覺得偶爾有點「急」：ACCEL_SLEW_RATE_BP 第一項往下調到 1.5
-# - 若你主要想改善「前車一煞立刻反應」：FAST_V_DESIRED_LEAD_DECEL_THRESH 從 -0.6 改 -0.5
-# ====================================================================
-
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
 EARLYNESS = 1.0   
 STRENGTH  = 0.65
 SENS      = 1.50   
 
-MIX_AVG_ENABLE = False
-MIX_AVG_MIN_KPH = 2.0
-MIX_AVG_MAX_KPH = 20.0
-
-FAST_V_DESIRED_ENABLE = True
-FAST_V_DESIRED_LOW_SPEED_KPH = 30.0            
-FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.25       
-FAST_V_DESIRED_BLEND = 0.85                    
+# 🌟 已徹底移除會干擾 Planner 狀態機的 FAST_V_DESIRED 與 MIX_AVG 機制
+# 將起步與滑行的控制權 100% 交給我們精雕細琢的 [狀態三] 到 [狀態四]
 
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
-ACCEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 0.4] 
+# 🌟 優化：收緊底層加速度變化極限，讓整體物理動態與熨斗機制完美配合，絕不突兀
+ACCEL_SLEW_RATE_BP = [2.0, 1.5, 1.0, 0.4] 
 DECEL_SLEW_RATE_BP = [2.0, 2.0, 1.8, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
@@ -65,12 +53,12 @@ PREBRAKE_MAX_DECEL_BASE = -0.65 #0.8
 
 LON_MPC_STEP = 0.2
 
-A_CRUISE_MAX_VALS = [1.25,  1.15,   1.05,   0.7, 0.644, 0.441, 0.198] #[1.5,  1.0,   0.8,   0.7, 0.644, 0.441, 0.198]
+A_CRUISE_MAX_VALS = [1.25,  1.15,   1.05,   0.7, 0.644, 0.441, 0.198] 
 A_CRUISE_MAX_BP   = [0.0,  2.78,  8.33,  15.0,  20.0,  25.0,  30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
-_A_TOTAL_MAX_V = [2.5, 3.8] #[1.7, 3.2]
+_A_TOTAL_MAX_V = [2.5, 3.8] 
 _A_TOTAL_MAX_BP = [20., 40.]
 
 
@@ -307,9 +295,6 @@ class LongitudinalPlanner:
     _lead, _d_rel, _v_lead, _closing, _ttc, _a_req = metrics
     has_lead = (_lead is not None and np.isfinite(_d_rel))
 
-    lead_is_pulling_away = has_lead and _closing < -0.2 and lead_a > 0.0
-    fast_response = bool(FAST_V_DESIRED_ENABLE and not lead_is_pulling_away and (trigger_approach or (v_ego * CV.MS_TO_KPH < FAST_V_DESIRED_LOW_SPEED_KPH) or (lead_a < FAST_V_DESIRED_LEAD_DECEL_THRESH)))
-
     v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
     v_cruise_initialized = sm['carState'].vCruise != V_CRUISE_UNSET
@@ -334,8 +319,6 @@ class LongitudinalPlanner:
       self.a_desired = np.clip(sm['carState'].aEgo, accel_clip[0], accel_clip[1])
 
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
-    if fast_response:
-      self.v_desired_filter.x = (1.0 - FAST_V_DESIRED_BLEND) * self.v_desired_filter.x + FAST_V_DESIRED_BLEND * v_ego
 
     x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'])
     self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
@@ -399,10 +382,6 @@ class LongitudinalPlanner:
           base_a_target = mpc_a
       self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
 
-    if MIX_AVG_ENABLE and (MIX_AVG_MIN_KPH <= v_ego * CV.MS_TO_KPH < MIX_AVG_MAX_KPH):
-      base_a_target = 0.5 * (mpc_a + e2e_a)
-      self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
-
     final_a_target = base_a_target
     
     is_stopping_target = self.output_should_stop or (has_lead and _v_lead < 0.5 and _d_rel < 15.0)
@@ -428,22 +407,15 @@ class LongitudinalPlanner:
       # ==========================================
       w_speed = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
       
-      # 🌟 優化 1：拉長速差過渡區間，消滅油門突波！
-      # 啟動點延後至 -0.2 (防前車稍微蠕動就觸發)
-      # 滿載點延後至 -1.8 (約 6.5 km/h 的速差)，讓權重上升變成平緩的長坡，不急躁。
-      w_pursuit = smooth_interp(_closing, [-1.8, -0.2], [1.0, 0.0]) 
-      w_safe = smooth_interp(_d_rel, [4.0, 12.0], [0.0, 1.0])
+      w_pursuit = smooth_interp(_closing, [0.1, 1.2], [1.0, 0.0]) 
+      w_safe = smooth_interp(_d_rel, [4.0, 8.0], [0.0, 1.0])
       
       final_w = w_pursuit * w_safe * w_speed
       
       if final_w > 0.01:
-        # 🌟 優化 2：降低爆發乘數，並軟化上下限！
-        # - 前車加速度乘數 0.3 -> 0.15
-        # - 自身速差乘數 0.35 -> 0.20
-        # - 下限 0.1 -> 0.05 (消滅起跳踹感)
-        # - 上限 0.6 -> 0.45 (封印猛爆推力)
+        # 降低爆發乘數並軟化上下限，消除踹一腳的突波感
         raw_pursuit = max(lead_a, 0.0) * 0.15 + abs(min(_closing, 0.0)) * 0.20
-        pursuit_accel = float(np.clip(raw_pursuit, 0.025, 0.45))
+        pursuit_accel = float(np.clip(raw_pursuit, 0.02, 0.45))
         
         if final_a_target < pursuit_accel:
           final_a_target = (1.0 - final_w) * final_a_target + final_w * pursuit_accel
@@ -455,31 +427,28 @@ class LongitudinalPlanner:
       w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
 
       # 廢除連乘，改用寬容的基礎條件
-      w_dist_iron = float(np.clip((_d_rel - 3.0) / 4.0, 0.0, 1.0))
+      w_dist_iron = float(np.clip((_d_rel - 4.0) / 4.0, 0.0, 1.0))
       w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
       
       # 取兩者的最小值作為基礎權重，並【乘上高速緩衝權重】
       raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
 
-      # 🌟 優化 3：動態煞車敏感度 (專治低速塞車的太晚煞車)
-      # 塞車極低速 (30km/h以內) 時，前車只要輕點煞車 (-0.2) 熨斗就立刻解除
-      # 時速拉高後 (50km/h以上)，容忍度放寬到 -0.6，避免高速稍微收油就頓挫
+      # 🌟 優化：動態煞車敏感度 (專治低速塞車的太晚煞車)
       lead_brake_thr = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 50.0], [-0.20, -0.60])
       
-      # 分離判定：
-      # 1. 前車減速超過動態門檻 (低速極敏感，高速較寬容)
-      # 2. 前車大腳油門急加速 (> 0.8)，也解除熨斗準備衝刺
-      if lead_a < lead_brake_thr or lead_a > 0.8:
+      # 前車減速超過動態門檻，或前車大腳急加速，都立刻解除熨斗
+      if lead_a < lead_brake_thr or lead_a > 0.5:
         raw_coast_weight = 0.0
 
+      # 極端平滑的 EMA 濾波
       if raw_coast_weight > self.smooth_coast_weight:
         self.smooth_coast_weight += 0.02 * (raw_coast_weight - self.smooth_coast_weight)
       else:
         self.smooth_coast_weight += 0.20 * (raw_coast_weight - self.smooth_coast_weight)
 
+      # 拋物線引力場
       if self.smooth_coast_weight > 0.01:
         natural_coast = float(np.clip(accel_coast * 0.60 - 0.02, -0.25, 0.1))
-        # 將剛剛第一站算出來的 final_a_target 拿來跟自然滑行比較
         diff = final_a_target - natural_coast
         
         zone = 0.45
@@ -493,25 +462,15 @@ class LongitudinalPlanner:
     
     # [狀態三.五] 前車轉彎消失 / 前方突然淨空快速補油
     elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
-      # 當前車左右轉離開車道，has_lead 瞬間變 False，此時底層 MPC 往往會猶豫幾秒才爬升
-      
-      # 🌟 優化 1：降低絕對底薪 (消滅起跳踹感)
-      # 0km/h 極限值由 0.65 降至 0.45，18km/h 由 0.4 降至 0.25
+      # 🌟 優化：無縫比例融合 (Soft Blending) 消除補油突兀感
       clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.45, 0.25, 0.0])
-      
       if base_a_target < clear_boost:
-        # 🌟 優化 2：無縫比例融合 (Soft Blending)
-        # 廢除生硬的直接覆蓋。改用 50/50 融合，這會把推力軟化。
-        # 若原本 MPC 給 0.0，這裡會算出 (0.0 + 0.45)/2 = 0.225，
-        # 產生一陣「立刻有感、但極度圓潤」的起步微風，給底層 MPC 充足的甦醒過渡時間。
         final_a_target = 0.5 * base_a_target + 0.5 * clear_boost
         
-      # 🌟 補洞：前車消失了，讓熨斗權重快速歸零
       self.smooth_coast_weight *= 0.6
-    
+
     # [無車狀態的終極防線]
     else:
-      # 🌟 補洞：如果是正常無車巡航，確保熨斗權重持續歸零，絕不殘留到下一次跟車
       self.smooth_coast_weight *= 0.6
 
     # ==========================================
@@ -523,7 +482,7 @@ class LongitudinalPlanner:
 
     self.output_a_target = float(np.clip(final_a_target, accel_clip[0], accel_clip[1]))
     self.prev_accel_clip = accel_clip
-    
+
   def publish(self, sm, pm):
     plan_send = messaging.new_message('longitudinalPlan')
     plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'selfdriveState', 'radarState'])
