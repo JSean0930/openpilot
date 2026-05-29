@@ -196,7 +196,7 @@ class CarInterface(CarInterfaceBase):
         # 🌟 優化 2：修正非油電車的預測延遲！
         # 配合我們在 carcontroller.py 做的 PID 強化，將預測延遲從 0.5 降至 0.15
         # 避免大腦「預判過度」導致動態過於激進
-        ret.longitudinalActuatorDelay = 0.5
+        ret.longitudinalActuatorDelay = 0.15
 
     if dp_params & structs.DPFlags.ToyotaLockCtrl:
       ret.flags |= ToyotaFlags.LOCK_CTRL.value
