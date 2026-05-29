@@ -18,30 +18,15 @@ from dragonpilot.selfdrive.controls.lib.acm import ACM
 from dragonpilot.selfdrive.controls.lib.aem import AEM
 from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
 
-# ====================================================================
-# 調參提示（僅註解）
-# - 低速跟停還想更敏感：FAST_V_DESIRED_BLEND 往上加到 0.75~0.8
-# - 若覺得偶爾有點「急」：ACCEL_SLEW_RATE_BP 第一項往下調到 1.5
-# - 若你主要想改善「前車一煞立刻反應」：FAST_V_DESIRED_LEAD_DECEL_THRESH 從 -0.6 改 -0.5
-# ====================================================================
-
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
 EARLYNESS = 1.0   
 STRENGTH  = 0.65
 SENS      = 1.50   
 
-MIX_AVG_ENABLE = False
-MIX_AVG_MIN_KPH = 2.0
-MIX_AVG_MAX_KPH = 20.0
-
-FAST_V_DESIRED_ENABLE = True
-FAST_V_DESIRED_LOW_SPEED_KPH = 30.0            
-FAST_V_DESIRED_LEAD_DECEL_THRESH = -0.25       
-FAST_V_DESIRED_BLEND = 0.85                    
-
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
-ACCEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 0.4] 
+# 🌟 已收緊加速度變化率限制，配合 Planner 的平順要求
+ACCEL_SLEW_RATE_BP = [2.0, 1.5, 1.0, 0.4] 
 DECEL_SLEW_RATE_BP = [2.0, 2.0, 1.8, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
@@ -65,12 +50,12 @@ PREBRAKE_MAX_DECEL_BASE = -0.65 #0.8
 
 LON_MPC_STEP = 0.2
 
-A_CRUISE_MAX_VALS = [1.5,  1.25,   1.0,   0.7, 0.644, 0.441, 0.198] #[1.5,  1.0,   0.8,   0.7, 0.644, 0.441, 0.198]
+A_CRUISE_MAX_VALS = [1.5,  1.25,   1.0,   0.7, 0.644, 0.441, 0.198] 
 A_CRUISE_MAX_BP   = [0.0,  2.78,  8.33,  15.0,  20.0,  25.0,  30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
-_A_TOTAL_MAX_V = [2.5, 3.8] #[1.7, 3.2]
+_A_TOTAL_MAX_V = [2.5, 3.8] 
 _A_TOTAL_MAX_BP = [20., 40.]
 
 
@@ -307,9 +292,6 @@ class LongitudinalPlanner:
     _lead, _d_rel, _v_lead, _closing, _ttc, _a_req = metrics
     has_lead = (_lead is not None and np.isfinite(_d_rel))
 
-    lead_is_pulling_away = has_lead and _closing < -0.2 and lead_a > 0.0
-    fast_response = bool(FAST_V_DESIRED_ENABLE and not lead_is_pulling_away and (trigger_approach or (v_ego * CV.MS_TO_KPH < FAST_V_DESIRED_LOW_SPEED_KPH) or (lead_a < FAST_V_DESIRED_LEAD_DECEL_THRESH)))
-
     v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
     v_cruise_initialized = sm['carState'].vCruise != V_CRUISE_UNSET
@@ -334,8 +316,6 @@ class LongitudinalPlanner:
       self.a_desired = np.clip(sm['carState'].aEgo, accel_clip[0], accel_clip[1])
 
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
-    if fast_response:
-      self.v_desired_filter.x = (1.0 - FAST_V_DESIRED_BLEND) * self.v_desired_filter.x + FAST_V_DESIRED_BLEND * v_ego
 
     x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'])
     self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
@@ -397,10 +377,6 @@ class LongitudinalPlanner:
           base_a_target = min(mpc_a, e2e_a * 1.40)
         else:
           base_a_target = mpc_a
-      self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
-
-    if MIX_AVG_ENABLE and (MIX_AVG_MIN_KPH <= v_ego * CV.MS_TO_KPH < MIX_AVG_MAX_KPH):
-      base_a_target = 0.5 * (mpc_a + e2e_a)
       self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
 
     final_a_target = base_a_target
@@ -537,4 +513,3 @@ class LongitudinalPlanner:
     longitudinalPlan.allowThrottle = bool(self.allow_throttle)
 
     pm.send('longitudinalPlan', plan_send)
-
