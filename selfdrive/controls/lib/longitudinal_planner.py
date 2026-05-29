@@ -444,7 +444,7 @@ class LongitudinalPlanner:
       if raw_coast_weight > self.smooth_coast_weight:
         self.smooth_coast_weight += 0.02 * (raw_coast_weight - self.smooth_coast_weight)
       else:
-        self.smooth_coast_weight += 0.20 * (raw_coast_weight - self.smooth_coast_weight)
+        self.smooth_coast_weight += 0.25 * (raw_coast_weight - self.smooth_coast_weight)
 
       # 拋物線引力場
       if self.smooth_coast_weight > 0.01:
