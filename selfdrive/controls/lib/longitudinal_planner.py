@@ -400,6 +400,24 @@ class LongitudinalPlanner:
         nod_relief = (1.5 - v_ego) / 1.5 * 0.40
         final_a_target = min(base_a_target + nod_relief, -0.15)
 
+    # ==========================================
+    # 🌟 新增：[狀態二.五] 塞車防追尾「反射神經」前饋介入
+    # ==========================================
+    elif has_lead and (v_ego * CV.MS_TO_KPH < 25.0) and lead_a < -0.2 and _closing > -0.5:
+      # 當在市區低速 (25km/h以內)，且前車踩煞車 (lead_a < -0.2)
+      # 我們不等待 MPC 慢吞吞的軌跡，直接按比例複製前車的煞車力道！
+      
+      # 煞車複製比例：距離越近，複製的煞車力道越強 (0.5 到 1.2 倍)
+      reflex_ratio = smooth_interp(_d_rel, [3.0, 10.0], [1.2, 0.5])
+      reflex_brake = float(lead_a * reflex_ratio)
+      
+      # 如果反射神經算出的煞車比 MPC 還深，直接覆蓋！
+      if base_a_target > reflex_brake:
+        final_a_target = reflex_brake
+        
+      # 🚨 關鍵：瞬間切斷所有滑行熨斗的殘留權重，一毫秒都不要等！
+      self.smooth_coast_weight = 0.0
+
     # [有車狀態：追擊與滑行的「流水線融合」]
     elif has_lead:
       # ==========================================
