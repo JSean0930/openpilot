@@ -446,8 +446,8 @@ class LongitudinalPlanner:
     elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
       # 當前車左右轉離開車道，has_lead 瞬間變 False，此時底層 MPC 往往會猶豫幾秒才爬升
       # 我們在這裡給予一個溫和且果斷的起步底薪 (Base Thrust)
-      # 速度越慢 (0~18km/h) 給的底薪越多 (0.65)，速度上來了就自然退場交給 MPC
-      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.65, 0.4, 0.0])
+      # 速度越慢 (0~18km/h) 給的底薪越多 (0.35)，速度上來了就自然退場交給 MPC
+      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.35, 0.25, 0.0])
       if base_a_target < clear_boost:
         # 平滑托高目標加速度的下限，讓補油不突兀但很迅速
         final_a_target = clear_boost
