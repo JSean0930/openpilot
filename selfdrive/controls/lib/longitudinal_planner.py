@@ -433,7 +433,7 @@ class LongitudinalPlanner:
       if final_w > 0.01:
         # 降低爆發乘數並軟化上下限，消除踹一腳的突波感
         raw_pursuit = max(lead_a, 0.0) * 0.15 + abs(min(_closing, 0.0)) * 0.20
-        pursuit_accel = float(np.clip(raw_pursuit, 0.02, 0.45))
+        pursuit_accel = float(np.clip(raw_pursuit, 0.01, 0.30))
         
         if final_a_target < pursuit_accel:
           final_a_target = (1.0 - final_w) * final_a_target + final_w * pursuit_accel
@@ -481,7 +481,7 @@ class LongitudinalPlanner:
     # [狀態三.五] 前車轉彎消失 / 前方突然淨空快速補油
     elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
       # 🌟 優化：無縫比例融合 (Soft Blending) 消除補油突兀感
-      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.45, 0.25, 0.0])
+      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.30, 0.20, 0.0])
       if base_a_target < clear_boost:
         final_a_target = 0.5 * base_a_target + 0.5 * clear_boost
         
