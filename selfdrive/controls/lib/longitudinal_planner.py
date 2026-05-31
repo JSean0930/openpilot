@@ -403,7 +403,7 @@ class LongitudinalPlanner:
     # ==========================================
     # 🌟 新增：[狀態二.五] 塞車防追尾「反射神經」前饋介入
     # ==========================================
-    elif has_lead and (v_ego * CV.MS_TO_KPH < 25.0) and lead_a < -0.2 and _closing > -0.5:
+    elif has_lead and (v_ego * CV.MS_TO_KPH < 30.0) and lead_a < -0.3 and _closing > -0.5:
       # 當在市區低速 (25km/h以內)，且前車踩煞車 (lead_a < -0.2)
       # 我們不等待 MPC 慢吞吞的軌跡，直接按比例複製前車的煞車力道！
       
