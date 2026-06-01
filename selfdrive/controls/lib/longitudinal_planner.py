@@ -355,10 +355,10 @@ class LongitudinalPlanner:
     # ==========================================
     # 🌟 核心革新：[狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
-    # 完全接管 30 km/h 以下的控車邏輯，繞過 MPC 的延遲，直接對齊前車動態
-    elif has_lead and (v_ego * CV.MS_TO_KPH < 32.0):
-      # 【克隆權重】：0-25 km/h 100% 照抄前車，25-32 km/h 逐漸交還給 MPC，無縫接軌高速域
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [25.0, 32.0], [1.0, 0.0])
+    # 完全接管 45 km/h 以下的控車邏輯，繞過 MPC 的延遲，直接對齊前車動態
+    elif has_lead and (v_ego * CV.MS_TO_KPH < 45.0):
+      # 【克隆權重】：0-45 km/h 100% 照抄前車，40-45 km/h 逐漸交還給 MPC，無縫接軌高速域
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [40.0, 45.0], [1.0, 0.0])
       
       # 1. 基礎前饋 (Feedforward)：照抄前車加速度
       # 用 clip 限制上下限，避免雷達雜訊造成車輛過度暴衝
