@@ -397,9 +397,12 @@ class LongitudinalPlanner:
     # 當車速超過 32 km/h，距離拉開，我們恢復使用熨斗機制來保持舒適的高速滑行
     elif has_lead:
       # 在這區間，我們追求的不是「死黏」，而是「平穩舒適」
+      # 時速 65 以下為 1.0 (全開)，65~70 漸漸淡出，70 以上為 0.0 (徹底關閉熨斗)
+      w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
+      
       w_dist_iron = float(np.clip((_d_rel - 8.0) / 4.0, 0.0, 1.0))
       w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
-      raw_coast_weight = min(w_dist_iron, w_close_iron)
+      raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
 
       # 高速動態煞車敏感度 (前車減速超過 -0.6 立刻解除熨斗)
       if lead_a < -0.6 or lead_a > 0.8:
