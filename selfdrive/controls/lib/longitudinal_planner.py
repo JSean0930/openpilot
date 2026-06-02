@@ -355,14 +355,14 @@ class LongitudinalPlanner:
     # ==========================================
     # 🌟 核心革新：[狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
-    # 完全接管 45 km/h 以下的控車邏輯，繞過 MPC 的延遲，直接對齊前車動態
-    elif has_lead and (v_ego * CV.MS_TO_KPH < 45.0):
-      # 【克隆權重】：0-45 km/h 100% 照抄前車，40-45 km/h 逐漸交還給 MPC，無縫接軌高速域
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [40.0, 45.0], [1.0, 0.0])
+    # 完全接管 35 km/h 以下的控車邏輯，繞過 MPC 的延遲，直接對齊前車動態
+    elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
+      # 【克隆權重】：0-35 km/h 100% 照抄前車，30-35 km/h 逐漸交還給 MPC，無縫接軌高速域
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 35.0], [1.0, 0.0])
       
       # 1. 基礎前饋 (Feedforward)：照抄前車加速度
       # 用 clip 限制上下限，避免雷達雜訊造成車輛過度暴衝
-      lead_a_feedforward = float(np.clip(lead_a, -3.0, 1.5))
+      lead_a_feedforward = float(np.clip(lead_a, -3.0, 1.2)) #1.5
       
       # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
       # 塞車跟車距離：基礎 2.0米 + 車速 * 1.0秒
@@ -394,7 +394,7 @@ class LongitudinalPlanner:
     # ==========================================
     # [狀態四] 🛣️ 高速巡航與熨斗 (High-Speed Pursuit & Iron)
     # ==========================================
-    # 當車速超過 32 km/h，距離拉開，我們恢復使用熨斗機制來保持舒適的高速滑行
+    # 當車速超過 35 km/h，距離拉開，我們恢復使用熨斗機制來保持舒適的高速滑行
     elif has_lead:
       # 在這區間，我們追求的不是「死黏」，而是「平穩舒適」
       # 時速 65 以下為 1.0 (全開)，65~70 漸漸淡出，70 以上為 0.0 (徹底關閉熨斗)
