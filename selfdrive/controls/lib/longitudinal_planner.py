@@ -362,7 +362,8 @@ class LongitudinalPlanner:
       
       # 1. 基礎前饋 (Feedforward)：照抄前車加速度
       # 用 clip 限制上下限，避免雷達雜訊造成車輛過度暴衝
-      lead_a_feedforward = float(np.clip(lead_a, -3.0, 1.2)) #1.5
+      #lead_a_feedforward = float(np.clip(lead_a, -3.0, 1.2)) #1.5
+      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
       
       # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
       # 塞車跟車距離：基礎 2.0米 + 車速 * 1.0秒
