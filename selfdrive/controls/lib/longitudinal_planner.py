@@ -370,11 +370,11 @@ class LongitudinalPlanner:
       target_dist = 4.0 + v_ego * 0.8
       dist_error = _d_rel - target_dist
       # 如果太遠就加速補償，太近就減速 (限制最大補償力道)
-      p_comp = float(np.clip(dist_error * 0.15, -0.6, 0.45)) #-0.6/0.6
+      p_comp = float(np.clip(dist_error * 0.15, -0.6, 0.3)) #-0.6/0.6
       
       # 3. 速差補償 (Derivative)：對齊車速
       v_error = -_closing # 若為正代表前車比我們快
-      v_comp = float(np.clip(v_error * 0.35, -1.0, 0.75)) #-1.0/1.0
+      v_comp = float(np.clip(v_error * 0.35, -1.0, 0.6)) #-1.0/1.0
       
       # 計算最純粹的「老司機物理油門踏板」
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
