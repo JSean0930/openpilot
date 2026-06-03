@@ -367,7 +367,8 @@ class LongitudinalPlanner:
       
       # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
       # 塞車跟車距離：基礎 2.0米 + 車速 * 1.0秒
-      target_dist = 2.0 + v_ego * 1.0
+      #target_dist = 2.0 + v_ego * 1.0
+      target_dist = 4.0 + v_ego * 0.8
       dist_error = _d_rel - target_dist
       # 如果太遠就加速補償，太近就減速 (限制最大補償力道)
       p_comp = float(np.clip(dist_error * 0.15, -0.6, 0.6))
