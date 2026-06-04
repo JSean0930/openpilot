@@ -367,18 +367,32 @@ class LongitudinalPlanner:
       
       # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
       # 塞車跟車距離：基礎 2.0米 + 車速 * 1.0秒
-      target_dist = 4.0 + v_ego * 0.8
+      target_dist = 2.0 + v_ego * 1.0
       dist_error = _d_rel - target_dist
-      # 如果太遠就加速補償，太近就減速 (限制最大補償力道)
-      p_comp = float(np.clip(dist_error * 0.15, -0.6, 0.3)) #-0.6/0.6
+      
+      # 🌟 魔法 1：距離死區 (Deadzone)
+      # 只要誤差在正負 1.5 公尺以內 (大約半台車身長)，我們完全不管它！不補油也不補煞車！
+      if abs(dist_error) < 1.5:
+        p_comp = 0.0
+      else:
+        # 🌟 魔法 2：係數極弱化 (0.15 降為 0.05)
+        # 就算超過死區，也只用極度微弱的力道去慢慢拉回，徹底消滅拉扯感
+        p_comp = float(np.clip(dist_error * 0.05, -0.4, 0.2)) 
       
       # 3. 速差補償 (Derivative)：對齊車速
-      v_error = -_closing # 若為正代表前車比我們快
-      v_comp = float(np.clip(v_error * 0.35, -1.0, 0.6)) #-1.0/1.0
+      v_error = -_closing
+      
+      # 🌟 魔法 3：速差死區 (Deadzone)
+      # 只要兩車速差在 0.4 m/s (約 1.5 km/h) 以內，視為「速度已同步」，不干預！
+      if abs(v_error) < 0.4:
+        v_comp = 0.0
+      else:
+        # 係數弱化 (0.35 降為 0.15)
+        v_comp = float(np.clip(v_error * 0.15, -0.6, 0.3)) 
       
       # 計算最純粹的「老司機物理油門踏板」
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
-      
+
       # 4. 微型濾波：防止雷達雜訊撕裂體驗 (這比 MPC 快 10 倍以上)
       self.clone_a_ema = 0.6 * self.clone_a_ema + 0.4 * raw_clone_a
       
