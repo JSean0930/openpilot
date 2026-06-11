@@ -358,7 +358,7 @@ class LongitudinalPlanner:
     # 完全接管 35 km/h 以下的控車邏輯，繞過 MPC 的延遲，直接對齊前車動態
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
       # 【克隆權重】：0-35 km/h 100% 照抄前車，30-35 km/h 逐漸交還給 MPC，無縫接軌高速域
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [5.0, 35.0], [1.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [2.0, 35.0], [1.0, 0.0])
       
       # 1. 基礎前饋 (Feedforward)：照抄前車加速度
       # 用 clip 限制上下限，避免雷達雜訊造成車輛過度暴衝
