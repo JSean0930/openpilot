@@ -207,7 +207,7 @@ class LongitudinalPlanner:
     
     # 時間記憶變數區
     self.smooth_coast_weight = 0.0
-    self.clone_a_ema = 0.0  # 🌟 新增：克隆模式專用平滑變數，吸收雷達雜訊
+    self.clone_a_ema = 0.0  
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -336,7 +336,7 @@ class LongitudinalPlanner:
     is_final_stop_zone = (not has_lead) or (has_lead and _d_rel < 7.0)
 
     # =========================================================================
-    # 次世代：流水線狀態機 (老司機全取代版)
+    # 次世代：流水線狀態機 (刪除干擾點段差，100%交由克隆模式)
     # =========================================================================
 
     # [狀態一] 緊急預煞 (防禦底線)
@@ -344,101 +344,67 @@ class LongitudinalPlanner:
       final_a_target, hard_stop = _prebrake_override(base_a_target, metrics)
       if hard_stop: self.output_should_stop = True
 
-    # [狀態二] 準備煞停區段 (最後一公尺的防點頭)
-    elif is_stopping_target and v_ego < 3.5:
-      if not is_final_stop_zone and base_a_target < 0.0:
-        final_a_target = min(base_a_target, -0.4)
-      elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.2:
-        nod_relief = (1.5 - v_ego) / 1.5 * 0.40
-        final_a_target = min(base_a_target + nod_relief, -0.15)
+    # 🌟 移除獨立的狀態二，避免硬核覆蓋干擾克隆模式，將「防點頭」移至全域末端
 
     # ==========================================
-    # 🌟 核心革新：[狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
+    # [狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
-    # 完全接管 35 km/h 以下的控車邏輯，繞過 MPC 的延遲，直接對齊前車動態
+    # 完美涵蓋 0-35 km/h，包括自然滑順的跟車煞停
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      # 【克隆權重】：0-35 km/h 100% 照抄前車，30-35 km/h 逐漸交還給 MPC，無縫接軌高速域
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [2.0, 35.0], [1.0, 0.0])
       
-      # 1. 基礎前饋 (Feedforward)：照抄前車加速度
-      # 用 clip 限制上下限，避免雷達雜訊造成車輛過度暴衝
-      #lead_a_feedforward = float(np.clip(lead_a, -3.0, 1.5))
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
     
-      # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
       target_dist = 2.0 + v_ego * 1.0
       dist_error = _d_rel - target_dist
       
-      # 🌟 魔法 1：非對稱距離死區
       if 0.0 < dist_error < 1.5:
-        # 如果太遠 (正數)，容許 1.5m 不急著補油，消滅騎馬感
         p_comp = 0.0
       elif -0.5 < dist_error <= 0.0:
-        # 如果太近 (負數)，只給極小的 0.5m 容忍度，提早介入準備減速！
         p_comp = 0.0
       else:
-        # 加速力道極弱化 (0.03)，但減速力道維持敏銳 (0.08)
         comp_factor = 0.03 if dist_error > 0 else 0.08
         p_comp = float(np.clip(dist_error * comp_factor, -0.6, 0.2)) 
       
-      # 3. 速差補償 (Derivative)：對齊車速
       v_error = -_closing
       
-      # 🌟 魔法 2：非對稱速差死區 (前車慢絕對零容忍)
       if 0.0 < v_error < 0.5:
-        # 前車比我們快 (正數)，給 0.5m/s 容忍度，讓前車先走
         v_comp = 0.0
       else:
-        # 前車只要比我們慢 (負數)，立刻！馬上！不設死區！直接介入！
-        # 煞車係數加大到 0.25，確保收油門速度極快
         v_comp_factor = 0.10 if v_error > 0 else 0.25
         v_comp = float(np.clip(v_error * v_comp_factor, -1.2, 0.3)) 
       
-      # 計算最純粹的「老司機物理油門踏板」
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
-      # 🌟 魔法 3：非對稱微型濾波器 (防暴衝，不防急煞)
       if raw_clone_a < self.clone_a_ema:
-        # 【收油門/踩煞車】：幾乎不阻擋 (0.1比0.9)，讓目標值瞬間掉下去！
         self.clone_a_ema = 0.1 * self.clone_a_ema + 0.9 * raw_clone_a
       else:
-        # 【踩油門/起步】：維持極端平滑 (0.7比0.3)，消滅起步拉扯感
         self.clone_a_ema = 0.7 * self.clone_a_ema + 0.3 * raw_clone_a
       
-      # 保命底線：如果距離太近且前車急煞，無情破壞所有濾波直接重煞
       if _d_rel < 6.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
-      # 5. 與底層 MPC 完美融合
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       
-      # 確保熨斗權重歸零，不互相干擾
       self.smooth_coast_weight = 0.0
 
     # ==========================================
     # [狀態四] 🛣️ 高速巡航與熨斗 (High-Speed Pursuit & Iron)
     # ==========================================
-    # 當車速超過 35 km/h，距離拉開，我們恢復使用熨斗機制來保持舒適的高速滑行
     elif has_lead:
-      # 在這區間，我們追求的不是「死黏」，而是「平穩舒適」
-      # 時速 65 以下為 1.0 (全開)，65~70 漸漸淡出，70 以上為 0.0 (徹底關閉熨斗)
       w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
-      
       w_dist_iron = float(np.clip((_d_rel - 8.0) / 4.0, 0.0, 1.0))
       w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
       raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
 
-      # 高速動態煞車敏感度 (前車減速超過 -0.6 立刻解除熨斗)
       if lead_a < -0.6 or lead_a > 0.8:
         raw_coast_weight = 0.0
 
-      # EMA 濾波進退場
       if raw_coast_weight > self.smooth_coast_weight:
         self.smooth_coast_weight += 0.02 * (raw_coast_weight - self.smooth_coast_weight)
       else:
         self.smooth_coast_weight += 0.25 * (raw_coast_weight - self.smooth_coast_weight)
 
-      # 拋物線引力場
       if self.smooth_coast_weight > 0.01:
         natural_coast = float(np.clip(accel_coast * 0.60 - 0.02, -0.25, 0.1))
         diff = final_a_target - natural_coast
@@ -456,10 +422,18 @@ class LongitudinalPlanner:
       if base_a_target < clear_boost:
         final_a_target = 0.5 * base_a_target + 0.5 * clear_boost
       self.smooth_coast_weight *= 0.6
-      self.clone_a_ema = final_a_target # 同步變數防突波
+      self.clone_a_ema = final_a_target 
     else:
       self.smooth_coast_weight *= 0.6
       self.clone_a_ema = final_a_target
+
+    # ==========================================
+    # 🌟 全域防點頭機制 (Global Anti-Nod)
+    # ==========================================
+    # 無論是克隆模式還是無車煞停，在最後 1.5 m/s 且正在煞車時，優雅地微放煞車
+    if is_stopping_target and is_final_stop_zone and v_ego < 1.5 and final_a_target < -0.2:
+      nod_relief = (1.5 - v_ego) / 1.5 * 0.40
+      final_a_target = min(final_a_target + nod_relief, -0.15)
 
     # ==========================================
     # 收尾：Slew Rate 物理變化率限制
@@ -497,5 +471,3 @@ class LongitudinalPlanner:
     longitudinalPlan.allowThrottle = bool(self.allow_throttle)
 
     pm.send('longitudinalPlan', plan_send)
-
-
