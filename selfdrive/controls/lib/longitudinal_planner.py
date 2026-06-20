@@ -431,9 +431,9 @@ class LongitudinalPlanner:
     # 🌟 全域防點頭機制 (Global Anti-Nod)
     # ==========================================
     # 無論是克隆模式還是無車煞停，在最後 1.5 m/s 且正在煞車時，優雅地微放煞車
-    if is_stopping_target and is_final_stop_zone and v_ego < 1.5 and final_a_target < -0.2:
-      nod_relief = (1.5 - v_ego) / 1.5 * 0.40
-      final_a_target = min(final_a_target + nod_relief, -0.15)
+    #if is_stopping_target and is_final_stop_zone and v_ego < 1.5 and final_a_target < -0.2:
+      #nod_relief = (1.5 - v_ego) / 1.5 * 0.40
+      #final_a_target = min(final_a_target + nod_relief, -0.15)
 
     # ==========================================
     # 收尾：Slew Rate 物理變化率限制
