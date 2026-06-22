@@ -358,7 +358,7 @@ class LongitudinalPlanner:
     # ==========================================
     # 完美涵蓋 0-35 km/h，包括自然滑順的跟車煞停
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 35.0], [1.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [1.0, 35.0], [1.0, 0.0])
       
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
     
@@ -391,8 +391,8 @@ class LongitudinalPlanner:
       if _d_rel < 6.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
-      #final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
-      final_a_target = 0.3 * base_a_target + 0.7 * self.clone_a_ema
+      final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
+      #final_a_target = 0.3 * base_a_target + 0.7 * self.clone_a_ema
       
       self.smooth_coast_weight = 0.0
 
