@@ -316,9 +316,6 @@ class LongitudinalPlanner:
     mpc_a = float(output_a_target_mpc)
     e2e_a = float(sm['modelV2'].action.desiredAcceleration)
 
-        mpc_a = float(output_a_target_mpc)
-    e2e_a = float(sm['modelV2'].action.desiredAcceleration)
-
     # ==========================================================
     # 🌟 全局基底訊號淨化區 (打破 acc/blended 模式限制)
     # ==========================================================
@@ -361,7 +358,7 @@ class LongitudinalPlanner:
     # ==========================================
     # 完美涵蓋 0-35 km/h，包括自然滑順的跟車煞停
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [1.0, 35.0], [1.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 35.0], [1.0, 0.0])
       
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
     
