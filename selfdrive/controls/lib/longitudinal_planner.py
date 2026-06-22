@@ -316,19 +316,29 @@ class LongitudinalPlanner:
     mpc_a = float(output_a_target_mpc)
     e2e_a = float(sm['modelV2'].action.desiredAcceleration)
 
-    if mode == 'acc':
-      base_a_target = mpc_a
-      self.output_should_stop = bool(output_should_stop_mpc)
-    else:
-      if has_lead:
-        if mpc_a > 0.0 and e2e_a > -0.1: base_a_target = mpc_a
-        else: base_a_target = min(mpc_a, e2e_a)
-      else:
-        e2e_is_stopping = bool(sm['modelV2'].action.shouldStop) or (e2e_a < -0.4)
-        if e2e_is_stopping: base_a_target = min(mpc_a, e2e_a)
-        elif v_ego < 3.0 and e2e_a > 0.0: base_a_target = min(mpc_a, e2e_a * 1.40)
-        else: base_a_target = mpc_a
-      self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
+        mpc_a = float(output_a_target_mpc)
+    e2e_a = float(sm['modelV2'].action.desiredAcceleration)
+
+    # ==========================================================
+    # 🌟 全局基底訊號淨化區 (打破 acc/blended 模式限制)
+    # ==========================================================
+    
+    # 1. 預設基底：100% 信任平穩的傳統 MPC
+    # 無論在什麼模式，只要不符合特殊條件，一律用最平滑的 mpc_a 當作基底
+    base_a_target = mpc_a
+    self.output_should_stop = bool(output_should_stop_mpc)
+
+    # 2. 解除封印：全域紅綠燈與路口判斷 (跨越 25km/h 限制)
+    # 條件：前方無車 (有車時一律優先跟車保命) 且 時速低於 70 km/h
+    if not has_lead and (v_ego * CV.MS_TO_KPH < 70.0):
+      # 直接讀取視覺神經網路的煞停意圖
+      e2e_is_stopping = bool(sm['modelV2'].action.shouldStop) or (e2e_a < -0.4)
+      
+      if e2e_is_stopping:
+        # 🚨 強制介入：只要視覺模型看到紅綠燈或停止線，立刻取最保守的煞車力道
+        base_a_target = min(mpc_a, e2e_a)
+        # 點亮煞停旗標，確保後續的 Planner 狀態機能順利進入煞停程序
+        self.output_should_stop = True
 
     final_a_target = base_a_target
     
