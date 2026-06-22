@@ -391,7 +391,8 @@ class LongitudinalPlanner:
       if _d_rel < 6.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
-      final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
+      #final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
+      final_a_target = 0.3 * base_a_target + 0.7 * self.clone_a_ema
       
       self.smooth_coast_weight = 0.0
 
