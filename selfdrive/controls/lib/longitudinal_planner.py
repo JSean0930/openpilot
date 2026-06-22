@@ -353,15 +353,37 @@ class LongitudinalPlanner:
 
     # 🌟 移除獨立的狀態二，避免硬核覆蓋干擾克隆模式，將「防點頭」移至全域末端
 
+    
     # ==========================================
     # [狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
-    # 完美涵蓋 0-35 km/h，包括自然滑順的跟車煞停
+    # 完美涵蓋 0-35 km/h，包括自然滑順的動態跟車
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [1.0, 35.0], [1.0, 0.0])
+      # 基礎克隆權重
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 35.0], [1.0, 0.0])
       
+      # =========================================================
+      # 🌟 核心修復：【駐車交接機制 (Parking Handover)】
+      # 解決純 PD 控制沒有「踩死煞車」概念導致的點放煞車與無限蠕動。
+      # 當前車即將靜止且距離拉近時，將控制權無縫交還給擅長煞停的 MPC。
+      # =========================================================
+      
+      # 1. 判斷前車是否靜止 (低於 2.0m/s 開始準備，低於 0.5m/s 視為完全靜止)
+      w_lead_stopped = smooth_interp(_v_lead, [0.5, 2.0], [1.0, 0.0])
+      
+      # 2. 判斷距離多近 (距離 10m 開始淡出克隆，距離 5m 時徹底交還給 MPC)
+      w_dist_yield = smooth_interp(_d_rel, [5.0, 10.0], [0.0, 1.0])
+      
+      # 3. 權重融合：前車若沒停，不影響克隆；前車若停了，距離越近克隆權重越低
+      final_yield_factor = 1.0 - (w_lead_stopped * (1.0 - w_dist_yield))
+      w_clone = min(w_clone, final_yield_factor)
+      
+      # =========================================================
+
+      # 1. 基礎前饋 (Feedforward)
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
     
+      # 2. 距離補償 (P)
       target_dist = 2.0 + v_ego * 1.0
       dist_error = _d_rel - target_dist
       
@@ -373,6 +395,7 @@ class LongitudinalPlanner:
         comp_factor = 0.03 if dist_error > 0 else 0.08
         p_comp = float(np.clip(dist_error * comp_factor, -0.6, 0.2)) 
       
+      # 3. 速差補償 (D)
       v_error = -_closing
       
       if 0.0 < v_error < 0.5:
@@ -383,16 +406,18 @@ class LongitudinalPlanner:
       
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
+      # 4. 微型濾波
       if raw_clone_a < self.clone_a_ema:
         self.clone_a_ema = 0.1 * self.clone_a_ema + 0.9 * raw_clone_a
       else:
         self.clone_a_ema = 0.7 * self.clone_a_ema + 0.3 * raw_clone_a
       
+      # 保命底線
       if _d_rel < 6.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
+      # 5. 與底層 MPC 完美融合
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
-      #final_a_target = 0.3 * base_a_target + 0.7 * self.clone_a_ema
       
       self.smooth_coast_weight = 0.0
 
@@ -441,7 +466,7 @@ class LongitudinalPlanner:
     # 無論是克隆模式還是無車煞停，在最後 1.5 m/s 且正在煞車時，優雅地微放煞車
     if is_stopping_target and is_final_stop_zone and v_ego < 1.5 and final_a_target < -0.2:
       nod_relief = (1.5 - v_ego) / 1.5 * 0.40
-      final_a_target = min(final_a_target + nod_relief, -0.25)
+      final_a_target = min(final_a_target + nod_relief, -0.15)
 
     # ==========================================
     # 收尾：Slew Rate 物理變化率限制
