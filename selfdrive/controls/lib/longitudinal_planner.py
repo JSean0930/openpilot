@@ -302,8 +302,20 @@ class LongitudinalPlanner:
       self.acm.update_states(sm['carControl'], sm['radarState'], user_control, v_ego, v_cruise)
       self.a_desired_trajectory = self.acm.update_a_desired_trajectory(self.a_desired_trajectory)
 
-    self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
+        self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
+    
+    # 1. 先讀取原始 MPC 的碰撞警告
     self.fcw = self.mpc.crash_cnt > 2 and not sm['carState'].standstill
+    
+    # ==========================================================
+    # 🌟 配套修復：接管碰撞警告 (FCW) 判斷權
+    # ==========================================================
+    # 底層 MPC 非常保守，它不知道我們在使用「克隆模式」，看到我們跟腳貼近就會亂叫。
+    # 所以在 35 km/h 以下，我們將 FCW 的發言權搶過來，交給我們的 [狀態一] 緊急預煞模組！
+    if has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
+      # 只有當雷達物理數值真的突破底線，觸發我們的緊急預煞時，才允許發出警報聲！
+      self.fcw = bool(trigger_approach)
+
     if self.fcw: cloudlog.info("FCW triggered")
 
     a_prev = self.a_desired
