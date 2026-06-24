@@ -302,7 +302,7 @@ class LongitudinalPlanner:
       self.acm.update_states(sm['carControl'], sm['radarState'], user_control, v_ego, v_cruise)
       self.a_desired_trajectory = self.acm.update_a_desired_trajectory(self.a_desired_trajectory)
 
-        self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
+    self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
     
     # 1. 先讀取原始 MPC 的碰撞警告
     self.fcw = self.mpc.crash_cnt > 2 and not sm['carState'].standstill
