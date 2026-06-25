@@ -398,7 +398,7 @@ class LongitudinalPlanner:
       w_lead_stopped = smooth_interp(_v_lead, [0.5, 2.0], [1.0, 0.0])
       
       # 2. 判斷距離多近 (距離 10m 開始淡出克隆，距離 5m 時徹底交還給 MPC)
-      w_dist_yield = smooth_interp(_d_rel, [5.0, 10.0], [0.0, 1.0])
+      w_dist_yield = smooth_interp(_d_rel, [6.0, 15.0], [0.0, 1.0])
       
       # 3. 權重融合：前車若沒停，不影響克隆；前車若停了，距離越近克隆權重越低
       final_yield_factor = 1.0 - (w_lead_stopped * (1.0 - w_dist_yield))
@@ -410,7 +410,7 @@ class LongitudinalPlanner:
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
     
       # 2. 距離補償 (P)
-      target_dist = 4.0 + v_ego * 0.8
+      target_dist = 3.0 + v_ego * 0.8
       dist_error = _d_rel - target_dist
       
       if 0.0 < dist_error < 1.5:
