@@ -365,7 +365,7 @@ class LongitudinalPlanner:
     # [狀態一] 緊急預煞 (防禦底線)
     # 🌟 配套修復 2：嚴格限制預煞介入條件，防止它在塞車時搶奪克隆模式的控制權
     # 條件A (塞車極端防護)：35km/h 以下，除非速差超過 2.0 m/s 且 距離小於 6 米，才准介入！
-    is_panic_jam = has_lead and (v_ego * CV.MS_TO_KPH < 35.0) and (_closing > 2.0) and (_d_rel < 6.0)
+    is_panic_jam = has_lead and (v_ego * CV.MS_TO_KPH < 35.0) and (_closing > 2.0) and (_d_rel < 3.0)
     
     # 條件B (高速常規防護)：35km/h 以上，維持原本的 trigger_approach 邏輯
     is_high_speed_approach = (v_ego * CV.MS_TO_KPH >= 35.0) and trigger_approach
