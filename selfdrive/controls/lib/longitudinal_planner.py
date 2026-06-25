@@ -396,7 +396,7 @@ class LongitudinalPlanner:
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
     
       # 2. 距離補償 (P)
-      target_dist = 2.0 + v_ego * 1.0
+      target_dist = 3.0 + v_ego * 0.8
       dist_error = _d_rel - target_dist
       
       if 0.0 < dist_error < 1.5:
