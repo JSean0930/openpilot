@@ -386,7 +386,7 @@ class LongitudinalPlanner:
     # 完美涵蓋 0-35 km/h，包括自然滑順的動態跟車
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
       # 基礎克隆權重
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [25.0, 35.0], [1.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [1.0, 35.0], [1.0, 0.0])
       
       # =========================================================
       # 🌟 核心修復：【駐車交接機制 (Parking Handover)】
