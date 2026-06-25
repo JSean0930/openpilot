@@ -358,10 +358,24 @@ class LongitudinalPlanner:
     # 次世代：流水線狀態機 (刪除干擾點段差，100%交由克隆模式)
     # =========================================================================
 
+    # =========================================================================
+    # 次世代：流水線狀態機 (刪除干擾點段差，100%交由克隆模式)
+    # =========================================================================
+
     # [狀態一] 緊急預煞 (防禦底線)
-    if trigger_approach:
+    # 🌟 配套修復 2：嚴格限制預煞介入條件，防止它在塞車時搶奪克隆模式的控制權
+    # 條件A (塞車極端防護)：35km/h 以下，除非速差超過 2.0 m/s 且 距離小於 6 米，才准介入！
+    is_panic_jam = has_lead and (v_ego * CV.MS_TO_KPH < 35.0) and (_closing > 2.0) and (_d_rel < 6.0)
+    
+    # 條件B (高速常規防護)：35km/h 以上，維持原本的 trigger_approach 邏輯
+    is_high_speed_approach = (v_ego * CV.MS_TO_KPH >= 35.0) and trigger_approach
+
+    if is_panic_jam or is_high_speed_approach:
       final_a_target, hard_stop = _prebrake_override(base_a_target, metrics)
       if hard_stop: self.output_should_stop = True
+      
+      # 只有在真正命懸一線、被強制接管煞車時，才觸發警報！
+      self.fcw = True
 
     # 🌟 移除獨立的狀態二，避免硬核覆蓋干擾克隆模式，將「防點頭」移至全域末端
 
