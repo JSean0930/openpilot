@@ -425,12 +425,12 @@ class LongitudinalPlanner:
         self.clone_a_ema = 0.7 * self.clone_a_ema + 0.3 * raw_clone_a
       
       # 保命底線
-      if _d_rel < 6.0 and lead_a < -0.5:
+      if _d_rel < 3.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
       # 5. 與底層 MPC 完美融合
-      #final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
-      final_a_target = 0.4 * base_a_target + 0.6 * self.clone_a_ema
+      final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
+      #final_a_target = 0.4 * base_a_target + 0.6 * self.clone_a_ema
       
       self.smooth_coast_weight = 0.0
 
