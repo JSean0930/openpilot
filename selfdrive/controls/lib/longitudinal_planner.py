@@ -358,13 +358,9 @@ class LongitudinalPlanner:
     # 次世代：流水線狀態機 (刪除干擾點段差，100%交由克隆模式)
     # =========================================================================
 
-    # =========================================================================
-    # 次世代：流水線狀態機 (刪除干擾點段差，100%交由克隆模式)
-    # =========================================================================
-
     # [狀態一] 緊急預煞 (防禦底線)
     # 🌟 配套修復 2：嚴格限制預煞介入條件，防止它在塞車時搶奪克隆模式的控制權
-    # 條件A (塞車極端防護)：35km/h 以下，除非速差超過 2.0 m/s 且 距離小於 6 米，才准介入！
+    # 條件A (塞車極端防護)：35km/h 以下，除非速差超過 2.0 m/s 且 距離小於 3 米，才准介入！
     is_panic_jam = has_lead and (v_ego * CV.MS_TO_KPH < 35.0) and (_closing > 2.0) and (_d_rel < 3.0)
     
     # 條件B (高速常規防護)：35km/h 以上，維持原本的 trigger_approach 邏輯
@@ -386,7 +382,7 @@ class LongitudinalPlanner:
     # 完美涵蓋 0-35 km/h，包括自然滑順的動態跟車
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
       # 基礎克隆權重
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [1.0, 35.0], [1.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 35.0], [1.0, 0.0])
       
       # =========================================================
       # 🌟 核心修復：【駐車交接機制 (Parking Handover)】
@@ -409,17 +405,30 @@ class LongitudinalPlanner:
       # 1. 基礎前饋 (Feedforward)
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
     
-      # 2. 距離補償 (P)
-      target_dist = 3.0 + v_ego * 0.8
+      # =========================================================
+      # 🌟 魔法擴充：動態解開封印 (Dynamic Gap Closing)
+      # 解決前車消失時，面對大空檔加速遲鈍的問題。
+      # 當誤差大於 2 公尺時，開始漸漸放寬油門上限與濾波限制！
+      # =========================================================
+      target_dist = 2.0 + v_ego * 1.0
       dist_error = _d_rel - target_dist
       
+      # 距離誤差越大，允許的最大加速力道就越高 (從 0.2 解放至 0.8)
+      p_max = smooth_interp(dist_error, [2.0, 8.0], [0.2, 0.8])
+      v_max = smooth_interp(dist_error, [2.0, 8.0], [0.3, 0.8])
+      
+      # 距離誤差越大，加速時的濾波器就越弱，讓起步更果斷 (從 0.7 降至 0.2)
+      up_filter_weight = smooth_interp(dist_error, [2.0, 8.0], [0.7, 0.2])
+
+      # 2. 距離補償 (P)
       if 0.0 < dist_error < 1.5:
         p_comp = 0.0
       elif -0.5 < dist_error <= 0.0:
         p_comp = 0.0
       else:
         comp_factor = 0.03 if dist_error > 0 else 0.08
-        p_comp = float(np.clip(dist_error * comp_factor, -0.6, 0.2)) 
+        # 🌟 套用動態油門上限 p_max
+        p_comp = float(np.clip(dist_error * comp_factor, -0.6, p_max)) 
       
       # 3. 速差補償 (D)
       v_error = -_closing
@@ -428,18 +437,21 @@ class LongitudinalPlanner:
         v_comp = 0.0
       else:
         v_comp_factor = 0.10 if v_error > 0 else 0.25
-        v_comp = float(np.clip(v_error * v_comp_factor, -1.2, 0.3)) 
+        # 🌟 套用動態油門上限 v_max
+        v_comp = float(np.clip(v_error * v_comp_factor, -1.2, v_max)) 
       
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
       # 4. 微型濾波
       if raw_clone_a < self.clone_a_ema:
+        # 收油/煞車：維持瞬間反應
         self.clone_a_ema = 0.1 * self.clone_a_ema + 0.9 * raw_clone_a
       else:
-        self.clone_a_ema = 0.7 * self.clone_a_ema + 0.3 * raw_clone_a
+        # 加速/補油：🌟 套用動態濾波權重 up_filter_weight
+        self.clone_a_ema = up_filter_weight * self.clone_a_ema + (1.0 - up_filter_weight) * raw_clone_a
       
       # 保命底線
-      if _d_rel < 3.0 and lead_a < -0.5:
+      if _d_rel < 6.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
       # 5. 與底層 MPC 完美融合
