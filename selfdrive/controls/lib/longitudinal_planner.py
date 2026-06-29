@@ -403,86 +403,62 @@ class LongitudinalPlanner:
 
     # 🌟 移除獨立的狀態二，避免硬核覆蓋干擾克隆模式，將「防點頭」移至全域末端
 
-    
     # ==========================================
     # [狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
-    # 完美涵蓋 0-35 km/h，包括自然滑順的動態跟車
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      # 基礎克隆權重
+      # 🌟 修正 1：徹底移除交接給 MPC 的邏輯，讓雷達 100% 掌控到靜止！
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 35.0], [1.0, 0.0])
-      
-      # =========================================================
-      # 🌟 核心修復：【駐車交接機制 (Parking Handover)】
-      # 解決純 PD 控制沒有「踩死煞車」概念導致的點放煞車與無限蠕動。
-      # 當前車即將靜止且距離拉近時，將控制權無縫交還給擅長煞停的 MPC。
-      # =========================================================
-      
-      # 1. 判斷前車是否靜止 (低於 2.0m/s 開始準備，低於 0.5m/s 視為完全靜止)
-      w_lead_stopped = smooth_interp(_v_lead, [0.5, 2.0], [1.0, 0.0])
-      
-      # 2. 判斷距離多近 (距離 10m 開始淡出克隆，距離 5m 時徹底交還給 MPC)
-      w_dist_yield = smooth_interp(_d_rel, [6.0, 10.0], [0.0, 1.0])
-      
-      # 3. 權重融合：前車若沒停，不影響克隆；前車若停了，距離越近克隆權重越低
-      final_yield_factor = 1.0 - (w_lead_stopped * (1.0 - w_dist_yield))
-      w_clone = min(w_clone, final_yield_factor)
-      
-      # =========================================================
 
-      # 1. 基礎前饋 (Feedforward)
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
-    
-      # =========================================================
-      # 🌟 魔法擴充：動態解開封印 (Dynamic Gap Closing)
-      # 解決前車消失時，面對大空檔加速遲鈍的問題。
-      # 當誤差大於 2 公尺時，開始漸漸放寬油門上限與濾波限制！
-      # =========================================================
-      target_dist = 2.0 + v_ego * 1.0
+      
+      # 🌟 修正 2：精準定距，強制設定基礎停止距離為 3.0 公尺！
+      # (加上 v_ego * 0.8 是為了在移動時保持安全彈性，靜止時剛好就是 3.0m)
+      target_dist = 3.0 + v_ego * 0.8
       dist_error = _d_rel - target_dist
       
-      # 距離誤差越大，允許的最大加速力道就越高 (從 0.2 解放至 0.8)
+      # 動態解開封印 (防空檔發呆)
       p_max = smooth_interp(dist_error, [2.0, 8.0], [0.2, 0.8])
       v_max = smooth_interp(dist_error, [2.0, 8.0], [0.3, 0.8])
-      
-      # 距離誤差越大，加速時的濾波器就越弱，讓起步更果斷 (從 0.7 降至 0.2)
       up_filter_weight = smooth_interp(dist_error, [2.0, 8.0], [0.7, 0.2])
 
-      # 2. 距離補償 (P)
-      if 0.0 < dist_error < 1.5:
+      # 縮小死區：讓系統對 3.0 公尺的定位更龜毛、更精準
+      if 0.0 < dist_error < 1.0:
         p_comp = 0.0
       elif -0.5 < dist_error <= 0.0:
         p_comp = 0.0
       else:
-        comp_factor = 0.03 if dist_error > 0 else 0.08
-        # 🌟 套用動態油門上限 p_max
+        comp_factor = 0.04 if dist_error > 0 else 0.08
         p_comp = float(np.clip(dist_error * comp_factor, -0.6, p_max)) 
       
-      # 3. 速差補償 (D)
       v_error = -_closing
-      
       if 0.0 < v_error < 0.5:
         v_comp = 0.0
       else:
         v_comp_factor = 0.10 if v_error > 0 else 0.25
-        # 🌟 套用動態油門上限 v_max
         v_comp = float(np.clip(v_error * v_comp_factor, -1.2, v_max)) 
       
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
-      # 4. 微型濾波
+      # =========================================================
+      # 🌟 修正 3：原生駐車夾緊機制 (Native Brake Hold)
+      # 既然不交給 MPC，我們必須自己解決 PD 控制器的末端蠕動。
+      # 當前車已停且我們進入 3.5 米範圍內，車速極低時，直接施加物理夾緊煞車！
+      # =========================================================
+      if _v_lead < 0.5 and _d_rel < 3.5:
+        # 當車速低於 1.0m/s (3.6km/h) 時，開始漸進強迫給予 -0.6 的煞車力道
+        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.6, 0.0])
+        # 覆蓋原本的油門，取更深的煞車力道，死死咬住卡鉗不放
+        raw_clone_a = min(raw_clone_a, brake_hold)
+
       if raw_clone_a < self.clone_a_ema:
-        # 收油/煞車：維持瞬間反應
         self.clone_a_ema = 0.1 * self.clone_a_ema + 0.9 * raw_clone_a
       else:
-        # 加速/補油：🌟 套用動態濾波權重 up_filter_weight
         self.clone_a_ema = up_filter_weight * self.clone_a_ema + (1.0 - up_filter_weight) * raw_clone_a
       
-      # 保命底線
       if _d_rel < 6.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
-      # 5. 與底層 MPC 完美融合
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       
       self.smooth_coast_weight = 0.0
@@ -532,7 +508,7 @@ class LongitudinalPlanner:
     # 無論是克隆模式還是無車煞停，在最後 1.5 m/s 且正在煞車時，優雅地微放煞車
     if is_stopping_target and is_final_stop_zone and v_ego < 1.5 and final_a_target < -0.2:
       nod_relief = (1.5 - v_ego) / 1.5 * 0.40
-      final_a_target = min(final_a_target + nod_relief, -0.15)
+      final_a_target = min(final_a_target + nod_relief, -0.2)
 
     # ==========================================
     # 收尾：Slew Rate 物理變化率限制
