@@ -315,13 +315,9 @@ class LongitudinalPlanner:
     # ==========================================================
     # 🌟 配套修復：接管碰撞警告 (FCW) 判斷權
     # ==========================================================
-    # 底層 MPC 非常保守，它不知道我們在使用「克隆模式」，看到我們跟腳貼近就會亂叫。
-    # 所以在 35 km/h 以下，我們將 FCW 的發言權搶過來，交給我們的 [狀態一] 緊急預煞模組！
-    if has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      # 只有當雷達物理數值真的突破底線，觸發我們的緊急預煞時，才允許發出警報聲！
-      self.fcw = bool(trigger_approach)
-
-    if self.fcw: cloudlog.info("FCW triggered")
+    # 只要我們在市區或郊區跟車 (時速低於 50km/h)，徹底封鎖 MPC 的假警報
+    if has_lead and (v_ego * CV.MS_TO_KPH < 50.0):
+      self.fcw = False
 
     a_prev = self.a_desired
     self.a_desired = float(np.interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
@@ -402,7 +398,8 @@ class LongitudinalPlanner:
       if hard_stop: self.output_should_stop = True
       
       # 只有在真正命懸一線、被強制接管煞車時，才觸發警報！
-      self.fcw = True
+      if hard_stop or (has_lead and _closing > 4.0 and _d_rel < 8.0):
+        self.fcw = True
 
     # 🌟 移除獨立的狀態二，避免硬核覆蓋干擾克隆模式，將「防點頭」移至全域末端
 
