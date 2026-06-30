@@ -407,50 +407,58 @@ class LongitudinalPlanner:
     # [狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      # 🌟 修正 1：徹底移除交接給 MPC 的邏輯，讓雷達 100% 掌控到靜止！
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 35.0], [1.0, 0.0])
-
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
       
-      # 🌟 修正 2：精準定距，強制設定基礎停止距離為 3.0 公尺！
-      # (加上 v_ego * 0.8 是為了在移動時保持安全彈性，靜止時剛好就是 3.0m)
-      target_dist = 3.0 + v_ego * 0.8
+      # 目標嚴格鎖定在 3.0 米
+      target_dist = 3.0 + max(0.0, v_ego - 3.0) * 0.8
       dist_error = _d_rel - target_dist
       
-      # 動態解開封印 (防空檔發呆)
-      p_max = smooth_interp(dist_error, [2.0, 8.0], [0.2, 0.8])
+      # =========================================================
+      # 🌟 核心修復 1：阻斷 P 與 D 的內耗 (No Gas on Approach)
+      # =========================================================
+      is_stopping_approach = (_v_lead < 2.0) and (_closing > 0.0)
+
+      if is_stopping_approach:
+        # 前車快停了且我們正在靠近，絕對不准「為了縮小距離而補大油門」！
+        # 強制將 P 控制上限壓制在極微弱的 0.1，只保留最後滑行到 3 米的導引力
+        p_max = 0.1 
+      else:
+        # 正常跟車起步時，維持動態解開封印，防止空檔發呆
+        p_max = smooth_interp(dist_error, [2.0, 8.0], [0.2, 0.8])
+        
       v_max = smooth_interp(dist_error, [2.0, 8.0], [0.3, 0.8])
       up_filter_weight = smooth_interp(dist_error, [2.0, 8.0], [0.7, 0.2])
 
-      # 縮小死區：讓系統對 3.0 公尺的定位更龜毛、更精準
-      if 0.0 < dist_error < 1.0:
-        p_comp = 0.0
-      elif -0.5 < dist_error <= 0.0:
-        p_comp = 0.0
-      else:
-        comp_factor = 0.04 if dist_error > 0 else 0.08
-        p_comp = float(np.clip(dist_error * comp_factor, -0.6, p_max)) 
+      # P 補償 (距離)
+      comp_factor = 0.05 if dist_error > 0 else 0.10
+      p_comp = float(np.clip(dist_error * comp_factor, -0.6, p_max)) 
       
+      # =========================================================
+      # 🌟 核心修復 2：解放克隆模式的煞車極限
+      # =========================================================
       v_error = -_closing
-      if 0.0 < v_error < 0.5:
+      if v_error > 0.0:
         v_comp = 0.0
       else:
-        v_comp_factor = 0.10 if v_error > 0 else 0.25
-        v_comp = float(np.clip(v_error * v_comp_factor, -1.2, v_max)) 
+        # 距離越近，速差補償的力道越重，讓最後的煞車曲線呈現完美的漸進感
+        v_comp_factor = smooth_interp(_d_rel, [3.0, 15.0], [0.45, 0.15])
+        # 解除原本 -1.2 的軟腳封印，允許克隆模式在需要時給出高達 -2.5 的煞車！
+        v_comp = float(np.clip(v_error * v_comp_factor, -2.5, v_max)) 
       
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
       # =========================================================
-      # 🌟 修正 3：原生駐車夾緊機制 (Native Brake Hold)
-      # 既然不交給 MPC，我們必須自己解決 PD 控制器的末端蠕動。
-      # 當前車已停且我們進入 3.5 米範圍內，車速極低時，直接施加物理夾緊煞車！
+      # 絕對駐車鎖死機制 (最後 4.5 米的收尾，消滅蠕動，此段邏輯維持不變)
       # =========================================================
-      if _v_lead < 0.5 and _d_rel < 3.5:
-        # 當車速低於 1.0m/s (3.6km/h) 時，開始漸進強迫給予 -0.6 的煞車力道
-        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.6, 0.0])
-        # 覆蓋原本的油門，取更深的煞車力道，死死咬住卡鉗不放
+      if _v_lead < 0.5 and _d_rel < 4.5:
+        if raw_clone_a > 0.0:
+          raw_clone_a *= smooth_interp(v_ego, [0.0, 1.0], [0.0, 1.0])
+        
+        brake_hold = smooth_interp(v_ego, [0.0, 0.5], [-0.6, 0.0])
         raw_clone_a = min(raw_clone_a, brake_hold)
 
+      # 微型濾波輸出
       if raw_clone_a < self.clone_a_ema:
         self.clone_a_ema = 0.1 * self.clone_a_ema + 0.9 * raw_clone_a
       else:
