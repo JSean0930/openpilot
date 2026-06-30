@@ -407,14 +407,12 @@ class LongitudinalPlanner:
     # [狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      # 🌟 修正 1：徹底移除交接給 MPC 的邏輯，讓雷達 100% 掌控到靜止！
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [30.0, 35.0], [1.0, 0.0])
 
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
       
-      # 🌟 修正 2：精準定距，強制設定基礎停止距離為 3.0 公尺！
-      # (加上 v_ego * 0.8 是為了在移動時保持安全彈性，靜止時剛好就是 3.0m)
-      target_dist = 3.0 + v_ego * 0.8
+      # 1. 目標嚴格鎖定在 3.0 米
+      target_dist = 3.0 + max(0.0, v_ego - 3.0) * 0.8
       dist_error = _d_rel - target_dist
       
       # 動態解開封印 (防空檔發呆)
@@ -422,35 +420,40 @@ class LongitudinalPlanner:
       v_max = smooth_interp(dist_error, [2.0, 8.0], [0.3, 0.8])
       up_filter_weight = smooth_interp(dist_error, [2.0, 8.0], [0.7, 0.2])
 
-      # 縮小死區：讓系統對 3.0 公尺的定位更龜毛、更精準
-      if 0.0 < dist_error < 1.0:
-        p_comp = 0.0
-      elif -0.5 < dist_error <= 0.0:
-        p_comp = 0.0
-      else:
-        comp_factor = 0.04 if dist_error > 0 else 0.08
-        p_comp = float(np.clip(dist_error * comp_factor, -0.6, p_max)) 
+      # 🌟 修正一：刪除「距離死區」！
+      # 以前有死區會導致車子在 4 米就提早失去動力停下。
+      # 現在我們讓比例控制連續平滑地將車子拉到準確的 3.0 米。
+      comp_factor = 0.05 if dist_error > 0 else 0.10
+      p_comp = float(np.clip(dist_error * comp_factor, -0.6, p_max)) 
       
+      # 速差補償
       v_error = -_closing
-      if 0.0 < v_error < 0.5:
+      if v_error > 0.0:
         v_comp = 0.0
       else:
-        v_comp_factor = 0.10 if v_error > 0 else 0.25
+        # 低速時稍微放輕煞車，讓車子能順利且優雅地滑行到 3.0 米
+        v_comp_factor = smooth_interp(v_ego, [0.0, 3.0], [0.15, 0.25])
         v_comp = float(np.clip(v_error * v_comp_factor, -1.2, v_max)) 
       
-      raw_clone_a = lead_a_feedforward + p_comp + v_comp
-
       # =========================================================
-      # 🌟 修正 3：原生駐車夾緊機制 (Native Brake Hold)
-      # 既然不交給 MPC，我們必須自己解決 PD 控制器的末端蠕動。
-      # 當前車已停且我們進入 3.5 米範圍內，車速極低時，直接施加物理夾緊煞車！
+      # 🌟 修正二：絕對駐車鎖死機制 (Absolute Standstill Latch)
+      # 徹底消滅「蠕動微調」。只要前車靜止且我們進入 4.5 米內，
+      # 系統就會啟動「人類灑脫模式」：停了就停了，不准再補油門！
       # =========================================================
-      if _v_lead < 0.5 and _d_rel < 3.5:
-        # 當車速低於 1.0m/s (3.6km/h) 時，開始漸進強迫給予 -0.6 的煞車力道
-        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.6, 0.0])
-        # 覆蓋原本的油門，取更深的煞車力道，死死咬住卡鉗不放
+      if _v_lead < 0.5 and _d_rel < 4.5:
+        # A. 沒收往前蠕動的動力：車速跌破 1.0m/s (3.6km/h) 時，強行將往前推的油門 P 控制歸零
+        if p_comp > 0.0:
+          p_comp *= smooth_interp(v_ego, [0.0, 1.0], [0.0, 1.0])
+        
+        raw_clone_a = lead_a_feedforward + p_comp + v_comp
+        
+        # B. 鎖死卡鉗：車速跌破 0.5m/s 時，漸進施加電子手煞車 (-0.6)
+        brake_hold = smooth_interp(v_ego, [0.0, 0.5], [-0.6, 0.0])
         raw_clone_a = min(raw_clone_a, brake_hold)
+      else:
+        raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
+      # 微型濾波
       if raw_clone_a < self.clone_a_ema:
         self.clone_a_ema = 0.1 * self.clone_a_ema + 0.9 * raw_clone_a
       else:
