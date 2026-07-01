@@ -411,7 +411,7 @@ class LongitudinalPlanner:
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
       
       # 目標嚴格鎖定在 3.0 米
-      target_dist = 3.0 + max(0.0, v_ego - 3.0) * 0.8
+      target_dist = 3.0 + max(0.0, v_ego - 1.0) * 0.8
       dist_error = _d_rel - target_dist
       
       # =========================================================
