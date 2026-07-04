@@ -407,7 +407,7 @@ class LongitudinalPlanner:
     # [狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [20.0, 35.0], [1.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.1, 35.0], [1.0, 0.0])
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
       
       # 目標嚴格鎖定在 3.0 米
