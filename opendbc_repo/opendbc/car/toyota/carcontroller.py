@@ -19,8 +19,8 @@ VisualAlert = structs.CarControl.HUDControl.VisualAlert
 
 # The up limit allows the brakes/gas to unwind quickly leaving a stop,
 # the down limit roughly matches the rate of ACCEL_NET, reducing PCM compensation windup
-ACCEL_WINDUP_LIMIT = 4.0 * DT_CTRL * 3  # m/s^2 / frame
-ACCEL_WINDDOWN_LIMIT = -4.0 * DT_CTRL * 3  # m/s^2 / frame
+ACCEL_WINDUP_LIMIT = 7.0 * DT_CTRL * 3  # m/s^2 / frame
+ACCEL_WINDDOWN_LIMIT = -7.0 * DT_CTRL * 3  # m/s^2 / frame
 ACCEL_PID_UNWIND = 0.03 * DT_CTRL * 3  # m/s^2 / frame
 
 MAX_PITCH_COMPENSATION = 1.5  # m/s^2
@@ -28,7 +28,7 @@ MAX_PITCH_COMPENSATION = 1.5  # m/s^2
 # LKA limits
 # EPS faults if you apply torque while the steering rate is above 100 deg/s for too long
 MAX_STEER_RATE = 100  # deg/s
-MAX_STEER_RATE_FRAMES = 17  # tx control frames needed before torque can be cut
+MAX_STEER_RATE_FRAMES = 18  # tx control frames needed before torque can be cut
 
 # EPS allows user torque above threshold for 50 frames before permanently faulting
 MAX_USER_TORQUE = 500
@@ -47,8 +47,8 @@ DRIVE = car.CarState.GearShifter.drive
 
 def get_long_tune(CP, params):
   if CP.carFingerprint in TSS2_CAR:
-    kiBP = [2., 5.]
-    kiV = [0.5, 0.25]
+    kiBP =  [0.,   1.5,  3.0,  5.0,  8.0,  15.0, 22.2]
+    kiV =  [1.5, 1.15, 0.85, 0.50, 0.35,  0.25,  0.15]
   else:
     kiBP = [0., 5., 35.]
     kiV = [3.6, 2.4, 1.5]
@@ -259,9 +259,9 @@ class CarController(CarControllerBase):
         # Along with rate limiting positive jerk above, this greatly improves gas response time
         # Consider the net acceleration request that the PCM should be applying (pitch included)
         net_acceleration_request_min = min(actuators.accel + accel_due_to_pitch, net_acceleration_request)
-        if net_acceleration_request_min < 0.2 or stopping or not CC.longActive:
+        if net_acceleration_request_min < 0.05 or stopping or not CC.longActive:
           self.permit_braking = True
-        elif net_acceleration_request_min > 0.3:
+        elif net_acceleration_request_min > 0.15:
           self.permit_braking = False
 
         # rick - do not do delay compensation for non-TSS2 vehicles (e.g. car with sDSU?), assign the value back to actuators.accel
