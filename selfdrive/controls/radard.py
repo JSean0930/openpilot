@@ -177,7 +177,7 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
     # 解決低速起步遲疑，高速保有平順度
     # v_ego 節點: [靜止, 蠕行, 市區, 高速] m/s
     # tau 數值: [0.15, 0.3, 0.8, 1.5] 秒 (可依據車款動態微調)
-    base_tau = float(np.interp(v_ego, [0.0, 5.0, 15.0, 30.0], [0.15, 0.3, 0.8, 1.5]))
+    base_tau = float(np.interp(v_ego, [0.0, 5.0, 15.0, 30.0], [0.15, 0.3, 1.2, 2.0]))
     
     # 若前車加速度平穩，採用插值後的平滑 tau；若急加減速，瞬間歸零獲取最快動態響應
     if abs(track.aLeadK) < 0.5:
