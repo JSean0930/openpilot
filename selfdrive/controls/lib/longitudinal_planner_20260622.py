@@ -25,7 +25,6 @@ STRENGTH  = 0.65
 SENS      = 1.50   
 
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
-# 🌟 衝突解除 1：放寬低速域的變化率，允許系統瞬間執行「克隆指令」，消除物理遲鈍
 ACCEL_SLEW_RATE_BP = [2.5, 2.0, 1.0, 0.4] 
 DECEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 1.5]
 
@@ -208,6 +207,10 @@ class LongitudinalPlanner:
     # 時間記憶變數區
     self.smooth_coast_weight = 0.0
     self.clone_a_ema = 0.0  
+    
+    # 紅綠燈視覺意圖專用記憶體
+    self.e2e_stop_timer = 0.0      
+    self.e2e_stop_a_ema = 0.0
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -270,7 +273,7 @@ class LongitudinalPlanner:
     if reset_state:
       self.v_desired_filter.x = v_ego
       self.a_desired = np.clip(sm['carState'].aEgo, accel_clip[0], accel_clip[1])
-      self.clone_a_ema = sm['carState'].aEgo # 重置克隆狀態
+      self.clone_a_ema = sm['carState'].aEgo
 
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
     x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'])
@@ -303,8 +306,12 @@ class LongitudinalPlanner:
       self.a_desired_trajectory = self.acm.update_a_desired_trajectory(self.a_desired_trajectory)
 
     self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
+    
     self.fcw = self.mpc.crash_cnt > 2 and not sm['carState'].standstill
-    if self.fcw: cloudlog.info("FCW triggered")
+    
+    # 在市區或郊區跟車 (時速低於 50km/h)，徹底封鎖 MPC 的假警報
+    if has_lead and (v_ego * CV.MS_TO_KPH < 50.0):
+      self.fcw = False
 
     a_prev = self.a_desired
     self.a_desired = float(np.interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
@@ -316,19 +323,36 @@ class LongitudinalPlanner:
     mpc_a = float(output_a_target_mpc)
     e2e_a = float(sm['modelV2'].action.desiredAcceleration)
 
-    if mode == 'acc':
-      base_a_target = mpc_a
-      self.output_should_stop = bool(output_should_stop_mpc)
-    else:
-      if has_lead:
-        if mpc_a > 0.0 and e2e_a > -0.1: base_a_target = mpc_a
-        else: base_a_target = min(mpc_a, e2e_a)
+    # ==========================================================
+    # 🌟 全局基底訊號淨化區 (打破 acc/blended 模式限制)
+    # ==========================================================
+    base_a_target = mpc_a
+    self.output_should_stop = bool(output_should_stop_mpc)
+
+    # 高精度紅綠燈與路口判斷 (跨越 25km/h 限制)
+    if not has_lead and (v_ego * CV.MS_TO_KPH < 70.0):
+      current_is_stopping = bool(sm['modelV2'].action.shouldStop) or (e2e_a < -0.4)
+      
+      if current_is_stopping:
+        if self.e2e_stop_timer <= 0.0:
+          self.e2e_stop_a_ema = e2e_a 
+        self.e2e_stop_timer = 0.6     
       else:
-        e2e_is_stopping = bool(sm['modelV2'].action.shouldStop) or (e2e_a < -0.4)
-        if e2e_is_stopping: base_a_target = min(mpc_a, e2e_a)
-        elif v_ego < 3.0 and e2e_a > 0.0: base_a_target = min(mpc_a, e2e_a * 1.40)
-        else: base_a_target = mpc_a
-      self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
+        self.e2e_stop_timer -= self.dt 
+
+      if self.e2e_stop_timer > 0.0:
+        self.output_should_stop = True
+        
+        if e2e_a < self.e2e_stop_a_ema:
+          self.e2e_stop_a_ema = 0.1 * self.e2e_stop_a_ema + 0.9 * e2e_a  
+        else:
+          self.e2e_stop_a_ema = 0.9 * self.e2e_stop_a_ema + 0.1 * e2e_a  
+          
+        amp_ratio = smooth_interp(self.e2e_stop_a_ema, [-1.5, -0.5], [1.20, 1.0])
+        amplified_e2e_a = self.e2e_stop_a_ema * amp_ratio
+        base_a_target = min(mpc_a, amplified_e2e_a)
+      else:
+        self.e2e_stop_a_ema = 0.0 
 
     final_a_target = base_a_target
     
@@ -336,50 +360,79 @@ class LongitudinalPlanner:
     is_final_stop_zone = (not has_lead) or (has_lead and _d_rel < 7.0)
 
     # =========================================================================
-    # 次世代：流水線狀態機 (刪除干擾點段差，100%交由克隆模式)
+    # 次世代：流水線狀態機
     # =========================================================================
 
     # [狀態一] 緊急預煞 (防禦底線)
-    if trigger_approach:
+    is_panic_jam = has_lead and (v_ego * CV.MS_TO_KPH < 35.0) and (_closing > 2.0) and (_d_rel < 3.0)
+    is_high_speed_approach = (v_ego * CV.MS_TO_KPH >= 35.0) and trigger_approach
+
+    if is_panic_jam or is_high_speed_approach:
       final_a_target, hard_stop = _prebrake_override(base_a_target, metrics)
       if hard_stop: self.output_should_stop = True
-
-    # 🌟 移除獨立的狀態二，避免硬核覆蓋干擾克隆模式，將「防點頭」移至全域末端
+      
+      if hard_stop or (has_lead and _closing > 4.0 and _d_rel < 8.0):
+        self.fcw = True
 
     # ==========================================
     # [狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
-    # 完美涵蓋 0-35 km/h，包括自然滑順的跟車煞停
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [1.0, 35.0], [1.0, 0.0])
-      
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [20.0, 35.0], [1.0, 0.0])
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
-    
-      target_dist = 2.0 + v_ego * 1.0
+      
+      # 目標嚴格鎖定在 3.0 米
+      target_dist = 3.0 + max(0.0, v_ego - 3.0) * 0.8
       dist_error = _d_rel - target_dist
       
-      if 0.0 < dist_error < 1.5:
-        p_comp = 0.0
-      elif -0.5 < dist_error <= 0.0:
-        p_comp = 0.0
+      # 阻斷 P 與 D 的內耗
+      is_stopping_approach = (_v_lead < 2.0) and (_closing > 0.0)
+
+      if is_stopping_approach:
+        p_max = 0.1 
       else:
-        comp_factor = 0.03 if dist_error > 0 else 0.08
-        p_comp = float(np.clip(dist_error * comp_factor, -0.6, 0.2)) 
+        p_max = smooth_interp(dist_error, [2.0, 8.0], [0.2, 0.8])
+        
+      v_max = smooth_interp(dist_error, [2.0, 8.0], [0.3, 0.8])
+      up_filter_weight = smooth_interp(dist_error, [2.0, 8.0], [0.7, 0.2])
+
+      # P 補償 (距離)
+      comp_factor = 0.05 if dist_error > 0 else 0.10
+      p_comp = float(np.clip(dist_error * comp_factor, -0.6, p_max)) 
       
+      # =========================================================
+      # 🌟 核心修復 2：解放克隆模式的煞車極限
+      # =========================================================
       v_error = -_closing
-      
-      if 0.0 < v_error < 0.5:
+      if v_error > 0.0:
         v_comp = 0.0
       else:
-        v_comp_factor = 0.10 if v_error > 0 else 0.25
-        v_comp = float(np.clip(v_error * v_comp_factor, -1.2, 0.3)) 
+        # 🚀 強化最後一哩路的煞車！近距離的減速權重從 0.45 提升至 0.6
+        v_comp_factor = smooth_interp(_d_rel, [3.0, 15.0], [0.60, 0.15])
+        v_comp = float(np.clip(v_error * v_comp_factor, -2.5, v_max)) 
       
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
+      # =========================================================
+      # 🌟 絕對駐車鎖死機制 (最後 5.0 米收尾，消滅蠕動與不煞車)
+      # =========================================================
+      if _v_lead < 0.5 and _d_rel < 5.0:
+        # 1. 系統層級明確授權準備煞停
+        self.output_should_stop = True
+        
+        # 2. 徹底沒收往前的推力
+        if raw_clone_a > 0.0:
+          raw_clone_a *= smooth_interp(v_ego, [0.0, 1.5], [0.0, 1.0])
+        
+        # 3. 提早且加重電子手煞車：時速跌破 7.2km/h (2.0m/s) 就開始介入，靜止時咬死 -0.8！
+        brake_hold = smooth_interp(v_ego, [0.0, 2.0], [-0.8, -0.1])
+        raw_clone_a = min(raw_clone_a, brake_hold)
+
+      # 微型濾波輸出
       if raw_clone_a < self.clone_a_ema:
         self.clone_a_ema = 0.1 * self.clone_a_ema + 0.9 * raw_clone_a
       else:
-        self.clone_a_ema = 0.7 * self.clone_a_ema + 0.3 * raw_clone_a
+        self.clone_a_ema = up_filter_weight * self.clone_a_ema + (1.0 - up_filter_weight) * raw_clone_a
       
       if _d_rel < 6.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
@@ -428,12 +481,12 @@ class LongitudinalPlanner:
       self.clone_a_ema = final_a_target
 
     # ==========================================
-    # 🌟 全域防點頭機制 (Global Anti-Nod)
+    # 🌟 全局防點頭機制 (Global Anti-Nod)
     # ==========================================
-    # 無論是克隆模式還是無車煞停，在最後 1.5 m/s 且正在煞車時，優雅地微放煞車
     if is_stopping_target and is_final_stop_zone and v_ego < 1.5 and final_a_target < -0.2:
-      nod_relief = (1.5 - v_ego) / 1.5 * 0.40
-      final_a_target = min(final_a_target + nod_relief, -0.25)
+      # 🚀 擬人化鐘形煞車曲線：1.5m/s 開始微放，0.5m/s 放最多，0.0m/s 完全靜止時徹底壓回煞車鎖死！
+      nod_relief = smooth_interp(v_ego, [0.0, 0.5, 1.5], [0.0, 0.35, 0.0])
+      final_a_target = min(final_a_target + nod_relief, -0.2)
 
     # ==========================================
     # 收尾：Slew Rate 物理變化率限制
