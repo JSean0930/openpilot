@@ -397,7 +397,7 @@ class LongitudinalPlanner:
       self.clone_a_ema = 0.6 * self.clone_a_ema + 0.4 * raw_clone_a
       
       # 如果距離太近且前車急煞，跳過濾波直接煞車 (保命機制)
-      if _d_rel < 6.0 and lead_a < -0.5:
+      if _d_rel < 4.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
       # 5. 與底層 MPC 完美融合
