@@ -345,7 +345,7 @@ class LongitudinalPlanner:
       if hard_stop: self.output_should_stop = True
 
     # [狀態二] 準備煞停區段 (最後一公尺的防點頭)
-    elif is_stopping_target and v_ego < 3.5:
+    elif is_stopping_target and v_ego < 7.0:
       if not is_final_stop_zone and base_a_target < 0.0:
         final_a_target = min(base_a_target, -0.4)
       elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.2:
@@ -367,7 +367,7 @@ class LongitudinalPlanner:
       
       # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
       # 塞車跟車距離：基礎 2.0米 + 車速 * 1.0秒
-      target_dist = 2.0 + v_ego * 1.0
+      target_dist = 3.0 + v_ego * 1.0
       dist_error = _d_rel - target_dist
       
       # 🌟 魔法 1：距離死區 (Deadzone)
