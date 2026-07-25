@@ -50,8 +50,8 @@ PREBRAKE_MAX_DECEL_BASE = -0.65
 
 LON_MPC_STEP = 0.2
 
-A_CRUISE_MAX_VALS = [1.25,  1.15,   1.05,   0.7, 0.644, 0.441, 0.198] 
-A_CRUISE_MAX_BP   = [0.0,  2.78,  8.33,  15.0,  20.0,  25.0,  30.0]
+A_CRUISE_MAX_VALS = [1.15,  1.05,   0.95,   0.7,   0.644,  0.441,  0.198] 
+A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,  20.0,   25.0,   30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
