@@ -345,7 +345,7 @@ class LongitudinalPlanner:
       if hard_stop: self.output_should_stop = True
 
     # [狀態二] 準備煞停區段 (最後一公尺的防點頭)
-    elif is_stopping_target and v_ego < 7.0:
+    elif is_stopping_target and v_ego < 9.7:
       if not is_final_stop_zone and base_a_target < 0.0:
         final_a_target = min(base_a_target, -0.4)
       elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.2:
