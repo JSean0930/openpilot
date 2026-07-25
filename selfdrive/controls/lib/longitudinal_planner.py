@@ -413,7 +413,7 @@ class LongitudinalPlanner:
     elif has_lead:
       # 在這區間，我們追求的不是「死黏」，而是「平穩舒適」
       # 時速 65 以下為 1.0 (全開)，65~70 漸漸淡出，70 以上為 0.0 (徹底關閉熨斗)
-      w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [1.0, 0.0])
+      w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [0.7, 0.0])
       
       w_dist_iron = float(np.clip((_d_rel - 8.0) / 4.0, 0.0, 1.0))
       w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
