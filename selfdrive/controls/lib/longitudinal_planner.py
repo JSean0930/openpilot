@@ -239,8 +239,11 @@ class LongitudinalPlanner:
     accel_coast = get_coast_accel(sm['carControl'].orientationNED[1]) if len(sm['carControl'].orientationNED) == 3 else ACCEL_MAX
     v_ego = sm['carState'].vEgo
 
-    if v_ego * CV.MS_TO_KPH >= 25.0:
-      mode = 'acc'
+    #if v_ego * CV.MS_TO_KPH >= 25.0:
+    #  mode = 'acc'
+    #self.mpc.mode = mode
+    
+    mode = 'acc'
     self.mpc.mode = mode
 
     lead_a = _get_lead_decel_a(sm)
