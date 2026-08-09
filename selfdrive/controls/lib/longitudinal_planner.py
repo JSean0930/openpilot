@@ -369,13 +369,13 @@ class LongitudinalPlanner:
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
       
       # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
-      # 塞車跟車距離：基礎 2.0米 + 車速 * 1.0秒
+      # 塞車跟車距離
       target_dist = 4.0 + v_ego * 1.0
       dist_error = _d_rel - target_dist
       
       # 🌟 魔法 1：距離死區 (Deadzone)
       # 只要誤差在正負 1.5 公尺以內 (大約半台車身長)，我們完全不管它！不補油也不補煞車！
-      if abs(dist_error) < 1.5:
+      if abs(dist_error) < 1.0:
         p_comp = 0.0
       else:
         # 🌟 魔法 2：係數極弱化 (0.15 降為 0.05)
@@ -400,7 +400,7 @@ class LongitudinalPlanner:
       self.clone_a_ema = 0.6 * self.clone_a_ema + 0.4 * raw_clone_a
       
       # 如果距離太近且前車急煞，跳過濾波直接煞車 (保命機制)
-      if _d_rel < 3.0 and lead_a < -0.5:
+      if _d_rel < 4.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
         
       # 5. 與底層 MPC 完美融合
