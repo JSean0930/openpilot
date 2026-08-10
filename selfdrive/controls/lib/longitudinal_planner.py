@@ -375,7 +375,7 @@ class LongitudinalPlanner:
       
       # 🌟 魔法 1：距離死區 (Deadzone)
       # 只要誤差在正負 1.5 公尺以內 (大約半台車身長)，我們完全不管它！不補油也不補煞車！
-      if abs(dist_error) < 1.0:
+      if abs(dist_error) < 1.3:
         p_comp = 0.0
       else:
         # 🌟 魔法 2：係數極弱化 (0.15 降為 0.05)
