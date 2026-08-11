@@ -335,8 +335,8 @@ class LongitudinalPlanner:
 
     final_a_target = base_a_target
     
-    is_stopping_target = self.output_should_stop or (has_lead and _v_lead < 0.5 and _d_rel < 6.0)
-    is_final_stop_zone = (not has_lead) or (has_lead and _d_rel < 7.0)
+    is_stopping_target = self.output_should_stop or (has_lead and _v_lead < 0.5 and _d_rel < 7.0)
+    is_final_stop_zone = (not has_lead) or (has_lead and _d_rel < 4.0)
 
     # =========================================================================
     # 次世代：流水線狀態機 (老司機全取代版)
