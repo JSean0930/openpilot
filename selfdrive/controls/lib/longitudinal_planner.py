@@ -348,7 +348,7 @@ class LongitudinalPlanner:
       if hard_stop: self.output_should_stop = True
 
     # [狀態二] 準備煞停區段 (最後一公尺的防點頭)
-    elif is_stopping_target and v_ego < 9.7:
+    elif is_stopping_target and v_ego < 4.2:
       if not is_final_stop_zone and base_a_target < 0.0:
         final_a_target = min(base_a_target, -0.4)
       elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.2:
@@ -361,7 +361,7 @@ class LongitudinalPlanner:
     # 完全接管 35 km/h 以下的控車邏輯，繞過 MPC 的延遲，直接對齊前車動態
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
       # 【克隆權重】：0-35 km/h 100% 照抄前車，30-35 km/h 逐漸交還給 MPC，無縫接軌高速域
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.7, 0.3])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.9, 0.1])
       
       # 1. 基礎前饋 (Feedforward)：照抄前車加速度
       # 用 clip 限制上下限，避免雷達雜訊造成車輛過度暴衝
@@ -380,7 +380,7 @@ class LongitudinalPlanner:
       else:
         # 🌟 魔法 2：係數極弱化 (0.15 降為 0.05)
         # 就算超過死區，也只用極度微弱的力道去慢慢拉回，徹底消滅拉扯感
-        p_comp = float(np.clip(dist_error * 0.15, -0.4, 0.2)) 
+        p_comp = float(np.clip(dist_error * 0.10, -0.4, 0.2)) 
       
       # 3. 速差補償 (Derivative)：對齊車速
       v_error = -_closing
@@ -391,7 +391,7 @@ class LongitudinalPlanner:
         v_comp = 0.0
       else:
         # 係數弱化 (0.35 降為 0.15)
-        v_comp = float(np.clip(v_error * 0.05, -0.6, 0.3)) 
+        v_comp = float(np.clip(v_error * 0.20, -0.4, 0.3)) 
       
       # 計算最純粹的「老司機物理油門踏板」
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
