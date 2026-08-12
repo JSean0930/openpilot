@@ -335,7 +335,7 @@ class LongitudinalPlanner:
 
     final_a_target = base_a_target
     
-    is_stopping_target = self.output_should_stop or (has_lead and _v_lead < 0.5 and _d_rel < 7.0)
+    is_stopping_target = self.output_should_stop or (has_lead and _v_lead < 1.5 and _d_rel < 7.0)
     is_final_stop_zone = (not has_lead) or (has_lead and _d_rel < 4.0)
 
     # =========================================================================
@@ -370,17 +370,17 @@ class LongitudinalPlanner:
       
       # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
       # 塞車跟車距離
-      target_dist = 4.0 + v_ego * 1.0
+      target_dist = 4.0 + v_ego * 0.9
       dist_error = _d_rel - target_dist
       
       # 🌟 魔法 1：距離死區 (Deadzone)
       # 只要誤差在正負 1.5 公尺以內 (大約半台車身長)，我們完全不管它！不補油也不補煞車！
-      if abs(dist_error) < 1.3:
+      if abs(dist_error) < 1.0:
         p_comp = 0.0
       else:
         # 🌟 魔法 2：係數極弱化 (0.15 降為 0.05)
         # 就算超過死區，也只用極度微弱的力道去慢慢拉回，徹底消滅拉扯感
-        p_comp = float(np.clip(dist_error * 0.05, -0.4, 0.2)) 
+        p_comp = float(np.clip(dist_error * 0.15, -0.4, 0.2)) 
       
       # 3. 速差補償 (Derivative)：對齊車速
       v_error = -_closing
@@ -391,7 +391,7 @@ class LongitudinalPlanner:
         v_comp = 0.0
       else:
         # 係數弱化 (0.35 降為 0.15)
-        v_comp = float(np.clip(v_error * 0.15, -0.6, 0.3)) 
+        v_comp = float(np.clip(v_error * 0.05, -0.6, 0.3)) 
       
       # 計算最純粹的「老司機物理油門踏板」
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
