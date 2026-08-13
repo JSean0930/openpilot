@@ -348,10 +348,10 @@ class LongitudinalPlanner:
       if hard_stop: self.output_should_stop = True
 
     # [狀態二] 準備煞停區段 (最後一公尺的防點頭)
-    elif is_stopping_target and v_ego < 4.2:
+    elif is_stopping_target and v_ego < 10:
       if not is_final_stop_zone and base_a_target < 0.0:
-        final_a_target = min(base_a_target, -0.4)
-      elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.2:
+        final_a_target = min(base_a_target, -0.45)
+      elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.45:
         nod_relief = (1.5 - v_ego) / 1.5 * 0.40
         final_a_target = min(base_a_target + nod_relief, -0.15)
 
@@ -380,18 +380,18 @@ class LongitudinalPlanner:
       else:
         # 🌟 魔法 2：係數極弱化 (0.15 降為 0.05)
         # 就算超過死區，也只用極度微弱的力道去慢慢拉回，徹底消滅拉扯感
-        p_comp = float(np.clip(dist_error * 0.10, -0.2, 0.2)) 
+        p_comp = float(np.clip(dist_error * 0.05, -0.2, 0.2)) 
       
       # 3. 速差補償 (Derivative)：對齊車速
       v_error = -_closing
       
       # 🌟 魔法 3：速差死區 (Deadzone)
       # 只要兩車速差在 0.4 m/s (約 1.5 km/h) 以內，視為「速度已同步」，不干預！
-      if abs(v_error) < 0.4:
+      if abs(v_error) < 0.45:
         v_comp = 0.0
       else:
         # 係數弱化 (0.35 降為 0.15)
-        v_comp = float(np.clip(v_error * 0.20, -0.2, 0.3)) 
+        v_comp = float(np.clip(v_error * 0.15, -0.2, 0.3)) 
       
       # 計算最純粹的「老司機物理油門踏板」
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
@@ -423,7 +423,7 @@ class LongitudinalPlanner:
       raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
 
       # 高速動態煞車敏感度 (前車減速超過 -0.6 立刻解除熨斗)
-      if lead_a < -0.45 or lead_a > 0.6:
+      if lead_a < -0.45 or lead_a > 0.5:
         raw_coast_weight = 0.0
 
       # EMA 濾波進退場
