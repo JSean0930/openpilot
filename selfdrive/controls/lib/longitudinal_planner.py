@@ -423,14 +423,14 @@ class LongitudinalPlanner:
       raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
 
       # 高速動態煞車敏感度 (前車減速超過 -0.6 立刻解除熨斗)
-      if lead_a < -0.35 or lead_a > 0.4:
+      if lead_a < -0.45 or lead_a > 0.6:
         raw_coast_weight = 0.0
 
       # EMA 濾波進退場
       if raw_coast_weight > self.smooth_coast_weight:
         self.smooth_coast_weight += 0.02 * (raw_coast_weight - self.smooth_coast_weight)
       else:
-        self.smooth_coast_weight += 0.25 * (raw_coast_weight - self.smooth_coast_weight)
+        self.smooth_coast_weight += 0.15 * (raw_coast_weight - self.smooth_coast_weight)
 
       # 拋物線引力場
       if self.smooth_coast_weight > 0.01:
