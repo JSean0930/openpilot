@@ -350,10 +350,10 @@ class LongitudinalPlanner:
     # [狀態二] 準備煞停區段 (最後一公尺的防點頭)
     elif is_stopping_target and v_ego < 10:
       if not is_final_stop_zone and base_a_target < 0.0:
-        final_a_target = min(base_a_target, -0.45)
-      elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.45:
+        final_a_target = min(base_a_target, -0.2)
+      elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.2:
         nod_relief = (1.5 - v_ego) / 1.5 * 0.40
-        final_a_target = min(base_a_target + nod_relief, -0.15)
+        final_a_target = min(base_a_target + nod_relief, -0.17)
 
     # ==========================================
     # 🌟 核心革新：[狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
@@ -370,7 +370,7 @@ class LongitudinalPlanner:
       
       # 2. 距離補償 (Proportional)：算入我們與前車的理想車距
       # 塞車跟車距離
-      target_dist = 4.0 + v_ego * 0.9
+      target_dist = 4.0 + v_ego * 0.8
       dist_error = _d_rel - target_dist
       
       # 🌟 魔法 1：距離死區 (Deadzone)
@@ -397,7 +397,7 @@ class LongitudinalPlanner:
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
       # 4. 微型濾波：防止雷達雜訊撕裂體驗 (這比 MPC 快 10 倍以上)
-      self.clone_a_ema = 0.55 * self.clone_a_ema + 0.45 * raw_clone_a
+      self.clone_a_ema = 0.65 * self.clone_a_ema + 0.35 * raw_clone_a
       
       # 如果距離太近且前車急煞，跳過濾波直接煞車 (保命機制)
       if _d_rel < 4.0:
