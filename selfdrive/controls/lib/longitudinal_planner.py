@@ -347,14 +347,15 @@ class LongitudinalPlanner:
       final_a_target, hard_stop = _prebrake_override(base_a_target, metrics)
       if hard_stop: self.output_should_stop = True
 
-    # [狀態二] 準備煞停區段 (最後一公尺的防點頭)
-    elif is_stopping_target and v_ego < 10:
+    # [狀態二] 準備煞停區段 (確實煞停，移除防點頭)
+    # =========================================================================
+    elif is_stopping_target and v_ego < 10.0:
+      # 在進入最後停車熱區前，維持最低 -0.2 的保底煞車力道，確保穩定減速
       if not is_final_stop_zone and base_a_target < 0.0:
-        final_a_target = min(base_a_target, -0.2)
-      elif is_final_stop_zone and v_ego < 1.5 and base_a_target < -0.2:
-        nod_relief = (1.5 - v_ego) / 1.5 * 0.40
-        final_a_target = min(base_a_target + nod_relief, -0.17)
-
+        final_a_target = min(base_a_target, -0.15)
+      
+      # 進入最後一公尺 (is_final_stop_zone) 後，不再做任何「鬆煞車」的微調，
+      # 100% 信任並執行系統 (或克隆模式) 給出的煞車力道，死死咬住卡鉗直到靜止！
     # ==========================================
     # 🌟 核心革新：[狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
