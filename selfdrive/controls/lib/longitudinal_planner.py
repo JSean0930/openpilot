@@ -398,7 +398,7 @@ class LongitudinalPlanner:
       raw_clone_a = lead_a_feedforward + p_comp + v_comp
 
       # 4. 微型濾波：防止雷達雜訊撕裂體驗 (這比 MPC 快 10 倍以上)
-      self.clone_a_ema = 0.65 * self.clone_a_ema + 0.35 * raw_clone_a
+      self.clone_a_ema = 0.55 * self.clone_a_ema + 0.45 * raw_clone_a
       
       # 如果距離太近且前車急煞，跳過濾波直接煞車 (保命機制)
       if _d_rel < 4.0:
