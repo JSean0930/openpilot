@@ -374,47 +374,58 @@ class LongitudinalPlanner:
     # 🌟 核心革新：[狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      # 【修正克隆權重】：確保 25km/h 以下是 100% 絕對克隆，避免 MPC 雜訊滲透
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.7, 0.3])
       
-      # 1. 基礎前饋 (Feedforward)：極度信任前車加速度
-      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
-      
-      # 2. 距離補償 (Proportional)：降級為「輔助橡皮筋」
-      target_dist = 4.0 + max(0.0, v_ego - 2.0) * 0.8
+      # 1. 目標距離與非對稱死區
+      target_dist = 4.0 + max(0.0, v_ego - 1.5) * 0.8
       dist_error = _d_rel - target_dist
       
-      # 🌟 優化 1：非對稱距離死區 (吸納雷達 RCS 跳動雜訊)
-      if -1.0 < dist_error < 2.5:
-        p_comp = 0.0
+      # 距離死區：允許前車拉遠 1.5 米，允許逼近 0.5 米
+      # 在這個區間內，我們視為「距離完美」，不刻意強求補償，消滅靜止時的蠕動！
+      if -0.5 < dist_error < 1.5:
+        dist_error_eff = 0.0
+      elif dist_error > 0:
+        dist_error_eff = dist_error - 1.5
       else:
-        # 係數極小化：只提供非常微弱的牽引力
-        p_comp_factor = 0.03 if dist_error > 0 else 0.08
-        p_comp = float(np.clip(dist_error * p_comp_factor, -0.2, 0.15)) 
+        dist_error_eff = dist_error + 0.5
+
+      # 2. 🛡️ 前饋空間衰減機制 (解決遠處提早重煞)
+      # 如果距離還很長 (>12m)，前車踩煞車我們不需要照單全收，交給滑行曲線優雅減速。
+      # 如果距離很近 (<4m)，前車煞車我們就 100% 照抄保命。
+      # 注意：如果前車是加速 (lead_a > 0)，我們永遠 100% 跟隨，避免起步脫節。
+      ff_weight = smooth_interp(_d_rel, [4.0, 12.0], [1.0, 0.0]) if lead_a < 0.0 else 1.0
+      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0)) * ff_weight
+
+      # 3. 🚀 完美滑行曲線 (Glide Path)：將 P 與 D 統一！
+      # 我們不直接暴力追平速差，而是根據「剩餘空間」，算出一個「理想滑行車速」
+      # 每多 1 公尺的空間，允許我們比前車快 0.4 m/s (約 1.4 km/h) 溜過去
+      v_glide = dist_error_eff * 0.4
       
-      # 3. 速差補償 (Derivative)：晉升為「控車主力」
-      v_error = -_closing
+      # 理想車速 = 前車車速 + 允許的滑行車速
+      ideal_v_ego = max(0.0, _v_lead + v_glide)
       
-      # 🌟 優化 2：極度信任測速，廢除速差死區
+      # 我們現在只需要專心追蹤這個「理想車速」即可！
+      v_error = ideal_v_ego - v_ego
+
       if v_error > 0.0:
-        # 我們比前車慢 (前車拉開距離)
-        v_comp = float(np.clip(v_error * 0.15, 0.0, 0.3))
+        # 溫柔追擊 (滑行中)
+        v_comp = float(np.clip(v_error * 0.20, 0.0, 0.4))
       else:
-        # 我們比前車快 (正在逼近)：動態加重煞車
-        v_comp_factor = smooth_interp(_d_rel, [3.0, 15.0], [0.50, 0.15])
+        # 動態煞車：距離越近，對煞車誤差越敏感
+        v_comp_factor = smooth_interp(_d_rel, [3.0, 12.0], [0.60, 0.20])
         v_comp = float(np.clip(v_error * v_comp_factor, -2.5, 0.0)) 
       
-      raw_clone_a = lead_a_feedforward + p_comp + v_comp
+      raw_clone_a = lead_a_feedforward + v_comp
 
-      # 4. 🌟 優化 3：非對稱微型濾波與雙重保命驗證
-      if _d_rel < 6.0 and lead_a < -0.5:
+      # 4. 微型濾波與保命驗證
+      if _d_rel < 5.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
       elif raw_clone_a < self.clone_a_ema:
-        # 煞車方向：保持高度敏捷 
+        # 煞車方向：保持高度敏捷 (0.15 老 + 0.85 新)，隨時煞得住
         self.clone_a_ema = 0.15 * self.clone_a_ema + 0.85 * raw_clone_a
       else:
-        # 加速方向：保持慵懶舒適 
-        self.clone_a_ema = 0.65 * self.clone_a_ema + 0.35 * raw_clone_a
+        # 加速/放煞車方向：慵懶濾波 (0.70 老 + 0.30 新)，消滅收油頓挫
+        self.clone_a_ema = 0.70 * self.clone_a_ema + 0.30 * raw_clone_a
         
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       
