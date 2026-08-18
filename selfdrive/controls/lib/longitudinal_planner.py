@@ -375,7 +375,7 @@ class LongitudinalPlanner:
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
       # 【修正克隆權重】：確保 25km/h 以下是 100% 絕對克隆，避免 MPC 雜訊滲透
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [25.0, 35.0], [1.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.7, 0.3])
       
       # 1. 基礎前饋 (Feedforward)：極度信任前車加速度
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0))
