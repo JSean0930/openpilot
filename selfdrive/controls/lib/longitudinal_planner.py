@@ -377,7 +377,7 @@ class LongitudinalPlanner:
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.7, 0.3])
       
       # 1. 目標距離與非對稱死區
-      target_dist = 4.0 + max(0.0, v_ego - 1.5) * 0.8
+      target_dist = 6.0 + max(0.0, v_ego - 1.5) * 0.7
       dist_error = _d_rel - target_dist
       
       # 距離死區：允許前車拉遠 1.5 米，允許逼近 0.5 米
@@ -393,7 +393,7 @@ class LongitudinalPlanner:
       # 如果距離還很長 (>8m)，前車踩煞車我們不需要照單全收，交給滑行曲線優雅減速。
       # 如果距離很近 (<4m)，前車煞車我們就 100% 照抄保命。
       # 注意：如果前車是加速 (lead_a > 0)，我們永遠 100% 跟隨，避免起步脫節。
-      ff_weight = smooth_interp(_d_rel, [4.0, 8.0], [1.0, 0.0]) if lead_a < 0.0 else 1.0
+      ff_weight = smooth_interp(_d_rel, [6.0, 15.0], [1.0, 0.0]) if lead_a < 0.0 else 1.0
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0)) * ff_weight
 
       # 3. 🚀 完美滑行曲線 (Glide Path)：將 P 與 D 統一！
