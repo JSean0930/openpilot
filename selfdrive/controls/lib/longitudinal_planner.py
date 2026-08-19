@@ -390,10 +390,10 @@ class LongitudinalPlanner:
         dist_error_eff = dist_error + 0.5
 
       # 2. 🛡️ 前饋空間衰減機制 (解決遠處提早重煞)
-      # 如果距離還很長 (>12m)，前車踩煞車我們不需要照單全收，交給滑行曲線優雅減速。
+      # 如果距離還很長 (>8m)，前車踩煞車我們不需要照單全收，交給滑行曲線優雅減速。
       # 如果距離很近 (<4m)，前車煞車我們就 100% 照抄保命。
       # 注意：如果前車是加速 (lead_a > 0)，我們永遠 100% 跟隨，避免起步脫節。
-      ff_weight = smooth_interp(_d_rel, [4.0, 12.0], [1.0, 0.0]) if lead_a < 0.0 else 1.0
+      ff_weight = smooth_interp(_d_rel, [4.0, 8.0], [1.0, 0.0]) if lead_a < 0.0 else 1.0
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0)) * ff_weight
 
       # 3. 🚀 完美滑行曲線 (Glide Path)：將 P 與 D 統一！
