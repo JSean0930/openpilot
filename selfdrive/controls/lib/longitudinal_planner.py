@@ -382,7 +382,7 @@ class LongitudinalPlanner:
       
       # 距離死區：允許前車拉遠 1.5 米，允許逼近 0.5 米
       # 在這個區間內，我們視為「距離完美」，不刻意強求補償，消滅靜止時的蠕動！
-      if -0.5 < dist_error < 1.5:
+      if 0.0 < dist_error < 1.5:
         dist_error_eff = 0.0
       elif dist_error > 0:
         dist_error_eff = dist_error - 1.5
