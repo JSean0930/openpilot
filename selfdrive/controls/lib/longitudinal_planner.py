@@ -377,58 +377,69 @@ class LongitudinalPlanner:
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.6, 0.4])
       
       # 1. 目標距離與非對稱死區
-      target_dist = 6.0 + max(0.0, v_ego - 1.5) * 0.7
+      target_dist = 5.0 + max(0.0, v_ego - 1.5) * 0.7
       dist_error = _d_rel - target_dist
       
-      # 距離死區：允許前車拉遠 1.5 米，允許逼近 0.5 米
-      # 在這個區間內，我們視為「距離完美」，不刻意強求補償，消滅靜止時的蠕動！
-      if 0.0 < dist_error < 1.5:
+      # 距離死區：允許拉遠 1.5 米，不允許逼近 (嚴格防禦)
+      if 0.0 <= dist_error <= 1.5:
         dist_error_eff = 0.0
-      elif dist_error > 0:
+      elif dist_error > 1.5:
         dist_error_eff = dist_error - 1.5
       else:
-        dist_error_eff = dist_error + 0.5
+        dist_error_eff = dist_error
 
-      # 2. 🛡️ 前饋空間衰減機制 (解決遠處提早重煞)
-      # 如果距離還很長 (>8m)，前車踩煞車我們不需要照單全收，交給滑行曲線優雅減速。
-      # 如果距離很近 (<4m)，前車煞車我們就 100% 照抄保命。
-      # 注意：如果前車是加速 (lead_a > 0)，我們永遠 100% 跟隨，避免起步脫節。
-      ff_weight = smooth_interp(_d_rel, [6.0, 15.0], [1.0, 0.0]) if lead_a < 0.0 else 1.0
+      # 2. 🛡️ 智慧前饋衰減 (解決「遠處提早定竿」的元兇)
+      if lead_a < 0.0:
+        if _v_lead < 4.0:
+          # 【滑行收尾模式】：前車快停了。如果我們還落後一大截 (dist_error > 4.0)，
+          # 就放掉前車的重煞車訊號，不盲目照抄，把減速任務交給完美的滑行曲線！
+          ff_weight = smooth_interp(dist_error, [1.0, 4.0], [1.0, 0.0])
+        else:
+          # 【動態跟車模式】：前車還在高速行進中減速，必須 100% 複製煞車保命
+          ff_weight = 1.0
+      else:
+        # 前車加速：永遠 100% 跟上，防止起步遲鈍
+        ff_weight = 1.0
+
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0)) * ff_weight
 
-      # 3. 🚀 完美滑行曲線 (Glide Path)：將 P 與 D 統一！
-      # 我們不直接暴力追平速差，而是根據「剩餘空間」，算出一個「理想滑行車速」
-      # 每多 1 公尺的空間，允許我們比前車快 0.4 m/s (約 1.4 km/h) 溜過去
+      # 3. 🚀 完美滑行曲線 (Glide Path)
       v_glide = dist_error_eff * 0.4
-      
-      # 理想車速 = 前車車速 + 允許的滑行車速
       ideal_v_ego = max(0.0, _v_lead + v_glide)
-      
-      # 我們現在只需要專心追蹤這個「理想車速」即可！
       v_error = ideal_v_ego - v_ego
 
       if v_error > 0.0:
-        # 溫柔追擊 (滑行中)
+        # 溫柔補油 (滑行/追擊)
         v_comp = float(np.clip(v_error * 0.20, 0.0, 0.4))
       else:
-        # 動態煞車：距離越近，對煞車誤差越敏感
+        # 動態煞車：距離越近，煞車越敏銳
         v_comp_factor = smooth_interp(_d_rel, [3.0, 12.0], [0.60, 0.20])
         v_comp = float(np.clip(v_error * v_comp_factor, -2.5, 0.0)) 
       
       raw_clone_a = lead_a_feedforward + v_comp
 
-      # 4. 微型濾波與保命驗證
-      if _d_rel < 5.0 and lead_a < -0.5:
+      # 4. 🛑 絕對駐車鎖死 (解決「停下後再蠕動」的元兇)
+      # 當前車幾乎靜止，且我們已經滑進目標區塊附近 (dist_error < 2.0 米)
+      if _v_lead < 0.5 and dist_error < 2.0:
+        self.output_should_stop = True # 系統明確授權煞停
+        if raw_clone_a > 0.0:
+          raw_clone_a = 0.0 # 徹底沒收任何要求往前的推力
+          
+        # 當車速跌破 1.0 m/s，強迫給予深達 -0.8 的死區咬合力，克服變速箱怠速蠕動！
+        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.8, -0.15])
+        raw_clone_a = min(raw_clone_a, brake_hold)
+
+      # 5. 非對稱微型濾波
+      if _d_rel < 6.0 and lead_a < -0.5:
         self.clone_a_ema = raw_clone_a
       elif raw_clone_a < self.clone_a_ema:
-        # 煞車方向：保持高度敏捷 (0.15 老 + 0.85 新)，隨時煞得住
+        # 煞車方向：保持高度敏捷 (0.15 老 + 0.85 新)
         self.clone_a_ema = 0.15 * self.clone_a_ema + 0.85 * raw_clone_a
       else:
-        # 加速/放煞車方向：慵懶濾波 (0.70 老 + 0.30 新)，消滅收油頓挫
-        self.clone_a_ema = 0.70 * self.clone_a_ema + 0.30 * raw_clone_a
+        # 加速/放煞車方向：慵懶濾波 (0.65 老 + 0.35 新)，消滅收油頓挫
+        self.clone_a_ema = 0.65 * self.clone_a_ema + 0.35 * raw_clone_a
         
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
-      
       self.smooth_coast_weight = 0.0
 
     # ==========================================
