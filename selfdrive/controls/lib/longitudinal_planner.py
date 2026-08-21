@@ -426,7 +426,7 @@ class LongitudinalPlanner:
           raw_clone_a = 0.0 # 徹底沒收任何要求往前的推力
           
         # 當車速跌破 1.0 m/s，強迫給予深達 -0.8 的死區咬合力，克服變速箱怠速蠕動！
-        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.8, -0.15])
+        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.30, -0.15])
         raw_clone_a = min(raw_clone_a, brake_hold)
 
       # 5. 非對稱微型濾波
