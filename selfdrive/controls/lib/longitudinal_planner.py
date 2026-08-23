@@ -374,7 +374,7 @@ class LongitudinalPlanner:
     # 🌟 核心革新：[狀態三] 🚦 塞車克隆模式 (Traffic Jam Clone)
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.6, 0.4])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.55, 0.45])
       
       # 1. 目標距離與非對稱死區
       target_dist = 5.0 + max(0.0, v_ego - 1.5) * 0.7
@@ -426,7 +426,7 @@ class LongitudinalPlanner:
           raw_clone_a = 0.0 # 徹底沒收任何要求往前的推力
           
         # 當車速跌破 1.0 m/s，強迫給予深達 -0.8 的死區咬合力，克服變速箱怠速蠕動！
-        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.30, -0.15])
+        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.50, -0.15])
         raw_clone_a = min(raw_clone_a, brake_hold)
 
       # 5. 非對稱微型濾波
