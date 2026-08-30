@@ -15,49 +15,27 @@ from openpilot.common.simple_kalman import KF1D
 
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
-# 1) 前車加速度時間常數（aLeadTau）速度相依調整 (專為市區塞車與高速巡航優化)
-#   - 速度分段 (m/s) ≈ [0, 35, 60, 108] km/h
-#LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 9.72, 16.67, 30.0]
 LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 5.0, 10.0, 30.0]
-#   - 對應 tau（秒）: 低速極敏捷，高速極平穩
-#LEAD_ACCEL_TAU_V_EGO_V  = [0.10, 0.25, 1.50,  2.00]
-LEAD_ACCEL_TAU_V_EGO_V  = [1.20, 0.60, 1.50, 2.00]
+LEAD_ACCEL_TAU_V_EGO_V  = [0.3, 0.45, 1.50, 2.00]
 
-# aLead 被視為「幾乎零加速度」的門檻（m/s^2）
-# 若前車加減速超過此數值，tau 將瞬間歸零 (0.0) 以發動最快反應
-LEAD_ACCEL_CONST_ACCEL_THRESH = 0.25 # 從 0.2 稍微放寬，避免塞車微調油門時過度觸發 0.0 造成頓挫, 0.25
+LEAD_ACCEL_CONST_ACCEL_THRESH = 0.25 
 
-# 2) 視覺 / 雷達 覆蓋邏輯（集中在上方方便日後調整）
 VISION_PROB_MIN = 0.35
 RADAR_OVERRIDE_PROB = 0.60
 
-# ====================== 本次修改重點：低速純視覺優化區 ======================
-LOW_SPEED_VISION_ONLY = True
+SENSOR_FUSION_ENABLE = True
 
-# 3) 平滑過渡區間 (Blending) - 取代原本非黑即白的 SPEED_SWITCH_KMH
-SPEED_BLEND_MIN_KMH = 55.0 
-SPEED_BLEND_MAX_KMH = 65.0
-SPEED_BLEND_MIN_MS = SPEED_BLEND_MIN_KMH / 3.6
-SPEED_BLEND_MAX_MS = SPEED_BLEND_MAX_KMH / 3.6
-
-# 4) 視覺濾波器參數 (過濾 Vision 產生的神經質高頻抖動)
-# 稍微降低視覺延遲，配合塞車高反應需求
 VISION_V_REL_TAU = 0.10 
 VISION_A_LEAD_TAU = 0.15 
 
-# 5) 視覺鎖定磁滯區間 (Hysteresis) - 防止 prob 邊緣閃爍造成的幽靈煞車
 VISION_PROB_LOCK = 0.40   
 VISION_PROB_UNLOCK = 0.20 
 # =======================================================================
 
+_LEAD_ACCEL_TAU = 0.8 
 
-# Default lead acceleration decay（保留原本常數，供舊邏輯或其他模組使用）
-_LEAD_ACCEL_TAU = 1.5
-
-# radar tracks
 SPEED, ACCEL = 0, 1
 
-# stationary qualification parameters
 V_EGO_STATIONARY = 4.
 
 RADAR_TO_CENTER = 2.7
@@ -87,7 +65,6 @@ class Track:
     self.identifier = identifier
     self.cnt = 0
 
-    # aLeadTau 改為可被速度動態調整的 filter，初始值仍沿用原本 _LEAD_ACCEL_TAU
     self.aLeadTau = FirstOrderFilter(_LEAD_ACCEL_TAU, 0.45, DT_MDL)
 
     self.K_A = kalman_params.A
@@ -95,14 +72,26 @@ class Track:
     self.K_K = kalman_params.K
     self.kf = KF1D([[v_lead], [0.0]], self.K_A, self.K_C, self.K_K)
 
+    # 🌟 優化二：專屬這個雷達目標的距離記憶體
+    self.filtered_dRel = 0.0
+    self.dRel_initialized = False
+
   def update(self, d_rel: float, y_rel: float, v_rel: float,
              v_lead: float, measured: float, v_ego: float):
-    """
-    v_ego 新增傳入，讓 aLeadTau 能做速度相依調整：
-      - 低速：tau 小，對前車減速/加速變化更敏感
-      - 高速：tau 大，維持穩定
-    """
-    self.dRel = d_rel
+             
+    # 🌟 優化二：真正的「速度相依」互補濾波器 (加在訊號源頭)
+    if not self.dRel_initialized:
+      self.filtered_dRel = d_rel
+      self.dRel_initialized = True
+    else:
+      predicted_dRel = self.filtered_dRel + (v_rel * DT_MDL)
+      # 低速極致平滑 (0.95)，高速防偏移 (0.85)
+      trust_kinematic = float(np.interp(v_ego, [0.0, 30.0], [0.95, 0.85]))
+      trust_radar = 1.0 - trust_kinematic
+      self.filtered_dRel = trust_kinematic * predicted_dRel + trust_radar * d_rel
+
+    # 將淨化後的平滑距離，正式指派給系統
+    self.dRel = self.filtered_dRel
     self.yRel = y_rel
     self.vRel = v_rel
     self.vLead = v_lead
@@ -119,7 +108,6 @@ class Track:
     if abs(self.aLeadK) < LEAD_ACCEL_CONST_ACCEL_THRESH:
       self.aLeadTau.x = base_tau
     else:
-      # 強變化時收斂到 0（等效更小 tau），讓反應更快
       self.aLeadTau.update(0.0)
 
     self.cnt += 1
@@ -141,7 +129,6 @@ class Track:
     }
 
   def potential_low_speed_lead(self, v_ego: float):
-    # stop for stuff in front of you and low speed, even without model confirmation
     return abs(self.yRel) < 1.0 and (v_ego < V_EGO_STATIONARY) and (0.75 < self.dRel < 25)
 
   def is_potential_fcw(self, model_prob: float):
@@ -151,7 +138,6 @@ class Track:
     return f"x: {self.dRel:4.1f}  y: {self.yRel:4.1f}  v: {self.vRel:4.1f}  a: {self.aLeadK:4.1f}"
 
 
-# ====================== 新增：視覺狀態追蹤類別 ======================
 class VisionLeadState:
   def __init__(self):
     self.active = False
@@ -159,31 +145,27 @@ class VisionLeadState:
     self.a_lead_filter = FirstOrderFilter(0.0, VISION_A_LEAD_TAU, DT_MDL)
 
   def update(self, prob: float, v_rel_raw: float, a_lead_raw: float) -> bool:
-    # 磁滯邏輯 (Hysteresis) 判斷是否鎖定前車
     if self.active:
       if prob < VISION_PROB_UNLOCK:
         self.active = False
     else:
       if prob > VISION_PROB_LOCK:
         self.active = True
-        # 剛鎖定時，初始化濾波器數值，避免從 0 開始爬升的延遲
         self.v_rel_filter.x = v_rel_raw
         self.a_lead_filter.x = a_lead_raw
 
-    # 若處於鎖定狀態，則更新濾波器以平滑高頻雜訊
     if self.active:
       self.v_rel_filter.update(v_rel_raw)
       self.a_lead_filter.update(a_lead_raw)
 
     return self.active
-# ====================================================================
 
 
 def laplacian_pdf(x: float, mu: float, b: float):
   b = max(b, 1e-4)
   return math.exp(-abs(x-mu)/b)
 
-
+# 🌟 優化一：將雷達與視覺的匹配邏輯，改為「速度相依」
 def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks: dict[int, Track]):
   offset_vision_dist = lead.x[0] - RADAR_TO_CAMERA
 
@@ -195,8 +177,11 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
 
   track = max(tracks.values(), key=prob)
 
-  dist_sane = abs(track.dRel - offset_vision_dist) < max([(offset_vision_dist) * .25, 5.0])
-  vel_sane = (abs(track.vRel + v_ego - lead.v[0]) < 10) or (v_ego + track.vRel > 3)
+  # 低速塞車時放寬到 8.0 公尺，高速收緊到 4.0 公尺，死死咬住雷達目標
+  dist_tolerance = float(np.interp(v_ego, [0.0, 25.0], [8.0, 4.0]))
+  dist_sane = abs(track.dRel - offset_vision_dist) < max([(offset_vision_dist) * 0.25, dist_tolerance])
+  vel_sane = (abs(track.vRel + v_ego - lead.v[0]) < 10.0) or (v_ego + track.vRel > 3.0)
+  
   if dist_sane and vel_sane:
     return track
   return None
@@ -204,14 +189,7 @@ def match_vision_to_track(v_ego: float, lead: capnp._DynamicStructReader, tracks
 
 def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capnp._DynamicStructReader,
              model_v_ego: float, vision_state: VisionLeadState, low_speed_override: bool = True) -> dict[str, Any]:
-  """
-  速度切換策略與視覺優化：
-    - 加入低通濾波與磁滯邏輯，大幅降低純視覺的高頻抖動。
-    - 引入平滑過渡 (Blending)：在 55~65 km/h 之間依比例混合視覺與雷達，消除切換頓挫。
-    - 加入靜止鎖定 (Standstill Lock)：避免煞停瞬間視覺雜訊導致暴衝。
-  """
 
-  # ====================== 1. 視覺狀態更新與濾波 ======================
   lead_v_rel_pred_raw = lead_msg.v[0] - model_v_ego
   a_lead_raw = float(lead_msg.a[0])
 
@@ -221,25 +199,20 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
 
   vision_dict: dict[str, Any] = {"status": False}
   if vision_active:
-    # 動態 aLeadTau 邏輯
     base_tau = float(np.interp(v_ego, LEAD_ACCEL_TAU_V_EGO_BP, LEAD_ACCEL_TAU_V_EGO_V))
     if abs(vision_state.a_lead_filter.x) < LEAD_ACCEL_CONST_ACCEL_THRESH:
       vision_tau = base_tau
     else:
       vision_tau = 0.0
 
-    # === 靜止鎖定邏輯 (Standstill Lock) ===
-    # 當本車時速極低 (< 1.5 m/s，約 5.4 km/h) 且前車也幾乎靜止時 (絕對速度 < 0.8 m/s)
     is_standstill = (v_ego < 0.4) and (abs(v_ego + vision_state.v_rel_filter.x) < 0.5)
     
     if is_standstill:
-      # 強制壓制視覺雜訊，避免引發蠕行或暴衝
-      final_v_rel = -v_ego  # 意味著前車絕對速度為 0
+      final_v_rel = -v_ego  
       final_v_lead = 0.0
       final_a_lead = 0.0
-      vision_tau = 4.0      # 鎖死 Tau，不允許任何神經質反應
+      vision_tau = 4.0      
     else:
-      # 正常行駛時的濾波數值
       final_v_rel = float(vision_state.v_rel_filter.x)
       final_v_lead = float(v_ego + vision_state.v_rel_filter.x)
       final_a_lead = float(vision_state.a_lead_filter.x)
@@ -259,80 +232,34 @@ def get_lead(v_ego: float, ready: bool, tracks: dict[int, Track], lead_msg: capn
       "radarTrackId": -1,
     }
 
-  # ====================== 2. 判斷低速純視覺邏輯 ======================
-  if LOW_SPEED_VISION_ONLY:
-    # 計算視覺權重 w_vision (1.0 代表純視覺，0.0 代表純雷達)
-    w_vision = np.clip((SPEED_BLEND_MAX_MS - v_ego) / (SPEED_BLEND_MAX_MS - SPEED_BLEND_MIN_MS), 0.0, 1.0)
-
-    # --- 區間 A: 完全低速 (純視覺接管，不允許雷達與補強) ---
-    if w_vision == 1.0:
-      return vision_dict
-
-    # --- 準備雷達數據 (供高速與過渡區間使用) ---
-    radar_dict: dict[str, Any] = {"status": False}
+  lead_dict: dict[str, Any] = {"status": False}
+  
+  if SENSOR_FUSION_ENABLE:
     track = None
-    if len(tracks) > 0 and ready and lead_msg.prob > .5:
+    if len(tracks) > 0 and ready and lead_msg.prob > VISION_PROB_MIN:
       track = match_vision_to_track(v_ego, lead_msg, tracks)
 
     if track is not None:
       radar_dict = track.get_RadarState(lead_msg.prob)
-
-    # 雷達低速補強
-    if low_speed_override:
-      low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
-      if len(low_speed_tracks) > 0:
-        closest_track = min(low_speed_tracks, key=lambda c: c.dRel)
-        if (not radar_dict.get("status", False)) or (closest_track.dRel < radar_dict.get("dRel", float('inf'))):
-          radar_dict = closest_track.get_RadarState()
-
-    # --- 區間 B: 平滑過渡區間 (Blending) ---
-    if 0.0 < w_vision < 1.0:
-      if vision_dict["status"] and radar_dict["status"]:
-        # 依照權重比例融合兩者數據
-        blended = radar_dict.copy()
-        blended["dRel"]   = float(w_vision * vision_dict["dRel"]   + (1 - w_vision) * radar_dict["dRel"])
-        blended["yRel"]   = float(w_vision * vision_dict["yRel"]   + (1 - w_vision) * radar_dict["yRel"])
-        blended["vRel"]   = float(w_vision * vision_dict["vRel"]   + (1 - w_vision) * radar_dict["vRel"])
-        blended["vLead"]  = float(w_vision * vision_dict["vLead"]  + (1 - w_vision) * radar_dict["vLead"])
-        blended["vLeadK"] = float(w_vision * vision_dict["vLeadK"] + (1 - w_vision) * radar_dict["vLeadK"])
-        blended["aLeadK"] = float(w_vision * vision_dict["aLeadK"] + (1 - w_vision) * radar_dict["aLeadK"])
-        blended["aLeadTau"] = float(w_vision * vision_dict["aLeadTau"] + (1 - w_vision) * radar_dict["aLeadTau"])
-        blended["radar"]  = True # 混合狀態標記為 True，供下游判斷
-        return blended
-      elif radar_dict["status"]:
-        return radar_dict
+      
+      if vision_active:
+        fused_dict = radar_dict.copy()
+        fused_dict["yRel"] = vision_dict["yRel"]
+        fused_dict["modelProb"] = vision_dict["modelProb"]
+        lead_dict = fused_dict
       else:
-        return vision_dict
-
-    # --- 區間 C: 完全高速 (雷達為主，視覺為輔) ---
-    if w_vision == 0.0:
-      if radar_dict["status"]:
-        return radar_dict
-      return vision_dict
-
-  # ====================== 3. 非低速純視覺 (保留原邏輯) ======================
-  # 當 LOW_SPEED_VISION_ONLY 為 False 時，維持原本視覺優先 + 雷達可覆蓋/補強
-  lead_dict: dict[str, Any] = {"status": False}
-
-  if vision_active:
-    lead_dict = vision_dict
-    if len(tracks) > 0 and (lead_msg.prob <= RADAR_OVERRIDE_PROB):
-      trk = match_vision_to_track(v_ego, lead_msg, tracks)
-      if trk is not None:
-        lead_dict = trk.get_RadarState(lead_msg.prob)
-  else:
-    track = None
-    if len(tracks) > 0 and ready and lead_msg.prob > .5:
-      track = match_vision_to_track(v_ego, lead_msg, tracks)
-
-    if track is not None:
-      lead_dict = track.get_RadarState(lead_msg.prob)
+        lead_dict = radar_dict
+    else:
+      if vision_active:
+        lead_dict = vision_dict
 
   if low_speed_override:
     low_speed_tracks = [c for c in tracks.values() if c.potential_low_speed_lead(v_ego)]
     if len(low_speed_tracks) > 0:
       closest_track = min(low_speed_tracks, key=lambda c: c.dRel)
-      if (not lead_dict.get("status", False)) or (closest_track.dRel < lead_dict.get("dRel", float('inf'))):
+      
+      # 🌟 優化一：速度相依的緊急覆蓋邏輯 (< 10m 限制)
+      if (not lead_dict.get("status", False)) or ((closest_track.dRel < lead_dict.get("dRel", float('inf'))) and closest_track.dRel < 10.0):
         lead_dict = closest_track.get_RadarState()
 
   return lead_dict
@@ -345,7 +272,6 @@ class RadarD:
     self.tracks: dict[int, Track] = {}
     self.kalman_params = KalmanParams(DT_MDL)
 
-    # 初始化兩台前車的視覺追蹤狀態
     self.vision_state_lead_one = VisionLeadState()
     self.vision_state_lead_two = VisionLeadState()
 
@@ -369,24 +295,19 @@ class RadarD:
 
     ar_pts = {pt.trackId: [pt.dRel, pt.yRel, pt.vRel, pt.measured] for pt in rr.points}
 
-    # *** remove missing points from meta data ***
     for ids in list(self.tracks.keys()):
       if ids not in ar_pts:
         self.tracks.pop(ids, None)
 
-    # *** compute the tracks ***
     for ids in ar_pts:
       rpt = ar_pts[ids]
-      # align v_ego by a fixed time to align it with the radar measurement
       v_lead = rpt[2] + self.v_ego_hist[0]
 
       if ids not in self.tracks:
         self.tracks[ids] = Track(ids, v_lead, self.kalman_params)
 
-      # 傳入 v_ego（使用與 v_lead 對齊的歷史值）
       self.tracks[ids].update(rpt[0], rpt[1], rpt[2], v_lead, rpt[3], self.v_ego_hist[0])
 
-    # *** publish radarState ***
     self.radar_state_valid = sm.all_checks()
     self.radar_state = log.RadarState.new_message()
     self.radar_state.mdMonoTime = sm.logMonoTime["modelV2"]
@@ -400,10 +321,8 @@ class RadarD:
 
     leads_v3 = sm["modelV2"].leadsV3
     if len(leads_v3) > 1:
-      # leadOne 傳入 vision_state_lead_one 管理狀態
       self.radar_state.leadOne = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[0], model_v_ego,
                                           self.vision_state_lead_one, low_speed_override=True)
-      # leadTwo 傳入 vision_state_lead_two 管理狀態
       self.radar_state.leadTwo = get_lead(self.v_ego, self.ready, self.tracks, leads_v3[1], model_v_ego,
                                           self.vision_state_lead_two, low_speed_override=False)
 
@@ -435,4 +354,3 @@ def main() -> None:
 
 if __name__ == "__main__":
   main()
-
