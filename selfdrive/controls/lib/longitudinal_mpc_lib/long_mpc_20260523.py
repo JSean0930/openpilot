@@ -76,7 +76,7 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
   elif personality == log.LongitudinalPersonality.standard:
     return 1.0
   elif personality == log.LongitudinalPersonality.aggressive:
-    return 0.5
+    return 0.7
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -87,9 +87,9 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
   if personality == log.LongitudinalPersonality.relaxed:
     base = 1.0 + 0.0042 * v_kph 
   elif personality == log.LongitudinalPersonality.standard:
-    base = 1.0 + 0.0024 * v_kph 
+    base = 0.8 + 0.0017 * v_kph #1.0 + 0.0024 * v_kph 
   elif personality == log.LongitudinalPersonality.aggressive:
-    base = 0.8 + 0.0017 * v_kph 
+    base = 0.7 + 0.0017 * v_kph 
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -353,6 +353,7 @@ class LongitudinalMpc:
 
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
+    # 🌟 徹底淨化：直接讀取已在 radard.py 中洗淨的雷達原始訊號，絕不進行二次濾波
     lead_xv_0 = self.process_lead(radarstate.leadOne)
     lead_xv_1 = self.process_lead(radarstate.leadTwo)
 
@@ -381,21 +382,20 @@ class LongitudinalMpc:
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle, cruise_obstacle])
       self.source = SOURCES[np.argmin(x_obstacles[0])]
 
-      # 🚨 使用更安全的陣列歸零法，避開舊版 Python 解包崩潰的雷
       x.fill(0.0)
       v.fill(0.0)
       a.fill(0.0)
       j.fill(0.0)
 
     elif self.mode == 'blended':
-      self.params[:, 5] = LEAD_DANGER_FACTOR #* 0.95
+      self.params[:, 5] = LEAD_DANGER_FACTOR
 
       a_upper_eff = np.minimum(a_max_arr, CRUISE_MAX_ACCEL)
       v_lower = v_ego + (T_IDXS * CRUISE_MIN_ACCEL * 1.05)
       v_upper = v_ego + (T_IDXS * a_upper_eff * 1.05)
       v_cruise_profile = np.clip(v_cruise * np.ones(N+1), v_lower, v_upper)
       
-      t_follow = t_follow #* 0.85
+      t_follow = t_follow 
 
       x_obstacles = np.column_stack([lead_0_obstacle, lead_1_obstacle])
 
@@ -407,16 +407,34 @@ class LongitudinalMpc:
 
       x_and_cruise = np.column_stack([x_model, cruise_target])
       
-      # ========================================================
-      # 🌟 優化 3：動態脫鉤寫法 (起步底薪進化版)
-      # ========================================================
-      v_start_thr = 25.0 / 3.6
+      lead = radarstate.leadOne
+      has_lead = lead.status
+
+      v_kph = v_ego * 3.6
+      w_base = float(np.interp(v_kph, [0.0, 10.0, 25.0], [0.0, 0.20, 0.60]))
       
-      w_raw = 0.20 + 0.80 * (v_ego / v_start_thr)
+      if has_lead:
+        lead_a = lead.aLeadK
+        d_rel = lead.dRel
+        closing = v_ego - lead.vLead
+        
+        closing_pull = min(closing, 0.0) 
+        pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.10 + abs(closing_pull) * 0.10, 0.0, 0.20))
+        
+        w_dist = float(np.interp(d_rel, [3.0, 8.0], [0.0, 1.0]))
+        pursuit_weight = pursuit_intent * w_dist
+        
+        brake_intent_close = float(np.interp(closing, [0.1, 0.8], [0.0, 0.5]))
+        brake_intent_lead = float(np.interp(lead_a, [-1.5, -0.5], [0.5, 0.0]))
+        defense_weight = max(brake_intent_close, brake_intent_lead)
+                
+        w_raw = w_base + pursuit_weight - defense_weight
+      else:
+        w_raw = w_base
+
       w = float(np.clip(w_raw, 0.0, 0.8))
 
       x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
-     
       x = x_mixed
       
       self.source = 'e2e' if x_and_cruise[1, 0] < x_and_cruise[1, 1] else 'cruise'
@@ -487,4 +505,3 @@ class LongitudinalMpc:
 if __name__ == "__main__":
   ocp = gen_long_ocp()
   AcadosOcpSolver.generate(ocp, json_file=JSON_FILE)
-
