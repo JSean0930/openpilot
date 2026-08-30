@@ -390,7 +390,8 @@ class LongitudinalPlanner:
 
       if v_error > 0.0:
         # 溫柔補油 (滑行/追擊)
-        v_comp = float(np.clip(v_error * 0.20, 0.0, 0.4))
+        #v_comp = float(np.clip(v_error * 0.20, 0.0, 0.4))
+        v_comp = float(np.clip(v_error * 0.35, 0.0, 1.0))
       else:
         # 動態煞車：距離越近，煞車越敏銳
         v_comp_factor = smooth_interp(_d_rel, [3.0, 12.0], [0.60, 0.20])
