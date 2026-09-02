@@ -357,7 +357,7 @@ class LongitudinalPlanner:
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.55, 0.45])
       
       # 1. 目標距離與非對稱死區
-      target_dist = 5.0 + max(0.0, v_ego - 1.5) * 0.5
+      target_dist = 5.0 + max(0.0, v_ego - 1.5) * 0.35
       dist_error = _d_rel - target_dist
       
       # 距離死區：允許拉遠 1.5 米，不允許逼近 (嚴格防禦)
@@ -418,7 +418,7 @@ class LongitudinalPlanner:
         self.clone_a_ema = 0.15 * self.clone_a_ema + 0.85 * raw_clone_a
       else:
         # 加速/放煞車方向：慵懶濾波 (0.65 老 + 0.35 新)，消滅收油頓挫
-        self.clone_a_ema = 0.65 * self.clone_a_ema + 0.35 * raw_clone_a
+        self.clone_a_ema = 0.6 * self.clone_a_ema + 0.4 * raw_clone_a
         
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       self.smooth_coast_weight = 0.0
