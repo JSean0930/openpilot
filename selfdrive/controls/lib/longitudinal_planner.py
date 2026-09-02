@@ -357,7 +357,7 @@ class LongitudinalPlanner:
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 35.0], [0.55, 0.45])
       
       # 1. 目標距離與非對稱死區
-      target_dist = 5.0 + max(0.0, v_ego - 1.5) * 0.7
+      target_dist = 5.0 + max(0.0, v_ego - 1.5) * 0.5
       dist_error = _d_rel - target_dist
       
       # 距離死區：允許拉遠 1.5 米，不允許逼近 (嚴格防禦)
