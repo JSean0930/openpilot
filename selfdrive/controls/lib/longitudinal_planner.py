@@ -418,7 +418,7 @@ class LongitudinalPlanner:
         self.clone_a_ema = 0.15 * self.clone_a_ema + 0.85 * raw_clone_a
       else:
         # 加速/放煞車方向：慵懶濾波 (0.65 老 + 0.35 新)，消滅收油頓挫
-        self.clone_a_ema = 0.6 * self.clone_a_ema + 0.4 * raw_clone_a
+        self.clone_a_ema = 0.3 * self.clone_a_ema + 0.7 * raw_clone_a
         
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       self.smooth_coast_weight = 0.0
