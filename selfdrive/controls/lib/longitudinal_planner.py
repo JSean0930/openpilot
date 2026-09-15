@@ -362,12 +362,17 @@ class LongitudinalPlanner:
       # 前車逼近 (負誤差)：1:1 傳遞 (1.0)，像硬彈簧一樣嚴格防禦，確保安全距離。
       dist_error_eff = dist_error * 0.5 if dist_error > 0.0 else dist_error
 
-      # 2. 🛡️ 連續漸進式前饋衰減 (消除 _v_lead < 4.0 的突兀切換)
+      # 2. 🛡️ 人性化前饋衰減 (完美解決「定竿」與「突然放煞車」的雙重痛點)
       if lead_a < 0.0:
-        # 當前車減速時，我們利用 smooth_interp 讓權重根據「前車車速」平滑漸變。
-        # 前車越慢 (< 2.0m/s)，我們越不照抄他的急煞 (交給下方滑行曲線)。
-        ff_weight = smooth_interp(_v_lead, [0.0, 6.0], [0.0, 1.0])
-        # 如果距離真的很近 (< 4m)，無條件恢復 100% 照抄保命。
+        # 條件A (前車狀態)：前車必須幾乎靜止 (< 2.0 m/s, 約 7 km/h)，才「考慮」放寬煞車。
+        ff_weight = smooth_interp(_v_lead, [0.0, 2.0], [0.0, 1.0])
+        
+        # 條件B (自車速度 - 防恐懼保險)：
+        # 如果自車速度還很快 (> 7.0 m/s, 約 25 km/h)，代表我們帶有巨大動能，絕對不允許放煞車！
+        # 只有當我們成功減速，車速降到 4.0 m/s (14 km/h) 以下，才像人類一樣「慢慢鬆開踏板」進入滑行。
+        ff_weight = max(ff_weight, smooth_interp(v_ego, [4.0, 7.0], [0.0, 1.0]))
+        
+        # 條件C (極近距離保險)：如果滑行到離前車 5 米內，強制恢復 100% 連動，準備精準死鎖。
         ff_weight = max(ff_weight, smooth_interp(_d_rel, [3.0, 5.0], [1.0, 0.0]))
       else:
         ff_weight = 1.0
