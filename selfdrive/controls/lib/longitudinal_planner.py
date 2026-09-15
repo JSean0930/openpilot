@@ -404,7 +404,7 @@ class LongitudinalPlanner:
         self.clone_a_ema = raw_clone_a
       elif raw_clone_a < self.clone_a_ema:
         # 煞車方向：適度敏捷 (0.3老 + 0.7新)，增加線性度
-        self.clone_a_ema = 0.30 * self.clone_a_ema + 0.70 * raw_clone_a
+        self.clone_a_ema = 0.25 * self.clone_a_ema + 0.75 * raw_clone_a
       else:
         # 放煞車/補油方向：恢復慵懶濾波 (0.75老 + 0.25新)，徹底消滅收油頓挫
         self.clone_a_ema = 0.60 * self.clone_a_ema + 0.40 * raw_clone_a
