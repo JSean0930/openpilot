@@ -351,7 +351,7 @@ class LongitudinalPlanner:
     # 統一接管：跟車、滑行、煞停、死鎖，全部由這套老司機邏輯一氣呵成！
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 30.0, 35.0], [0.75, 0.75, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 30.0, 35.0], [0.85, 0.85, 0.0])
       
       # 1. 🎯 目標距離與「軟彈簧」誤差計算 (移除生硬的死區)
       target_dist = 5.0 + max(0.0, v_ego - 1.5) * 0.35
@@ -385,11 +385,11 @@ class LongitudinalPlanner:
       v_error = ideal_v_ego - v_ego
 
       if v_error > 0.0:
-        v_comp = float(np.clip(v_error * 0.55, 0.0, 1.0))
+        v_comp = float(np.clip(v_error * 0.55, 0.0, 0.8))
       else:
         # 煞車線性化：移除原本隨距離暴增的動態乘數，改用純粹的固定比例 (0.45)。
         # 讓煞車力道 100% 跟隨速差，踩踏感會變得像真車一樣線性且可預期。
-        v_comp = float(np.clip(v_error * 0.45, -2.5, 0.0)) 
+        v_comp = float(np.clip(v_error * 0.55, -2.5, 0.0)) 
       
       raw_clone_a = lead_a_feedforward + v_comp
 
@@ -409,7 +409,7 @@ class LongitudinalPlanner:
         self.clone_a_ema = raw_clone_a
       elif raw_clone_a < self.clone_a_ema:
         # 煞車方向：適度敏捷 (0.3老 + 0.7新)，增加線性度
-        self.clone_a_ema = 0.25 * self.clone_a_ema + 0.75 * raw_clone_a
+        self.clone_a_ema = 0.15 * self.clone_a_ema + 0.85 * raw_clone_a
       else:
         # 放煞車/補油方向：恢復慵懶濾波 (0.75老 + 0.25新)，徹底消滅收油頓挫
         self.clone_a_ema = 0.50 * self.clone_a_ema + 0.50 * raw_clone_a
