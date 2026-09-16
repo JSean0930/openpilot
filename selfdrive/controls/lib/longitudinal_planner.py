@@ -385,7 +385,7 @@ class LongitudinalPlanner:
       v_error = ideal_v_ego - v_ego
 
       if v_error > 0.0:
-        v_comp = float(np.clip(v_error * 0.45, 0.0, 1.5))
+        v_comp = float(np.clip(v_error * 0.55, 0.0, 1.2))
       else:
         # 煞車線性化：移除原本隨距離暴增的動態乘數，改用純粹的固定比例 (0.45)。
         # 讓煞車力道 100% 跟隨速差，踩踏感會變得像真車一樣線性且可預期。
@@ -412,7 +412,7 @@ class LongitudinalPlanner:
         self.clone_a_ema = 0.25 * self.clone_a_ema + 0.75 * raw_clone_a
       else:
         # 放煞車/補油方向：恢復慵懶濾波 (0.75老 + 0.25新)，徹底消滅收油頓挫
-        self.clone_a_ema = 0.60 * self.clone_a_ema + 0.40 * raw_clone_a
+        self.clone_a_ema = 0.70 * self.clone_a_ema + 0.30 * raw_clone_a
         
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       self.smooth_coast_weight = 0.0
