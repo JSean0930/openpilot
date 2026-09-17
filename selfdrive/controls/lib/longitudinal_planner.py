@@ -360,7 +360,7 @@ class LongitudinalPlanner:
       # 將階梯式的 if/else 改為連續的線性折線：
       # 前車拉遠 (正誤差)：係數極弱化 (0.3)，像軟彈簧一樣允許稍微拉開，不急著補油。
       # 前車逼近 (負誤差)：1:1 傳遞 (1.0)，像硬彈簧一樣嚴格防禦，確保安全距離。
-      dist_error_eff = dist_error * 0.5 if dist_error > 0.0 else dist_error
+      dist_error_eff = dist_error * 0.85 if dist_error > 0.0 else dist_error
 
       # 2. 🛡️ 人性化前饋衰減 (完美解決「定竿」與「突然放煞車」的雙重痛點)
       if lead_a < 0.0:
@@ -373,7 +373,7 @@ class LongitudinalPlanner:
         ff_weight = max(ff_weight, smooth_interp(v_ego, [4.0, 7.0], [0.0, 1.0]))
         
         # 條件C (極近距離保險)：如果滑行到離前車 5 米內，強制恢復 100% 連動，準備精準死鎖。
-        ff_weight = max(ff_weight, smooth_interp(_d_rel, [3.0, 5.0], [1.0, 0.0]))
+        ff_weight = max(ff_weight, smooth_interp(_d_rel, [4.0, 7.0], [1.0, 0.0]))
       else:
         ff_weight = 1.0
 
