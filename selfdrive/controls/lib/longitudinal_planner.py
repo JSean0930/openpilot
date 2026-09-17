@@ -354,7 +354,7 @@ class LongitudinalPlanner:
       w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 30.0, 35.0], [0.85, 0.85, 0.0])
       
       # 1. 🎯 目標距離與「軟彈簧」誤差計算 (移除生硬的死區)
-      target_dist = 5.0 + max(0.0, v_ego - 1.5) * 0.35
+      target_dist = 5.0 + max(0.0, v_ego - 1.0) * 0.35
       dist_error = _d_rel - target_dist
       
       # 將階梯式的 if/else 改為連續的線性折線：
@@ -373,14 +373,14 @@ class LongitudinalPlanner:
         ff_weight = max(ff_weight, smooth_interp(v_ego, [4.0, 7.0], [0.0, 1.0]))
         
         # 條件C (極近距離保險)：如果滑行到離前車 5 米內，強制恢復 100% 連動，準備精準死鎖。
-        ff_weight = max(ff_weight, smooth_interp(_d_rel, [3.0, 7.0], [1.0, 0.0]))
+        ff_weight = max(ff_weight, smooth_interp(_d_rel, [4.0, 8.0], [1.0, 0.0]))
       else:
         ff_weight = 1.0
 
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0)) * ff_weight
 
       # 3. 🚀 絕對線性的動力學 (Kinematic Braking)
-      v_glide = dist_error_eff * 0.6
+      v_glide = dist_error_eff * 0.2
       ideal_v_ego = max(0.0, _v_lead + v_glide)
       v_error = ideal_v_ego - v_ego
 
@@ -395,13 +395,13 @@ class LongitudinalPlanner:
 
       # 4. 🛑 無縫駐車鎖死 (消除突兀的瞬間鎖死)
       # 利用車速 (v_ego) 作為連續變數，平滑地將煞車踏板往下壓，抵銷變速箱蠕動。
-      if _v_lead < 1.0 and _d_rel < target_dist + 1.0:
+      if _v_lead < 1.0 and dist_error < 0.5:
         self.output_should_stop = True
         if raw_clone_a > 0.0:
           raw_clone_a = 0.0
         
         # 隨著車速降到 1.5 m/s 以下，煞車力道從 0.0 線性加深到 -0.50
-        brake_hold = smooth_interp(v_ego, [0.0, 1.5], [-0.50, 0.0])
+        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.50, 0.0])
         raw_clone_a = min(raw_clone_a, brake_hold)
 
       # 5. 🩹 修復非對稱微型濾波 (恢復舒適度)
