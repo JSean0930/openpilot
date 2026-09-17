@@ -380,7 +380,7 @@ class LongitudinalPlanner:
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0)) * ff_weight
 
       # 3. 🚀 絕對線性的動力學 (Kinematic Braking)
-      v_glide = dist_error_eff * 0.4
+      v_glide = dist_error_eff * 0.3
       ideal_v_ego = max(0.0, _v_lead + v_glide)
       v_error = ideal_v_ego - v_ego
 
@@ -405,7 +405,7 @@ class LongitudinalPlanner:
         raw_clone_a = min(raw_clone_a, brake_hold)
 
       # 5. 🩹 修復非對稱微型濾波 (恢復舒適度)
-      if _d_rel < 6.0 and lead_a < -0.5:
+      if _d_rel < 6.0 and lead_a < -0.4:
         self.clone_a_ema = raw_clone_a
       elif raw_clone_a < self.clone_a_ema:
         # 煞車方向：適度敏捷 (0.3老 + 0.7新)，增加線性度
