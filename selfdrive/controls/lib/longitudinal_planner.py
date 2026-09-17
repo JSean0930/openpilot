@@ -373,14 +373,14 @@ class LongitudinalPlanner:
         ff_weight = max(ff_weight, smooth_interp(v_ego, [4.0, 7.0], [0.0, 1.0]))
         
         # 條件C (極近距離保險)：如果滑行到離前車 5 米內，強制恢復 100% 連動，準備精準死鎖。
-        ff_weight = max(ff_weight, smooth_interp(_d_rel, [4.0, 7.0], [1.0, 0.0]))
+        ff_weight = max(ff_weight, smooth_interp(_d_rel, [3.0, 7.0], [1.0, 0.0]))
       else:
         ff_weight = 1.0
 
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0)) * ff_weight
 
       # 3. 🚀 絕對線性的動力學 (Kinematic Braking)
-      v_glide = dist_error_eff * 0.3
+      v_glide = dist_error_eff * 0.2
       ideal_v_ego = max(0.0, _v_lead + v_glide)
       v_error = ideal_v_ego - v_ego
 
@@ -389,7 +389,7 @@ class LongitudinalPlanner:
       else:
         # 煞車線性化：移除原本隨距離暴增的動態乘數，改用純粹的固定比例 (0.45)。
         # 讓煞車力道 100% 跟隨速差，踩踏感會變得像真車一樣線性且可預期。
-        v_comp = float(np.clip(v_error * 0.55, -2.5, 0.0)) 
+        v_comp = float(np.clip(v_error * 0.45, -2.5, 0.0)) 
       
       raw_clone_a = lead_a_feedforward + v_comp
 
@@ -405,7 +405,7 @@ class LongitudinalPlanner:
         raw_clone_a = min(raw_clone_a, brake_hold)
 
       # 5. 🩹 修復非對稱微型濾波 (恢復舒適度)
-      if _d_rel < 6.0 and lead_a < -0.4:
+      if _d_rel < 7.0 and lead_a < -0.3:
         self.clone_a_ema = raw_clone_a
       elif raw_clone_a < self.clone_a_ema:
         # 煞車方向：適度敏捷 (0.3老 + 0.7新)，增加線性度
