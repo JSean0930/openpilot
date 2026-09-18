@@ -377,7 +377,7 @@ class LongitudinalPlanner:
       else:
         ff_weight = 1.0
 
-      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.0)) * ff_weight
+      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.2)) * ff_weight
 
       # 3. 🚀 絕對線性的動力學 (Kinematic Braking)
       v_glide = dist_error_eff * 0.2
@@ -385,7 +385,7 @@ class LongitudinalPlanner:
       v_error = ideal_v_ego - v_ego
 
       if v_error > 0.0:
-        v_comp = float(np.clip(v_error * 0.55, 0.0, 0.8))
+        v_comp = float(np.clip(v_error * 0.75, 0.0, 0.8))
       else:
         # 煞車線性化：移除原本隨距離暴增的動態乘數，改用純粹的固定比例 (0.45)。
         # 讓煞車力道 100% 跟隨速差，踩踏感會變得像真車一樣線性且可預期。
@@ -401,7 +401,7 @@ class LongitudinalPlanner:
           raw_clone_a = 0.0
         
         # 隨著車速降到 1.5 m/s 以下，煞車力道從 0.0 線性加深到 -0.50
-        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.50, 0.0])
+        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.35, 0.0])
         raw_clone_a = min(raw_clone_a, brake_hold)
 
       # 5. 🩹 修復非對稱微型濾波 (恢復舒適度)
