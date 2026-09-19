@@ -389,7 +389,7 @@ class LongitudinalPlanner:
       else:
         # 煞車線性化：移除原本隨距離暴增的動態乘數，改用純粹的固定比例 (0.45)。
         # 讓煞車力道 100% 跟隨速差，踩踏感會變得像真車一樣線性且可預期。
-        v_comp = float(np.clip(v_error * 0.85, -2.5, 0.0)) 
+        v_comp = float(np.clip(v_error * 0.60, -2.5, 0.0)) 
       
       raw_clone_a = lead_a_feedforward + v_comp
 
