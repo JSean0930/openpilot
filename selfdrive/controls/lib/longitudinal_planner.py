@@ -370,14 +370,14 @@ class LongitudinalPlanner:
         # 條件B (自車速度 - 防恐懼保險)：
         # 如果自車速度還很快 (> 7.0 m/s, 約 25 km/h)，代表我們帶有巨大動能，絕對不允許放煞車！
         # 只有當我們成功減速，車速降到 4.0 m/s (14 km/h) 以下，才像人類一樣「慢慢鬆開踏板」進入滑行。
-        ff_weight = max(ff_weight, smooth_interp(v_ego, [4.0, 7.0], [0.0, 1.0]))
+        ff_weight = max(ff_weight, smooth_interp(v_ego, [3.0, 7.0], [0.0, 1.0]))
         
         # 條件C (極近距離保險)：如果滑行到離前車 5 米內，強制恢復 100% 連動，準備精準死鎖。
         ff_weight = max(ff_weight, smooth_interp(_d_rel, [4.0, 8.0], [1.0, 0.0]))
       else:
         ff_weight = 1.0
 
-      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.2)) * ff_weight
+      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.5)) * ff_weight
 
       # 3. 🚀 絕對線性的動力學 (Kinematic Braking)
       v_glide = dist_error_eff * 0.2
@@ -389,7 +389,7 @@ class LongitudinalPlanner:
       else:
         # 煞車線性化：移除原本隨距離暴增的動態乘數，改用純粹的固定比例 (0.45)。
         # 讓煞車力道 100% 跟隨速差，踩踏感會變得像真車一樣線性且可預期。
-        v_comp = float(np.clip(v_error * 0.45, -2.5, 0.0)) 
+        v_comp = float(np.clip(v_error * 0.85, -2.5, 0.0)) 
       
       raw_clone_a = lead_a_feedforward + v_comp
 
