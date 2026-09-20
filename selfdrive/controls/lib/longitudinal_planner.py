@@ -380,7 +380,7 @@ class LongitudinalPlanner:
       lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.5)) * ff_weight
 
       # 3. 🚀 絕對線性的動力學 (Kinematic Braking)
-      v_glide = dist_error_eff * 0.2
+      v_glide = dist_error_eff * 0.4
       ideal_v_ego = max(0.0, _v_lead + v_glide)
       v_error = ideal_v_ego - v_ego
 
