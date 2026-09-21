@@ -365,27 +365,27 @@ class LongitudinalPlanner:
       # 2. 🛡️ 人性化前饋衰減 (完美解決「定竿」與「突然放煞車」的雙重痛點)
       if lead_a < 0.0:
         # 條件A (前車狀態)：前車必須幾乎靜止 (< 2.0 m/s, 約 7 km/h)，才「考慮」放寬煞車。
-        ff_weight = smooth_interp(_v_lead, [0.0, 2.0], [0.0, 1.0])
+        ff_weight = smooth_interp(_v_lead, [0.0, 1.0], [0.0, 1.0])
         
         # 條件B (自車速度 - 防恐懼保險)：
         # 如果自車速度還很快 (> 7.0 m/s, 約 25 km/h)，代表我們帶有巨大動能，絕對不允許放煞車！
         # 只有當我們成功減速，車速降到 4.0 m/s (14 km/h) 以下，才像人類一樣「慢慢鬆開踏板」進入滑行。
-        ff_weight = max(ff_weight, smooth_interp(v_ego, [3.0, 7.0], [0.0, 1.0]))
+        ff_weight = max(ff_weight, smooth_interp(v_ego, [1.0, 7.0], [0.0, 1.0]))
         
         # 條件C (極近距離保險)：如果滑行到離前車 5 米內，強制恢復 100% 連動，準備精準死鎖。
-        ff_weight = max(ff_weight, smooth_interp(_d_rel, [4.0, 8.0], [1.0, 0.0]))
+        ff_weight = max(ff_weight, smooth_interp(_d_rel, [4.0, 15.0], [1.0, 0.0]))
       else:
         ff_weight = 1.0
 
-      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.5)) * ff_weight
+      lead_a_feedforward = float(np.clip(lead_a, -2.0, 1.8)) * ff_weight
 
       # 3. 🚀 絕對線性的動力學 (Kinematic Braking)
-      v_glide = dist_error_eff * 0.55
+      v_glide = dist_error_eff * 0.4
       ideal_v_ego = max(0.0, _v_lead + v_glide)
       v_error = ideal_v_ego - v_ego
 
       if v_error > 0.0:
-        v_comp = float(np.clip(v_error * 0.75, 0.0, 0.8))
+        v_comp = float(np.clip(v_error * 0.75, 0.0, 2.0))
       else:
         # 煞車線性化：移除原本隨距離暴增的動態乘數，改用純粹的固定比例 (0.45)。
         # 讓煞車力道 100% 跟隨速差，踩踏感會變得像真車一樣線性且可預期。
@@ -412,7 +412,7 @@ class LongitudinalPlanner:
         self.clone_a_ema = 0.15 * self.clone_a_ema + 0.85 * raw_clone_a
       else:
         # 放煞車/補油方向：恢復慵懶濾波 (0.75老 + 0.25新)，徹底消滅收油頓挫
-        self.clone_a_ema = 0.50 * self.clone_a_ema + 0.50 * raw_clone_a
+        self.clone_a_ema = 0.30 * self.clone_a_ema + 0.70 * raw_clone_a
         
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       self.smooth_coast_weight = 0.0
