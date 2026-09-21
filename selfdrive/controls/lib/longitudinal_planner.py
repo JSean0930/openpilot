@@ -351,7 +351,7 @@ class LongitudinalPlanner:
     # 統一接管：跟車、滑行、煞停、死鎖，全部由這套老司機邏輯一氣呵成！
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 30.0, 35.0], [0.85, 0.85, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 30.0, 35.0], [0.7, 0.7, 0.0])
       
       # 1. 🎯 目標距離與「軟彈簧」誤差計算 (移除生硬的死區)
       target_dist = 5.0 + max(0.0, v_ego - 1.0) * 0.35
