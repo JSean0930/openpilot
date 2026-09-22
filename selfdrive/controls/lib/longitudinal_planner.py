@@ -351,7 +351,7 @@ class LongitudinalPlanner:
     # 統一接管：跟車、滑行、煞停、死鎖，全部由這套老司機邏輯一氣呵成！
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 30.0, 35.0], [0.7, 0.7, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 30.0, 35.0], [0.3, 0.3, 0.0])
       
       # 1. 🎯 目標距離與「軟彈簧」誤差計算 (移除生硬的死區)
       target_dist = 5.0 + max(0.0, v_ego - 1.0) * 0.35
@@ -408,11 +408,11 @@ class LongitudinalPlanner:
       if _d_rel < 7.0 and lead_a < -0.3:
         self.clone_a_ema = raw_clone_a
       elif raw_clone_a < self.clone_a_ema:
-        # 煞車方向：適度敏捷 (0.3老 + 0.7新)，增加線性度
-        self.clone_a_ema = 0.15 * self.clone_a_ema + 0.85 * raw_clone_a
+        # 煞車方向：適度敏捷 (0.15老 + 0.85新)，增加線性度
+        self.clone_a_ema = 0.0 * self.clone_a_ema + 1.0 * raw_clone_a
       else:
-        # 放煞車/補油方向：恢復慵懶濾波 (0.75老 + 0.25新)，徹底消滅收油頓挫
-        self.clone_a_ema = 0.30 * self.clone_a_ema + 0.70 * raw_clone_a
+        # 放煞車/補油方向：恢復慵懶濾波 (0.3老 + 0.7新)，徹底消滅收油頓挫
+        self.clone_a_ema = 0.0 * self.clone_a_ema + 1.0 * raw_clone_a
         
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       self.smooth_coast_weight = 0.0
