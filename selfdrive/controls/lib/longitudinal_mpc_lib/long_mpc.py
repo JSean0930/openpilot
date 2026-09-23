@@ -39,7 +39,7 @@ CONSTR_DIM = 4
 # =========================
 # 成本/權重
 # =========================
-X_EGO_OBSTACLE_COST = 8.#3.
+X_EGO_OBSTACLE_COST = 5.#3.
 X_EGO_COST = 0.
 V_EGO_COST = 0.
 A_EGO_COST = 0.
