@@ -330,11 +330,7 @@ class LongitudinalPlanner:
         else: base_a_target = mpc_a
       self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
 
-    
-    
-    
     final_a_target = base_a_target
-    # (已經刪除冗餘的 is_stopping_target 與 is_final_stop_zone 變數，保持代碼極簡)
 
     # =========================================================================
     # 次世代：流水線狀態機 (老司機全取代版 - 煞停大一統)
@@ -446,6 +442,13 @@ class LongitudinalPlanner:
 
     self.output_a_target = float(np.clip(final_a_target, accel_clip[0], accel_clip[1]))
     self.prev_accel_clip = accel_clip
+
+    # =======================================================
+    # 🔇 智能碰撞警告消除 (Smart FCW Suppression)
+    # =======================================================
+    if self.fcw and has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
+      if self.output_a_target < -0.3 or (v_ego * CV.MS_TO_KPH < 15.0):
+        self.fcw = False
 
   def publish(self, sm, pm):
     plan_send = messaging.new_message('longitudinalPlan')
