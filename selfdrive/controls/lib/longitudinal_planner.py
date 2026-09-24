@@ -351,7 +351,7 @@ class LongitudinalPlanner:
       
       # ⚠️ 關鍵修正 1：奪回 100% 控制權！
       # 低速時 1.0 代表完全不看 MPC，100% 直通您的克隆邏輯。
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0, 35.0], [0.3, 1.0, 1.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0, 35.0], [1.0, 1.0, 1.0, 0.0])
       
       # 1. 🎯 激進空間感：只要有空隙就立刻想補滿
       target_dist = 5.0 + max(0.0, v_ego - 1.0) * 0.35
@@ -363,18 +363,31 @@ class LongitudinalPlanner:
       # 上下限放寬到 +2.0 (急加速) 到 -3.0 (重煞車)
       lead_a_feedforward = float(np.clip(lead_a, -3.0, 2.0))
 
-      # 3. 🚀 極限動力學轉換
-      v_glide = dist_error_eff * 0.4
-      ideal_v_ego = max(0.0, _v_lead + v_glide)
-      v_error = ideal_v_ego - v_ego
-
-      # 係數拉高到 0.85，只要有一點速差，油門/煞車直接給到底
-      if v_error > 0.0:
-        v_comp = float(np.clip(v_error * 0.85, 0.0, 2.0))
-      else:
-        v_comp = float(np.clip(v_error * 0.85, -3.0, 0.0)) 
+      # 3. 🚀 極限動力學轉換 (以「空間距離」為主導的 PD 控制器)
+      # 您的哲學：塞車時看的是距離，不是速度！
       
-      raw_clone_a = lead_a_feedforward + v_comp
+      # 📏 空間權重 (P-Gain)：數字越大，車子對「距離落差」越敏感。
+      # 原本是 0.4，如果您要死咬前車距離，可以大膽拉高到 0.6 甚至 0.8！
+      distance_weight = 0.60  
+      
+      # 💨 速度權重 (D-Gain)：防點頭的緩衝阻尼。
+      # 保持 1.0，確保當距離快補滿時，能利用速差平順地收掉油門與煞車。
+      speed_weight = 1.0      
+
+      # 綜合動能誤差 = (速度差 * 速度權重) + (空間誤差 * 空間權重)
+      # 當 distance_weight 調大，距離在決策中的佔比就會徹底碾壓速度！
+      combined_error = ((_v_lead - v_ego) * speed_weight) + (dist_error_eff * distance_weight)
+
+      # ==========================================
+      # 徹底分成「起步/加速」與「逼近/煞車」兩個獨立宇宙
+      # ==========================================
+      if combined_error > 0.0:
+        # 🟢 起步專區：只要有空隙，立刻補油
+        v_comp = float(np.clip(combined_error * 0.85, 0.0, 2.0))
+      else:
+        # 🔴 煞車專區：只要空間被壓縮，立刻減速
+        # 這裡建議維持 0.85 甚至稍微降到 0.75，確保快煞停時的距離微調是平穩的，不會急頓。
+        v_comp = float(np.clip(combined_error * 0.75, -3.0, 0.0)) 
 
       # 4. 🛑 絕對駐車鎖死 (保持不變)
       if _v_lead < 1.0 and dist_error < 0.5:
