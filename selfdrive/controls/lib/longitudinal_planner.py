@@ -50,7 +50,6 @@ PREBRAKE_MAX_DECEL_BASE = -0.65
 
 LON_MPC_STEP = 0.2
 
-#A_CRUISE_MAX_VALS = [1.25,  1.15,   1.05,   0.8,   0.644,  0.441,  0.198]
 A_CRUISE_MAX_VALS = [2.0,   1.8,    1.5,    0.8,   0.644,  0.441,  0.198]
 A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,  20.0,   25.0,   30.0]
 
@@ -388,6 +387,9 @@ class LongitudinalPlanner:
         # 🔴 煞車專區：只要空間被壓縮，立刻減速
         # 這裡建議維持 0.85 甚至稍微降到 0.75，確保快煞停時的距離微調是平穩的，不會急頓。
         v_comp = float(np.clip(combined_error * 0.75, -3.0, 0.0)) 
+
+      # ⚠️ 修復：將前饋與補償加總，這就是我們最終要輸出的克隆推力！
+      raw_clone_a = lead_a_feedforward + v_comp
 
       # 4. 🛑 絕對駐車鎖死 (保持不變)
       if _v_lead < 1.0 and dist_error < 0.5:
