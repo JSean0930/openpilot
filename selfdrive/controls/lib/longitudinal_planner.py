@@ -240,7 +240,13 @@ class LongitudinalPlanner:
     v_ego = sm['carState'].vEgo
     
     # 🌟 暴力切換：全域強制使用最乾淨的 ACC 傳統基底
-    mode = 'acc'
+    #mode = 'acc'
+    #self.mpc.mode = mode
+    # 🌟 動態切換：低速使用您魔改的 Blended 視覺模式，高速使用純淨 ACC
+    if v_ego * CV.MS_TO_KPH < 35.0:
+      mode = 'blended'
+    else:
+      mode = 'acc'
     self.mpc.mode = mode
 
     lead_a = _get_lead_decel_a(sm)
@@ -316,18 +322,18 @@ class LongitudinalPlanner:
     mpc_a = float(output_a_target_mpc)
     e2e_a = float(sm['modelV2'].action.desiredAcceleration)
 
+    # =======================================================
+    # 🛡️ 動力輸出決策：100% 信任 MPC，拒絕神經網路原始雜訊干擾
+    # =======================================================
+    mpc_a = float(output_a_target_mpc)
+    
+    # 不管是 ACC 還是 Blended，加減速指令唯一指定 MPC 算出的完美解 (mpc_a)
+    base_a_target = mpc_a
+    
     if mode == 'acc':
-      base_a_target = mpc_a
       self.output_should_stop = bool(output_should_stop_mpc)
     else:
-      if has_lead:
-        if mpc_a > 0.0 and e2e_a > -0.1: base_a_target = mpc_a
-        else: base_a_target = min(mpc_a, e2e_a)
-      else:
-        e2e_is_stopping = bool(sm['modelV2'].action.shouldStop) or (e2e_a < -0.4)
-        if e2e_is_stopping: base_a_target = min(mpc_a, e2e_a)
-        elif v_ego < 3.0 and e2e_a > 0.0: base_a_target = min(mpc_a, e2e_a * 1.40)
-        else: base_a_target = mpc_a
+      # 在 Blended 模式下，保留神經網路 (e2e) 的「停車意圖」，確保能看懂紅綠燈煞停
       self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
 
     final_a_target = base_a_target
@@ -350,7 +356,7 @@ class LongitudinalPlanner:
       
       # ⚠️ 關鍵修正 1：奪回 100% 控制權！
       # 低速時 1.0 代表完全不看 MPC，100% 直通您的克隆邏輯。
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0, 35.0], [0.0, 0.0, 0.0, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0, 35.0], [0.0, 0.4, 0.2, 0.0])
       
       # 1. 🎯 激進空間感：只要有空隙就立刻想補滿
       target_dist = 5.0 + max(0.0, v_ego - 1.0) * 0.35
