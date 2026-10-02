@@ -419,18 +419,18 @@ class LongitudinalMpc:
         closing = v_ego - lead.vLead
         
         closing_pull = min(closing, 0.0) 
-        pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.10 + abs(closing_pull) * 0.10, 0.0, 0.20))
+        pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.25 + abs(closing_pull) * 0.25, 0.0, 0.45))
         
-        w_dist = float(np.interp(d_rel, [3.0, 8.0], [0.0, 1.0]))
+        w_dist = float(np.interp(d_rel, [2.0, 5.0], [0.0, 1.0]))
         pursuit_weight = pursuit_intent * w_dist
         
-        brake_intent_close = float(np.interp(closing, [0.1, 0.8], [0.0, 0.5]))
+        brake_intent_close = float(np.interp(closing, [0.25, 0.8], [0.0, 0.5]))
         brake_intent_lead = float(np.interp(lead_a, [-1.5, -0.5], [0.5, 0.0]))
         defense_weight = max(brake_intent_close, brake_intent_lead)
                 
         w_raw = w_base + pursuit_weight - defense_weight
       else:
-        w_raw = w_base
+        w_raw = w_base + 0.2
 
       w = float(np.clip(w_raw, 0.0, 1.0))
 
