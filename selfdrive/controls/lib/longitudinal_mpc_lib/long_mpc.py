@@ -411,7 +411,7 @@ class LongitudinalMpc:
       has_lead = lead.status
 
       v_kph = v_ego * 3.6
-      w_base = float(np.interp(v_kph, [0.0, 10.0, 25.0], [0.0, 0.20, 0.60]))
+      w_base = float(np.interp(v_kph, [0.0, 15.0, 25.0], [0.0, 0.50, 1.0]))
       
       if has_lead:
         lead_a = lead.aLeadK
@@ -432,7 +432,7 @@ class LongitudinalMpc:
       else:
         w_raw = w_base
 
-      w = float(np.clip(w_raw, 0.0, 0.8))
+      w = float(np.clip(w_raw, 0.0, 1.0))
 
       x_mixed = (1.0 - w) * np.min(x_and_cruise, axis=1) + w * np.max(x_and_cruise, axis=1)
       x = x_mixed
