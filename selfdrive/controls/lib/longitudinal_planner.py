@@ -289,7 +289,7 @@ class LongitudinalPlanner:
 
     if force_slow_decel: v_cruise = 0.0
 
-    self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality)
+    self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality, v_ego=v_ego)
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
 
     a_min_mpc, a_max_mpc = float(accel_clip[0]), float(accel_clip[1])
