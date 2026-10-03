@@ -243,7 +243,7 @@ class LongitudinalPlanner:
     #mode = 'acc'
     #self.mpc.mode = mode
     # 🌟 動態切換：低速使用您魔改的 Blended 視覺模式，高速使用純淨 ACC
-    if v_ego * CV.MS_TO_KPH < 35.0:
+    if v_ego * CV.MS_TO_KPH < 30.0:
       mode = 'blended'
     else:
       mode = 'acc'
@@ -352,11 +352,11 @@ class LongitudinalPlanner:
     # 🌟 核心革新：[狀態二] 🚦 塞車克隆模式 (Zero-Latency 零延遲暴走版)
     # 唯一目標：百分之百、零時差複製前車動態
     # ==========================================
-    elif has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
+    elif has_lead and (v_ego * CV.MS_TO_KPH < 30.0):
       
       # ⚠️ 關鍵修正 1：奪回 100% 控制權！
       # 低速時 1.0 代表完全不看 MPC，100% 直通您的克隆邏輯。
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0, 35.0], [0.5, 0.35, 0.2, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0], [0.5, 0.25, 0.0])
       
       # 1. 🎯 激進空間感：只要有空隙就立刻想補滿
       target_dist = 4.0 + max(0.0, v_ego - 1.0) * 0.45
