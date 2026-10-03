@@ -89,7 +89,7 @@ def get_T_FOLLOW(v_ego, personality=log.LongitudinalPersonality.standard):
   elif personality == log.LongitudinalPersonality.standard:
     base = 0.8 + 0.0017 * v_kph #1.0 + 0.0024 * v_kph 
   elif personality == log.LongitudinalPersonality.aggressive:
-    base = 0.5 + 0.0017 * v_kph 
+    base = 0.7 + 0.0017 * v_kph 
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -421,7 +421,7 @@ class LongitudinalMpc:
         closing_pull = min(closing, 0.0) 
         pursuit_intent = float(np.clip(max(lead_a, 0.0) * 0.25 + abs(closing_pull) * 0.25, 0.0, 0.45))
         
-        w_dist = float(np.interp(d_rel, [2.0, 5.0], [0.0, 1.0]))
+        w_dist = float(np.interp(d_rel, [1.0, 3.0], [0.0, 1.0]))
         pursuit_weight = pursuit_intent * w_dist
         
         brake_intent_close = float(np.interp(closing, [0.25, 0.8], [0.0, 0.5]))
