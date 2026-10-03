@@ -356,10 +356,10 @@ class LongitudinalPlanner:
       
       # ⚠️ 關鍵修正 1：奪回 100% 控制權！
       # 低速時 1.0 代表完全不看 MPC，100% 直通您的克隆邏輯。
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0, 35.0], [0.7, 0.4, 0.2, 0.0])
+      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0, 35.0], [0.5, 0.35, 0.2, 0.0])
       
       # 1. 🎯 激進空間感：只要有空隙就立刻想補滿
-      target_dist = 5.0 + max(0.0, v_ego - 1.0) * 0.35
+      target_dist = 4.0 + max(0.0, v_ego - 1.0) * 0.45
       dist_error = _d_rel - target_dist
       dist_error_eff = dist_error * 0.85 if dist_error > 0.0 else dist_error
 
@@ -403,7 +403,7 @@ class LongitudinalPlanner:
         if raw_clone_a > 0.0:
           raw_clone_a = 0.0
         
-        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.35, 0.0])
+        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.25, 0.0])
         raw_clone_a = min(raw_clone_a, brake_hold)
 
       # 5. ⚡ 零濾波直通 (Zero-Filter Passthrough)
