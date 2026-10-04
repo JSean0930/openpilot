@@ -26,7 +26,7 @@ SENS      = 1.50
 
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
 # 🌟 衝突解除 1：放寬低速域的變化率，允許系統瞬間執行「克隆指令」，消除物理遲鈍
-ACCEL_SLEW_RATE_BP = [2.0, 1.5, 1.0, 0.4] 
+ACCEL_SLEW_RATE_BP = [1.5, 1.2, 0.8, 0.4] 
 DECEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
@@ -50,7 +50,7 @@ PREBRAKE_MAX_DECEL_BASE = -0.65
 
 LON_MPC_STEP = 0.2
 
-A_CRUISE_MAX_VALS = [1.3,   1.5,    1.0,    0.8,   0.644,  0.441,  0.198]
+A_CRUISE_MAX_VALS = [1.8,   1.5,    1.0,    0.8,   0.644,  0.441,  0.198]
 A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,  20.0,   25.0,   30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
