@@ -362,8 +362,8 @@ class LongitudinalPlanner:
       w_yield_a = smooth_interp(lead_a, [-1.2, -0.2], [0.0, 1.0])
       
       # 條件 B：我們正在快速逼近 (_closing = v_ego - v_lead > 0)
-      # 如果我們比前車快 1.5 m/s 以上，克隆完全放手
-      w_yield_v = smooth_interp(_closing, [0.3, 1.5], [1.0, 0.0])
+      # 如果我們比前車快 1.0 m/s 以上，克隆完全放手
+      w_yield_v = smooth_interp(_closing, [0.3, 1.0], [1.0, 0.0])
       
       # 最終動態權重：只要前車一慢，或我們逼近過快，克隆權重瞬間平滑降至 0！
       w_clone = base_w_clone * min(w_yield_a, w_yield_v)
