@@ -26,7 +26,7 @@ SENS      = 1.50
 
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
 # 🌟 衝突解除 1：放寬低速域的變化率，允許系統瞬間執行「克隆指令」，消除物理遲鈍
-ACCEL_SLEW_RATE_BP = [1.5, 1.2, 0.8, 0.4] 
+ACCEL_SLEW_RATE_BP = [1.4, 1.1, 0.8, 0.4] 
 DECEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
@@ -347,14 +347,13 @@ class LongitudinalPlanner:
       if hard_stop: self.output_should_stop = True
 
     # ==========================================
-        # ==========================================
     # 🌟 核心革新：[狀態二] 🚦 塞車克隆模式 (平滑追擊 + E2E 絲滑煞停版)
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 30.0):
       
       # 1. 🏎️ 基礎克隆權重 (提高起步積極度)
       # 因為煞車時我們會把權重交還，所以起步時可以大膽給到 0.8 甚至更高，讓車子更跟腳
-      base_w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0], [0.8, 0.4, 0.0])
+      base_w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0], [0.5, 0.3, 0.0])
       
       # 2. 🧠 核心魔法：煞車平順退讓機制 (Yield to E2E)
       # 當我們準備煞車時，平滑地把控制權 100% 交還給 E2E！
