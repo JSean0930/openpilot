@@ -26,7 +26,7 @@ SENS      = 1.50
 
 SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
 # 🌟 衝突解除 1：放寬低速域的變化率，允許系統瞬間執行「克隆指令」，消除物理遲鈍
-ACCEL_SLEW_RATE_BP = [1.4, 1.1, 0.8, 0.4] 
+ACCEL_SLEW_RATE_BP = [1.1, 0.9, 0.7, 0.4] 
 DECEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
