@@ -347,52 +347,43 @@ class LongitudinalPlanner:
       if hard_stop: self.output_should_stop = True
 
     # ==========================================
-    # 🌟 核心革新：[狀態二] 🚦 塞車克隆模式 (Zero-Latency 零延遲暴走版)
-    # 唯一目標：百分之百、零時差複製前車動態
+        # ==========================================
+    # 🌟 核心革新：[狀態二] 🚦 塞車克隆模式 (平滑追擊 + E2E 絲滑煞停版)
     # ==========================================
     elif has_lead and (v_ego * CV.MS_TO_KPH < 30.0):
       
-      # ⚠️ 關鍵修正 1：奪回 100% 控制權！
-      # 低速時 1.0 代表完全不看 MPC，100% 直通您的克隆邏輯。
-      w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0], [0.5, 0.25, 0.0])
+      # 1. 🏎️ 基礎克隆權重 (提高起步積極度)
+      # 因為煞車時我們會把權重交還，所以起步時可以大膽給到 0.8 甚至更高，讓車子更跟腳
+      base_w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0], [0.8, 0.4, 0.0])
       
-      # 1. 🎯 激進空間感：只要有空隙就立刻想補滿
+      # 2. 🧠 核心魔法：煞車平順退讓機制 (Yield to E2E)
+      # 當我們準備煞車時，平滑地把控制權 100% 交還給 E2E！
+      
+      # 條件 A：前車正在踩煞車 (lead_a < 0)
+      w_yield_a = smooth_interp(lead_a, [-1.2, -0.2], [0.0, 1.0])
+      
+      # 條件 B：我們正在快速逼近 (_closing = v_ego - v_lead > 0)
+      # 如果我們比前車快 1.5 m/s 以上，克隆完全放手
+      w_yield_v = smooth_interp(_closing, [0.3, 1.5], [1.0, 0.0])
+      
+      # 最終動態權重：只要前車一慢，或我們逼近過快，克隆權重瞬間平滑降至 0！
+      w_clone = base_w_clone * min(w_yield_a, w_yield_v)
+      
+      # 3. 🎯 溫和的空間追擊 (只負責平滑跟上)
       target_dist = 4.0 + max(0.0, v_ego - 1.0) * 0.45
       dist_error = _d_rel - target_dist
       dist_error_eff = dist_error * 0.85 if dist_error > 0.0 else dist_error
 
-      # 2. 🛡️ 暴力前饋 (100% 照抄，無滑行妥協)
-      # 移除所有 ff_weight 的緩衝邏輯。前車踩多深，我們立刻跟著踩多深！
-      # 上下限放寬到 +2.0 (急加速) 到 -3.0 (重煞車)
-      lead_a_feedforward = float(np.clip(lead_a, -3.0, 2.0))
-
-      # 3. 🚀 極限動力學轉換 (以「空間距離」為主導的 PD 控制器)
-      # 您的哲學：塞車時看的是距離，不是速度！
+      # 柔和的前饋與控制 (不再需要重煞車，因為重煞交給E2E了)
+      lead_a_feedforward = float(np.clip(lead_a, -1.5, 1.5))
       
-      # 📏 空間權重 (P-Gain)：數字越大，車子對「距離落差」越敏感。
-      # 原本是 0.4，如果您要死咬前車距離，可以大膽拉高到 0.6 甚至 0.8！
-      distance_weight = 0.60  
-      
-      # 💨 速度權重 (D-Gain)：防點頭的緩衝阻尼。
-      # 保持 1.0，確保當距離快補滿時，能利用速差平順地收掉油門與煞車。
+      distance_weight = 0.50  
       speed_weight = 1.0      
-
-      # 綜合動能誤差 = (速度差 * 速度權重) + (空間誤差 * 空間權重)
-      # 當 distance_weight 調大，距離在決策中的佔比就會徹底碾壓速度！
       combined_error = ((_v_lead - v_ego) * speed_weight) + (dist_error_eff * distance_weight)
 
-      # ==========================================
-      # 徹底分成「起步/加速」與「逼近/煞車」兩個獨立宇宙
-      # ==========================================
-      if combined_error > 0.0:
-        # 🟢 起步專區：只要有空隙，立刻補油
-        v_comp = float(np.clip(combined_error * 0.85, 0.0, 2.0))
-      else:
-        # 🔴 煞車專區：只要空間被壓縮，立刻減速
-        # 這裡建議維持 0.85 甚至稍微降到 0.75，確保快煞停時的距離微調是平穩的，不會急頓。
-        v_comp = float(np.clip(combined_error * 0.75, -3.0, 0.0)) 
+      # 這裡只需要處理溫和的補償，物理極限交給外部的 accel_clip
+      v_comp = float(np.clip(combined_error * 0.8, -2.0, 1.5)) 
 
-      # ⚠️ 修復：將前饋與補償加總，這就是我們最終要輸出的克隆推力！
       raw_clone_a = lead_a_feedforward + v_comp
 
       # 4. 🛑 絕對駐車鎖死 (保持不變)
@@ -404,11 +395,9 @@ class LongitudinalPlanner:
         brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.25, 0.0])
         raw_clone_a = min(raw_clone_a, brake_hold)
 
-      # 5. ⚡ 零濾波直通 (Zero-Filter Passthrough)
-      # 取代原本的 0.0*老 + 1.0*新，我們直接把算出來的值賦予 ema，
-      # 在數學上徹底消滅濾波器帶來的任何一個 frame 的延遲。
       self.clone_a_ema = raw_clone_a
         
+      # 5. 🤝 最終融合輸出
       final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
       self.smooth_coast_weight = 0.0
 
