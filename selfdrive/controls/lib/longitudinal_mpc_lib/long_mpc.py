@@ -64,7 +64,7 @@ T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 # =========================
 # 物理/限制設定
 # =========================
-COMFORT_BRAKE = 3.0 
+COMFORT_BRAKE = 2.7
 STOP_DISTANCE = 4.0 
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
