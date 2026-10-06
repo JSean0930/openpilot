@@ -374,7 +374,7 @@ class LongitudinalPlanner:
       # 1.5 = 老爺車心態 (極度提早退讓，很遠就開始收油門煞車)
       # 2.5 = 原廠舒適標準 (推薦起點)
       # 3.5 = 跑車級自信 (極度晚煞車，貼很近才開始反應)
-      CLONE_COMFORT_BRAKE = 2.5 
+      CLONE_COMFORT_BRAKE = 1.5 
       
       base_dist = 4.0 
       time_gap_dist = max(0.0, v_ego - 1.0) * 0.45
@@ -391,7 +391,7 @@ class LongitudinalPlanner:
       # =========================================================
 
       dist_error = _d_rel - target_dist
-      dist_error_eff = dist_error * 0.85 if dist_error > 0.0 else dist_error
+      dist_error_eff = dist_error * 0.75 if dist_error > 0.0 else dist_error
 
       # 柔和的前饋與控制 (不再需要重煞車，因為重煞交給E2E了)
       lead_a_feedforward = float(np.clip(lead_a, -1.5, 1.5))
