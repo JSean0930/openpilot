@@ -391,7 +391,7 @@ class LongitudinalPlanner:
       # =========================================================
 
       dist_error = _d_rel - target_dist
-      dist_error_eff = dist_error * 0.75 if dist_error > 0.0 else dist_error
+      dist_error_eff = dist_error * 0.65 if dist_error > 0.0 else dist_error
 
       # 柔和的前饋與控制 (不再需要重煞車，因為重煞交給E2E了)
       lead_a_feedforward = float(np.clip(lead_a, -1.5, 1.5))
