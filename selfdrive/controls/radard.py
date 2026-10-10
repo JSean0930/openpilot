@@ -15,8 +15,8 @@ from openpilot.common.simple_kalman import KF1D
 
 # ====================== 可調參數區（TUNING PARAMS） ======================
 
-LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 5.0, 10.0, 30.0]
-LEAD_ACCEL_TAU_V_EGO_V  = [0.3, 0.45, 1.50, 2.00]
+LEAD_ACCEL_TAU_V_EGO_BP = [0.0, 5.0, 10.0, 16.67, 30.0]
+LEAD_ACCEL_TAU_V_EGO_V  = [0.6, 0.4, 0.8,  1.3,   2.00]
 
 LEAD_ACCEL_CONST_ACCEL_THRESH = 0.25 
 
