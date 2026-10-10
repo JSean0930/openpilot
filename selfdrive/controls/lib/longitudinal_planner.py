@@ -374,7 +374,7 @@ class LongitudinalPlanner:
       # 1.5 = 老爺車心態 (極度提早退讓，很遠就開始收油門煞車)
       # 2.5 = 原廠舒適標準 (推薦起點)
       # 3.5 = 跑車級自信 (極度晚煞車，貼很近才開始反應)
-      CLONE_COMFORT_BRAKE = 1.5 
+      CLONE_COMFORT_BRAKE = 1.0
       
       base_dist = 4.0 
       time_gap_dist = max(0.0, v_ego - 1.0) * 0.45
