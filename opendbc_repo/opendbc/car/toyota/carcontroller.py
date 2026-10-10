@@ -47,8 +47,9 @@ DRIVE = car.CarState.GearShifter.drive
 
 def get_long_tune(CP, params):
   if CP.carFingerprint in TSS2_CAR:
-    kiBP = [2., 5.]
-    kiV = [0.5, 0.25]
+    kiBP = [0.,   3.0,  5.0,  8.0,   15.0,  22.2]
+    # 增益曲線 (kiV):  平滑遞減，消滅折角頓挫
+    kiV  = [1.15, 0.85, 0.50, 0.35,  0.25,  0.15]
   else:
     kiBP = [0., 5., 35.]
     kiV = [3.6, 2.4, 1.5]
