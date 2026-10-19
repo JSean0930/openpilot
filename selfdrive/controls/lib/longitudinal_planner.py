@@ -353,7 +353,7 @@ class LongitudinalPlanner:
       
       # 1. 🏎️ 基礎克隆權重 (提高起步積極度)
       # 因為煞車時我們會把權重交還，所以起步時可以大膽給到 0.8 甚至更高，讓車子更跟腳
-      base_w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0], [0.8, 0.7, 0.6])
+      base_w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0], [0.6, 0.4, 0.25])
       
       # 2. 🧠 核心魔法：煞車平順退讓機制 (Yield to E2E)
       # 當我們準備煞車時，平滑地把控制權 100% 交還給 E2E！
