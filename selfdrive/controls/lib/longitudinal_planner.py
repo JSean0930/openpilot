@@ -1,1 +1,521 @@
+#!/usr/bin/env python3
+import math
+import numpy as np
+
+import cereal.messaging as messaging
+from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
+from openpilot.common.constants import CV
+from openpilot.common.filter_simple import FirstOrderFilter
+from openpilot.common.realtime import DT_MDL
+from openpilot.selfdrive.modeld.constants import ModelConstants
+from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
+from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc
+from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
+from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan
+from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
+from openpilot.common.swaglog import cloudlog
+from dragonpilot.selfdrive.controls.lib.acm import ACM
+from dragonpilot.selfdrive.controls.lib.aem import AEM
+from dragonpilot.selfdrive.controls.lib.dtsc import DTSC
+
+# ====================== 可調參數區（TUNING PARAMS） ======================
+
+EARLYNESS = 1.0   
+STRENGTH  = 0.65
+SENS      = 1.50   
+
+SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
+# 🌟 衝突解除 1：放寬低速域的變化率，允許系統瞬間執行「克隆指令」，消除物理遲鈍
+ACCEL_SLEW_RATE_BP = [1.1, 0.9, 0.7, 0.4] 
+DECEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 1.5]
+
+ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
+
+ALLOW_THROTTLE_THRESHOLD = 0.4
+MIN_ALLOW_THROTTLE_SPEED = 2.5
+
+HARD_MIN_LEAD_DIST_M = 3.0 
+CLOSING_MIN_MPS = 0.6 
+A_REQ_DIST_BUFFER_M = 2.0
+PREBRAKE_DIST_MIN_M = 1.5 
+PREBRAKE_DIST_MAX_M_BASE = 30.0  
+LEAD_SLOW_MPS_BASE = 9.0  
+TTC_START_BASE = 2.2
+TTC_FULL_BASE  = 1.2
+A_REQ_START_BASE = -1.2
+A_REQ_FULL_BASE  = -2.6
+PREBRAKE_MAX_DECEL_BASE = -0.65 
+
+# =======================================================================
+
+LON_MPC_STEP = 0.2
+
+A_CRUISE_MAX_VALS = [1.8,   1.5,    1.0,    0.8,   0.644,  0.441,  0.198]
+A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,  20.0,   25.0,   30.0]
+
+CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
+
+_A_TOTAL_MAX_V = [2.5, 3.8] 
+_A_TOTAL_MAX_BP = [20., 40.]
+
+class DPFlags:
+  ACM = 1
+  AEM = 2
+  DTSC = 2 ** 2
+  pass
+
+def smooth_interp(x, xp, fp):
+  x = np.clip(x, xp[0], xp[-1])
+  idx = np.searchsorted(xp, x, side='right') - 1
+  if idx >= len(xp) - 1: return float(fp[-1])
+  if idx < 0: return float(fp[0])
+  x0, x1 = xp[idx], xp[idx+1]
+  y0, y1 = fp[idx], fp[idx+1]
+  mu = (x - x0) / max((x1 - x0), 1e-6)
+  mu_smooth = (1.0 - math.cos(mu * math.pi)) / 2.0
+  return float(y0 * (1.0 - mu_smooth) + y1 * mu_smooth)
+
+def get_max_accel(v_ego):
+  return smooth_interp(v_ego, A_CRUISE_MAX_BP, A_CRUISE_MAX_VALS)
+
+def get_coast_accel(pitch):
+  return np.sin(pitch) * -5.65 - 0.3
+
+def limit_accel_in_turns(v_ego, angle_steers, a_target, CP):
+  a_total_max = np.interp(v_ego, _A_TOTAL_MAX_BP, _A_TOTAL_MAX_V)
+  a_y = v_ego ** 2 * angle_steers * CV.DEG_TO_RAD / (CP.steerRatio * CP.wheelbase)
+  a_x_allowed = math.sqrt(max(a_total_max ** 2 - a_y ** 2, 0.0))
+  return [a_target[0], min(a_target[1], a_x_allowed)]
+
+def _get_lead_decel_a(sm) -> float:
+  try:
+    if sm['radarState'].leadOne.status:
+      return float(sm['radarState'].leadOne.aLeadK)
+  except Exception:
+    pass
+  return 0.0
+
+def _pick_closest_lead(radarstate):
+  best = None
+  best_d = 1e9
+  for lead in (radarstate.leadOne, radarstate.leadTwo):
+    try:
+      if lead is not None and lead.status and np.isfinite(lead.dRel):
+        if lead.dRel < best_d:
+          best_d = float(lead.dRel)
+          best = lead
+    except Exception:
+      pass
+  return best
+
+def _lead_metrics(v_ego: float, radarstate):
+  lead = _pick_closest_lead(radarstate)
+  if lead is None:
+    return None, float('inf'), v_ego, 0.0, float('inf'), 0.0
+  d_rel = float(getattr(lead, 'dRel', 1e9))
+  v_lead = float(getattr(lead, 'vLead', v_ego))
+  closing = float(v_ego - v_lead)
+  if (not np.isfinite(d_rel)) or d_rel <= 0.0: ttc = 0.0
+  elif closing <= CLOSING_MIN_MPS: ttc = float('inf')
+  else: ttc = d_rel / max(closing, 1e-3)
+  d_eff = max(d_rel - A_REQ_DIST_BUFFER_M, 0.5)
+  if closing <= CLOSING_MIN_MPS: a_req = 0.0
+  else: a_req = - (closing * closing) / (2.0 * d_eff)
+  return lead, d_rel, v_lead, closing, float(ttc), float(a_req)
+
+def _derived_thresholds():
+  ttc_start = TTC_START_BASE + 0.9 * (EARLYNESS - 1.0)
+  ttc_full  = TTC_FULL_BASE  + 0.5 * (EARLYNESS - 1.0)
+  ttc_start = float(np.clip(ttc_start, 1.6, 4.0))
+  ttc_full  = float(np.clip(ttc_full, 0.8, ttc_start - 0.2))
+  a_req_start = A_REQ_START_BASE + 0.7 * (EARLYNESS - 1.0) + 0.5 * (SENS - 1.0)
+  a_req_full  = A_REQ_FULL_BASE  + 0.5 * (EARLYNESS - 1.0) + 0.3 * (SENS - 1.0)
+  a_req_start = float(np.clip(a_req_start, -2.0, -0.3))
+  a_req_full  = float(np.clip(a_req_full,  -4.5, a_req_start - 0.3))
+  dist_max = PREBRAKE_DIST_MAX_M_BASE * (0.9 + 0.35 * (SENS - 1.0)) * (0.95 + 0.25 * (EARLYNESS - 1.0))
+  dist_max = float(np.clip(dist_max, 35.0, 110.0))
+  lead_slow_mps = LEAD_SLOW_MPS_BASE * (0.95 + 0.25 * (SENS - 1.0)) * (0.95 + 0.15 * (EARLYNESS - 1.0))
+  lead_slow_mps = float(np.clip(lead_slow_mps, 6.0, 14.0))
+  prebrake_max_decel = PREBRAKE_MAX_DECEL_BASE * STRENGTH
+  prebrake_max_decel = float(np.clip(prebrake_max_decel, -3.5, -0.8))
+  return ttc_start, ttc_full, a_req_start, a_req_full, dist_max, lead_slow_mps, prebrake_max_decel
+
+def _approach_trigger(v_ego: float, radarstate):
+  ttc_start, ttc_full, a_req_start, a_req_full, dist_max, lead_slow_mps, prebrake_max_decel = _derived_thresholds()
+  lead, d_rel, v_lead, closing, ttc, a_req = _lead_metrics(v_ego, radarstate)
+  if lead is None: return False, (lead, d_rel, v_lead, closing, ttc, a_req)
+  in_dist_window = (np.isfinite(d_rel) and (PREBRAKE_DIST_MIN_M <= d_rel <= dist_max))
+  is_closing = closing > CLOSING_MIN_MPS
+  slow_or_close = (v_lead <= lead_slow_mps) or (d_rel <= 18.0)
+  ttc_trig = np.isfinite(ttc) and (ttc < ttc_start)
+  req_trig = (a_req < a_req_start)
+  trigger = bool(in_dist_window and is_closing and slow_or_close and (ttc_trig or req_trig))
+  return trigger, (lead, d_rel, v_lead, closing, ttc, a_req)
+
+def _prebrake_override(a_target: float, metrics):
+  ttc_start, ttc_full, a_req_start, a_req_full, dist_max, lead_slow_mps, prebrake_max_decel = _derived_thresholds()
+  lead, d_rel, v_lead, closing, ttc, a_req = metrics
+  a_new = float(a_target)
+  if np.isfinite(d_rel) and d_rel < HARD_MIN_LEAD_DIST_M:
+    return float(min(a_new, prebrake_max_decel)), True
+  if closing <= CLOSING_MIN_MPS: return a_new, False
+  w_ttc = 0.0
+  if np.isfinite(ttc) and ttc < ttc_start:
+    w_ttc = (ttc_start - ttc) / max(ttc_start - ttc_full, 1e-3)
+    w_ttc = float(np.clip(w_ttc, 0.0, 1.0))
+  w_req = 0.0
+  if a_req < a_req_start:
+    w_req = (a_req_start - a_req) / max(a_req_start - a_req_full, 1e-3)
+    w_req = float(np.clip(w_req, 0.0, 1.0))
+  w_linear = float(max(w_ttc, w_req))
+  if w_linear <= 0.0: return a_new, False
+  curve_exponent = float(np.clip(2.0 - (closing / 10.0), 1.0, 2.0))
+  w_smooth = w_linear ** curve_exponent 
+  dynamic_max_decel = float(prebrake_max_decel)
+  if w_linear > 0.8:
+    panic_multiplier = 1.3 + max(0.0, (closing - 5.0) * 0.15)
+    dynamic_max_decel = dynamic_max_decel * min(panic_multiplier, 2.5) 
+  a_cmd = (1.0 - w_smooth) * a_new + w_smooth * dynamic_max_decel
+  return float(min(a_new, a_cmd)), False
+
+# 🌟 新增 d_rel 參數傳入，實作動態 Slew Rate
+def _accel_clip_slew_step(dt: float, v_ego: float, lead_a: float, trigger_approach: bool, ttc: float, a_req: float, d_rel: float) -> tuple[float, float]:
+  base_slew_up = smooth_interp(v_ego, SLEW_V_BP, ACCEL_SLEW_RATE_BP)
+  base_slew_down = smooth_interp(v_ego, SLEW_V_BP, DECEL_SLEW_RATE_BP)
+  
+  # =========================================================
+  # 🚀 動態空間放大器 (Dynamic Slew Multiplier)
+  # 物理意義：前車拉得越遠，我們解除油門封印，允許越暴力的加速變化率
+  # =========================================================
+  if np.isfinite(d_rel):
+    # 距離 8m 以內：維持 1.0 倍 (市區走停，保持溫和防頓挫)
+    # 距離拉開到 25m 以上：Slew Rate 放大 2.5 倍 (大腳油門瞬間追擊)
+    dist_mult = smooth_interp(d_rel, [8.0, 25.0], [1.0, 2.5])
+    base_slew_up = float(base_slew_up * dist_mult)
+  else:
+    # 淨空無車狀態：直接給予 2.0 倍的暢通加速率，擺脫起步發呆
+    base_slew_up = float(base_slew_up * 2.0)
+  # =========================================================
+
+  ttc_start, ttc_full, a_req_start, a_req_full, dist_max, lead_slow_mps, prebrake_max_decel = _derived_thresholds()
+  ttc_fast = min(ttc_start + 0.4, 4.0)
+  a_req_fast = min(a_req_start + 0.3, -0.2)
+  fast_rel = bool(trigger_approach or (np.isfinite(ttc) and ttc < ttc_fast) or (a_req < a_req_fast))
+  fast = (lead_a < ACCEL_CLIP_FAST_LEAD_DECEL_THRESH) or fast_rel
+  if fast: base_slew_down = max(base_slew_down, 3.0)
+  
+  delta_up = float(max(0.01, base_slew_up * dt))
+  delta_down = float(max(0.01, base_slew_down * dt))
+  return delta_down, delta_up
+
+class LongitudinalPlanner:
+  def __init__(self, CP, init_v=0.0, init_a=0.0, dt=DT_MDL):
+    self.CP = CP
+    self.mpc = LongitudinalMpc(dt=dt)
+    self.mpc.mode = 'acc'
+    self.fcw = False
+    self.dt = dt
+    self.allow_throttle = True
+    self.a_desired = init_a
+    self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
+    self.prev_accel_clip = [ACCEL_MIN, ACCEL_MAX]
+    self.output_a_target = 0.0
+    self.output_should_stop = False
+    
+    # 時間記憶變數區
+    self.smooth_coast_weight = 0.0
+    self.clone_a_ema = 0.0  
+
+    self.v_desired_trajectory = np.zeros(CONTROL_N)
+    self.a_desired_trajectory = np.zeros(CONTROL_N)
+    self.j_desired_trajectory = np.zeros(CONTROL_N)
+    self.solverExecutionTime = 0.0
+    self.acm = ACM()
+    self.aem = AEM()
+    self.dtsc = DTSC(aggressiveness=0.8)
+
+  @staticmethod
+  def parse_model(model_msg):
+    if (len(model_msg.position.x) == ModelConstants.IDX_N and len(model_msg.velocity.x) == ModelConstants.IDX_N and len(model_msg.acceleration.x) == ModelConstants.IDX_N):
+      x = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.position.x)
+      v = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.velocity.x)
+      a = np.interp(T_IDXS_MPC, ModelConstants.T_IDXS, model_msg.acceleration.x)
+      j = np.zeros(len(T_IDXS_MPC))
+    else:
+      x, v, a, j = np.zeros(len(T_IDXS_MPC)), np.zeros(len(T_IDXS_MPC)), np.zeros(len(T_IDXS_MPC)), np.zeros(len(T_IDXS_MPC))
+    throttle_prob = model_msg.meta.disengagePredictions.gasPressProbs[1] if len(model_msg.meta.disengagePredictions.gasPressProbs) > 1 else 1.0
+    return x, v, a, j, throttle_prob
+
+  def update(self, sm, dp_flags=0):
+    mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
+
+    if dp_flags & DPFlags.AEM:
+      self.aem.update_states(model_msg=sm['modelV2'], radar_msg=sm['radarState'], v_ego=sm['carState'].vEgo)
+      mode = self.aem.get_mode(mode)
+
+    accel_coast = get_coast_accel(sm['carControl'].orientationNED[1]) if len(sm['carControl'].orientationNED) == 3 else ACCEL_MAX
+    v_ego = sm['carState'].vEgo
+    
+    # 🌟 動態切換：低速使用您魔改的 Blended 視覺模式，高速使用純淨 ACC
+    if v_ego * CV.MS_TO_KPH < 30.0:
+      mode = 'blended'
+    else:
+      mode = 'acc'
+    self.mpc.mode = mode
+
+    lead_a = _get_lead_decel_a(sm)
+    trigger_approach, metrics = _approach_trigger(v_ego, sm['radarState'])
+    _lead, _d_rel, _v_lead, _closing, _ttc, _a_req = metrics
+    has_lead = (_lead is not None and np.isfinite(_d_rel))
+
+    v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
+    v_cruise = v_cruise_kph * CV.KPH_TO_MS
+    v_cruise_initialized = sm['carState'].vCruise != V_CRUISE_UNSET
+
+    long_control_off = sm['controlsState'].longControlState == LongCtrlState.off
+    force_slow_decel = sm['controlsState'].forceDecel
+    reset_state = long_control_off if self.CP.openpilotLongitudinalControl else not sm['selfdriveState'].enabled
+    reset_state = reset_state or not v_cruise_initialized
+
+    prev_accel_constraint = not (reset_state or sm['carState'].standstill)
+    accel_clip = [ACCEL_MIN, get_max_accel(v_ego)]
+    
+    if mode == 'acc':
+      steer_angle_without_offset = sm['carState'].steeringAngleDeg - sm['liveParameters'].angleOffsetDeg
+      accel_clip = limit_accel_in_turns(v_ego, steer_angle_without_offset, accel_clip, self.CP)
+
+    if has_lead and v_ego < 3.0 and _v_lead < 1.5 and _d_rel < 8.0:
+      accel_clip[1] = min(accel_clip[1], max(0.2, _v_lead * 0.8))
+
+    if reset_state:
+      self.v_desired_filter.x = v_ego
+      self.a_desired = np.clip(sm['carState'].aEgo, accel_clip[0], accel_clip[1])
+      self.clone_a_ema = sm['carState'].aEgo 
+
+    self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
+    x, v, a, j, throttle_prob = self.parse_model(sm['modelV2'])
+    self.allow_throttle = throttle_prob > ALLOW_THROTTLE_THRESHOLD or v_ego <= MIN_ALLOW_THROTTLE_SPEED
+
+    if not self.allow_throttle:
+      clipped_accel_coast = max(accel_coast, accel_clip[0])
+      clipped_accel_coast_interp = np.interp(v_ego, [MIN_ALLOW_THROTTLE_SPEED, MIN_ALLOW_THROTTLE_SPEED * 2], [accel_clip[1], clipped_accel_coast])
+      accel_clip[1] = min(accel_clip[1], clipped_accel_coast_interp)
+
+    if force_slow_decel: v_cruise = 0.0
+
+    self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality, v_ego=v_ego)
+    self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
+
+    a_min_mpc, a_max_mpc = float(accel_clip[0]), float(accel_clip[1])
+    if dp_flags & DPFlags.DTSC:
+      lead_msg = sm['radarState'].leadOne if sm['radarState'].leadOne.status else None
+      a_min_dtsc, a_max_dtsc = self.dtsc.get_mpc_constraints(sm['modelV2'], v_ego, accel_clip[0], accel_clip[1], v_set_mps=v_cruise, lead_msg=lead_msg)
+      a_min_mpc = np.maximum(a_min_mpc, np.asarray(a_min_dtsc, dtype=float))
+      a_max_mpc = np.minimum(a_max_mpc, np.asarray(a_max_dtsc, dtype=float))
+
+    self.mpc.update(sm['radarState'], v_cruise, x, v, a, j, personality=sm['selfdriveState'].personality, a_min=a_min_mpc, a_max=a_max_mpc)
+    self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
+    self.a_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
+
+    if dp_flags & DPFlags.ACM:
+      user_control = long_control_off if self.CP.openpilotLongitudinalControl else not sm['selfdriveState'].enabled
+      self.acm.update_states(sm['carControl'], sm['radarState'], user_control, v_ego, v_cruise)
+      self.a_desired_trajectory = self.acm.update_a_desired_trajectory(self.a_desired_trajectory)
+
+    self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
+    self.fcw = self.mpc.crash_cnt > 2 and not sm['carState'].standstill
+    if self.fcw: cloudlog.info("FCW triggered")
+
+    a_prev = self.a_desired
+    self.a_desired = float(np.interp(self.dt, CONTROL_N_T_IDX, self.a_desired_trajectory))
+    self.v_desired_filter.x = self.v_desired_filter.x + self.dt * (self.a_desired + a_prev) / 2.0
+
+    action_t = self.CP.longitudinalActuatorDelay + DT_MDL
+    output_a_target_mpc, output_should_stop_mpc = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX, action_t=action_t, vEgoStopping=self.CP.vEgoStopping)
+    
+    mpc_a = float(output_a_target_mpc)
+    e2e_a = float(sm['modelV2'].action.desiredAcceleration)
+
+    # =======================================================
+    # 🛡️ 動力輸出決策：100% 信任 MPC，拒絕神經網路原始雜訊干擾
+    # =======================================================
+    # 不管是 ACC 還是 Blended，加減速指令唯一指定 MPC 算出的完美解 (mpc_a)
+    base_a_target = mpc_a
+    
+    if mode == 'acc':
+      self.output_should_stop = bool(output_should_stop_mpc)
+    else:
+      # 在 Blended 模式下，保留神經網路 (e2e) 的「停車意圖」，確保能看懂紅綠燈煞停
+      self.output_should_stop = bool(sm['modelV2'].action.shouldStop) or bool(output_should_stop_mpc)
+
+    final_a_target = base_a_target
+
+    # =========================================================================
+    # 次世代：流水線狀態機 (老司機全取代版 - 煞停大一統)
+    # =========================================================================
+
+    # [狀態一] 緊急預煞 (防禦底線)
+    # 保留獨立：這是保命符 (AEB)，當雷達偵測到即將碰撞，無條件覆蓋所有舒適邏輯
+    if trigger_approach:
+      final_a_target, hard_stop = _prebrake_override(base_a_target, metrics)
+      if hard_stop: self.output_should_stop = True
+
+    # ==========================================
+    # 🌟 核心革新：[狀態二] 🚦 塞車克隆模式 (平滑追擊 + E2E 絲滑煞停版)
+    # ==========================================
+    elif has_lead and (v_ego * CV.MS_TO_KPH < 30.0):
+      
+      # 1. 🏎️ 基礎克隆權重 (提高起步積極度)
+      # 因為煞車時我們會把權重交還，所以起步時可以大膽給到 0.8 甚至更高，讓車子更跟腳
+      base_w_clone = smooth_interp(v_ego * CV.MS_TO_KPH, [0.0, 15.0, 30.0], [0.6, 0.4, 0.25])
+      
+      # 2. 🧠 核心魔法：煞車平順退讓機制 (Yield to E2E)
+      # 當我們準備煞車時，平滑地把控制權 100% 交還給 E2E！
+      
+      # 條件 A：前車正在踩煞車 (lead_a < 0)
+      w_yield_a = smooth_interp(lead_a, [-1.2, -0.2], [0.0, 1.0])
+      
+      # 條件 B：我們正在快速逼近 (_closing = v_ego - v_lead > 0)
+      # 如果我們比前車快 1.0 m/s 以上，克隆完全放手
+      w_yield_v = smooth_interp(_closing, [0.3, 1.0], [1.0, 0.0])
+      
+      # 最終動態權重：只要前車一慢，或我們逼近過快，克隆權重瞬間平滑降至 0！
+      w_clone = base_w_clone * min(w_yield_a, w_yield_v)
+      
+      # 3. 🎯 物理運動學空間追擊 (導入 COMFORT_BRAKE 機制)
+      # =========================================================
+      # 🔧 調整這裡來控制「煞車時機早晚」：
+      # 1.5 = 老爺車心態 (極度提早退讓，很遠就開始收油門煞車)
+      # 2.5 = 原廠舒適標準 (推薦起點)
+      # 3.5 = 跑車級自信 (極度晚煞車，貼很近才開始反應)
+      CLONE_COMFORT_BRAKE = 0.3
+      
+      base_dist = 4.0 
+      time_gap_dist = max(0.0, v_ego - 1.0) * 0.45
+      
+      # 🧠 核心物理魔法：計算兩車煞停的「距離差」 (v^2 / 2a)
+      ego_stop_dist = (v_ego ** 2) / (2.0 * CLONE_COMFORT_BRAKE)
+      lead_stop_dist = (_v_lead ** 2) / (2.0 * CLONE_COMFORT_BRAKE)
+      
+      # 如果我們需要的煞車距離比前車長，就把這段距離加進護城河裡
+      kinematic_dist = max(0.0, ego_stop_dist - lead_stop_dist)
+      
+      # 最終動態目標距離：靜止底線 + 基礎跟車秒數 + 物理煞車預留區
+      target_dist = base_dist + time_gap_dist + kinematic_dist
+      # =========================================================
+
+      dist_error = _d_rel - target_dist
+      dist_error_eff = dist_error * 0.65 if dist_error > 0.0 else dist_error
+
+      # 柔和的前饋與控制 (不再需要重煞車，因為重煞交給E2E了)
+      lead_a_feedforward = float(np.clip(lead_a, -1.5, 1.5))
+      
+      distance_weight = 0.50  
+      speed_weight = 1.0      
+      combined_error = ((_v_lead - v_ego) * speed_weight) + (dist_error_eff * distance_weight)
+
+      # 這裡只需要處理溫和的補償，物理極限交給外部的 accel_clip
+      v_comp = float(np.clip(combined_error * 0.8, -2.0, 1.5)) 
+
+      raw_clone_a = lead_a_feedforward + v_comp
+
+      # 4. 🛑 絕對駐車鎖死 (保持不變)
+      if _v_lead < 1.0 and dist_error < 0.5:
+        self.output_should_stop = True
+        if raw_clone_a > 0.0:
+          raw_clone_a = 0.0
+        
+        brake_hold = smooth_interp(v_ego, [0.0, 1.0], [-0.25, 0.0])
+        raw_clone_a = min(raw_clone_a, brake_hold)
+
+      self.clone_a_ema = raw_clone_a
+        
+      # 5. 🤝 最終融合輸出
+      final_a_target = (1.0 - w_clone) * base_a_target + w_clone * self.clone_a_ema
+      self.smooth_coast_weight = 0.0
+
+    # ==========================================
+    # [狀態三] 🛣️ 高速巡航與熨斗 (High-Speed Pursuit & Iron)
+    # ==========================================
+    # (接續原有的高速邏輯，不需要改動)
+    elif has_lead:
+      w_speed_iron = smooth_interp(v_ego * CV.MS_TO_KPH, [65.0, 70.0], [0.7, 0.0])
+      
+      w_dist_iron = float(np.clip((_d_rel - 8.0) / 4.0, 0.0, 1.0))
+      w_close_iron = float(np.clip((2.0 - abs(_closing)) / 1.5, 0.0, 1.0))
+      raw_coast_weight = min(w_dist_iron, w_close_iron) * w_speed_iron
+
+      if lead_a < -0.45 or lead_a > 0.5:
+        raw_coast_weight = 0.0
+
+      if raw_coast_weight > self.smooth_coast_weight:
+        self.smooth_coast_weight += 0.02 * (raw_coast_weight - self.smooth_coast_weight)
+      else:
+        self.smooth_coast_weight += 0.15 * (raw_coast_weight - self.smooth_coast_weight)
+
+      if self.smooth_coast_weight > 0.01:
+        natural_coast = float(np.clip(accel_coast * 0.60 - 0.02, -0.25, 0.1))
+        diff = final_a_target - natural_coast
+        zone = 0.45
+        if abs(diff) < zone:
+          ratio = (abs(diff) / zone) ** 2
+          smoothed_a = natural_coast + diff * ratio
+        else:
+          smoothed_a = final_a_target
+        final_a_target = (1.0 - self.smooth_coast_weight) * final_a_target + self.smooth_coast_weight * smoothed_a
+    
+    # [狀態四] 💨 前車消失 / 淨空快速補油
+    elif not has_lead and base_a_target > 0.0 and (v_ego * CV.MS_TO_KPH < 60.0) and v_ego < v_cruise - 1.0:
+      clear_boost = smooth_interp(v_ego, [0.0, 5.0, 15.0], [0.30, 0.20, 0.0])
+      if base_a_target < clear_boost:
+        final_a_target = 0.5 * base_a_target + 0.5 * clear_boost
+      self.smooth_coast_weight *= 0.6
+      self.clone_a_ema = final_a_target
+    else:
+      self.smooth_coast_weight *= 0.6
+      self.clone_a_ema = final_a_target
+
+    # ==========================================
+    # 收尾：Slew Rate 物理變化率限制 (🌟 這裡傳入了 _d_rel)
+    # ==========================================
+    delta_down, delta_up = _accel_clip_slew_step(self.dt, v_ego, lead_a, trigger_approach, _ttc, _a_req, _d_rel)
+    for idx in range(2):
+      accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - delta_down, self.prev_accel_clip[idx] + delta_up)
+
+    self.output_a_target = float(np.clip(final_a_target, accel_clip[0], accel_clip[1]))
+    self.prev_accel_clip = accel_clip
+
+    # =======================================================
+    # 🔇 智能碰撞警告消除 (Smart FCW Suppression)
+    # =======================================================
+    if self.fcw and has_lead and (v_ego * CV.MS_TO_KPH < 35.0):
+      if self.output_a_target < -0.3 or (v_ego * CV.MS_TO_KPH < 15.0):
+        self.fcw = False
+
+  def publish(self, sm, pm):
+    plan_send = messaging.new_message('longitudinalPlan')
+    plan_send.valid = sm.all_checks(service_list=['carState', 'controlsState', 'selfdriveState', 'radarState'])
+
+    longitudinalPlan = plan_send.longitudinalPlan
+    longitudinalPlan.modelMonoTime = sm.logMonoTime['modelV2']
+    longitudinalPlan.processingDelay = (plan_send.logMonoTime / 1e9) - sm.logMonoTime['modelV2']
+    longitudinalPlan.solverExecutionTime = self.mpc.solve_time
+
+    longitudinalPlan.speeds = self.v_desired_trajectory.tolist()
+    longitudinalPlan.accels = self.a_desired_trajectory.tolist()
+    longitudinalPlan.jerks = self.j_desired_trajectory.tolist()
+    longitudinalPlan.hasLead = sm['radarState'].leadOne.status
+
+    try:
+      longitudinalPlan.longitudinalPlanSource = self.mpc.source
+    except Exception:
+      longitudinalPlan.longitudinalPlanSource = 'cruise'
+
+    longitudinalPlan.fcw = self.fcw
+    longitudinalPlan.aTarget = float(self.output_a_target)
+    longitudinalPlan.shouldStop = bool(self.output_should_stop)
+    longitudinalPlan.allowBrake = True
+    longitudinalPlan.allowThrottle = bool(self.allow_throttle)
+
+    pm.send('longitudinalPlan', plan_send)
 
