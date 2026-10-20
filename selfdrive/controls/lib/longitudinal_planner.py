@@ -24,10 +24,10 @@ EARLYNESS = 1.0
 STRENGTH  = 0.65
 SENS      = 1.50   
 
-SLEW_V_BP = [0., 11.1, 19.4, 25.0] 
+SLEW_V_BP = [0., 4.2, 11.1, 19.4, 25.0] 
 # 🌟 衝突解除 1：放寬低速域的變化率，允許系統瞬間執行「克隆指令」，消除物理遲鈍
-ACCEL_SLEW_RATE_BP = [0.9, 0.7, 0.5, 0.3] 
-DECEL_SLEW_RATE_BP = [3.0, 2.5, 2.0, 1.5]
+ACCEL_SLEW_RATE_BP = [0.1, 0.15, 0.35, 0.25, 0.15] 
+DECEL_SLEW_RATE_BP = [3.0, 3.0,  2.5,  2.0,  1.5]
 
 ACCEL_CLIP_FAST_LEAD_DECEL_THRESH = -0.2       
 
@@ -50,8 +50,8 @@ PREBRAKE_MAX_DECEL_BASE = -0.65
 
 LON_MPC_STEP = 0.2
 
-A_CRUISE_MAX_VALS = [1.8,   1.5,    1.0,    0.8,   0.644,  0.441,  0.198]
-A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,  20.0,   25.0,   30.0]
+A_CRUISE_MAX_VALS = [0.2,   0.3,    0.4,    0.7,   0.4,   0.3,   0.15]
+A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,  20.0,  25.0,  30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
@@ -190,7 +190,7 @@ def _accel_clip_slew_step(dt: float, v_ego: float, lead_a: float, trigger_approa
   if np.isfinite(d_rel):
     # 距離 10m 以內：維持 1.0 倍 (市區走停，保持溫和防頓挫)
     # 距離拉開到 25m 以上：Slew Rate 放大 2.5 倍 (大腳油門瞬間追擊)
-    dist_mult = smooth_interp(d_rel, [20.0, 35.0], [1.0, 2.5])
+    dist_mult = smooth_interp(d_rel, [20.0, 35.0], [1.0, 2.0])
     base_slew_up = float(base_slew_up * dist_mult)
   else:
     # 淨空無車狀態：直接給予 2.0 倍的暢通加速率，擺脫起步發呆
