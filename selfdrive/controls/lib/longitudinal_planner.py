@@ -50,7 +50,7 @@ PREBRAKE_MAX_DECEL_BASE = -0.65
 
 LON_MPC_STEP = 0.2
 
-A_CRUISE_MAX_VALS = [0.2,   0.3,    0.4,    0.7,   0.4,   0.3,   0.15]
+A_CRUISE_MAX_VALS = [0.4,   0.3,    0.4,    0.7,   0.4,   0.3,   0.15]
 A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,  20.0,  25.0,  30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
@@ -190,7 +190,7 @@ def _accel_clip_slew_step(dt: float, v_ego: float, lead_a: float, trigger_approa
   if np.isfinite(d_rel):
     # 距離 10m 以內：維持 1.0 倍 (市區走停，保持溫和防頓挫)
     # 距離拉開到 25m 以上：Slew Rate 放大 2.5 倍 (大腳油門瞬間追擊)
-    dist_mult = smooth_interp(d_rel, [20.0, 35.0], [1.0, 2.0])
+    dist_mult = smooth_interp(d_rel, [10.0, 35.0], [1.0, 2.0])
     base_slew_up = float(base_slew_up * dist_mult)
   else:
     # 淨空無車狀態：直接給予 2.0 倍的暢通加速率，擺脫起步發呆
