@@ -18,7 +18,7 @@ from dragonpilot.selfdrive.controls.lib.acm import ACM
 from dragonpilot.selfdrive.controls.lib.aem import AEM
 from dragonpilot.selfdrive.controls.lib.apm import APM
 
-A_CRUISE_MAX_VALS = [0.8,   0.8,    1.0,    0.75,   0.644,  0.441,  0.198]
+A_CRUISE_MAX_VALS = [0.8,   1.0,    1.0,    0.75,   0.644,  0.441,  0.198]
 A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,  20.0,   25.0,   30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
