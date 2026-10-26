@@ -156,7 +156,10 @@ def gen_long_ocp():
   # from an obstacle at every timestep. This obstacle can be a lead car
   # or other object. In e2e mode we can use x_position targets as a cost
   # instead.
-  costs = [((x_obstacle - x_ego) - (desired_dist_comfort)) / (v_ego + 10.),
+  offset_val = fmax(2.78, fmin(15.0, v_ego))
+  v_denom = v_ego + offset_val
+  
+  costs = [((x_obstacle - x_ego) - (desired_dist_comfort)) / v_denom,
            x_ego,
            v_ego,
            a_ego,
@@ -171,7 +174,7 @@ def gen_long_ocp():
   constraints = vertcat(v_ego,
                         (a_ego - a_min),
                         (a_max - a_ego),
-                        ((x_obstacle - x_ego) - lead_danger_factor * (desired_dist_comfort)) / (v_ego + 10.))
+                        ((x_obstacle - x_ego) - lead_danger_factor * (desired_dist_comfort)) / v_denom)
   ocp.model.con_h_expr = constraints
 
   x0 = np.zeros(X_DIM)
