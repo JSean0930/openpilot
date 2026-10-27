@@ -15,7 +15,8 @@ if __name__ == '__main__':  # generating code
 else:
   from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 
-from casadi import SX, vertcat
+#from casadi import SX, vertcat
+from casadi import SX, vertcat, fmax, fmin
 
 MODEL_NAME = 'long'
 LONG_MPC_DIR = os.path.dirname(os.path.abspath(__file__))
