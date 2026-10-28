@@ -1,6 +1,6 @@
 import numpy as np
 
-THROTTLE_ACC_PROB     = 0.6  # gasPressProb >= this -> model wants throttle -> ACC
+THROTTLE_ACC_PROB     = 0.55  # gasPressProb >= this -> model wants throttle -> ACC
 # 原本死板的 0.4 我們不用了，我們在函數內動態生成！
 
 class AEM:
