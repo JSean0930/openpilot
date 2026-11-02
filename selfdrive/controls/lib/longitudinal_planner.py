@@ -18,7 +18,7 @@ from dragonpilot.selfdrive.controls.lib.acm import ACM
 from dragonpilot.selfdrive.controls.lib.aem import AEM
 from dragonpilot.selfdrive.controls.lib.apm import APM
 
-A_CRUISE_MAX_VALS = [0.8,   1.0,    1.0,    0.75,   0.55,   0.35,   0.15]
+A_CRUISE_MAX_VALS = [0.8,   1.1,    1.0,    0.75,   0.55,   0.35,   0.15]
 A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,   20.0,   25.0,   30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
@@ -27,7 +27,7 @@ MIN_ALLOW_THROTTLE_SPEED = 2.5
 
 # Lookup table for turns
 #_A_TOTAL_MAX_V = [1.7, 3.2]
-_A_TOTAL_MAX_V = [2.5, 3.8]
+_A_TOTAL_MAX_V = [2.2, 3.5]
 _A_TOTAL_MAX_BP = [20., 40.]
 
 class DPFlags:
