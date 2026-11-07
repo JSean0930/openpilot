@@ -38,13 +38,10 @@ class AEM:
     # 緩衝區 (Hysteresis) 邏輯判斷
     # ==========================================
     if v_kph < EXPERIMENTAL_ENABLE_SPEED:
-      # 低於 20 km/h -> 準備開啟
       target_state = True
     elif v_kph > EXPERIMENTAL_DISABLE_SPEED:
-      # 高於 25 km/h -> 準備關閉
       target_state = False
     else:
-      # 介於 20 ~ 25 km/h 之間 (緩衝區) -> 保持當下狀態，不作任何改變
       target_state = self._is_experimental_on
 
     # 執行狀態切換 (內部有防護機制，不用擔心頻繁寫入)
