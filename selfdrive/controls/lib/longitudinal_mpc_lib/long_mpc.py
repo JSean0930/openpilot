@@ -157,7 +157,7 @@ def gen_long_ocp():
   # from an obstacle at every timestep. This obstacle can be a lead car
   # or other object. In e2e mode we can use x_position targets as a cost
   # instead.
-  offset_val = fmax(2.78, fmin(15.0, v_ego))
+  offset_val = fmax(2.78, fmin(10.0, v_ego))
   v_denom = v_ego + offset_val
   
   costs = [((x_obstacle - x_ego) - (desired_dist_comfort)) / v_denom,
