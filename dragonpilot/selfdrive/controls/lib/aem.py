@@ -9,7 +9,7 @@ EXPERIMENTAL_ENABLE_SPEED = 60.0   # 低於此速度：開啟 Experimental Mode 
 EXPERIMENTAL_DISABLE_SPEED = 70.0  # 高於此速度：關閉 Experimental Mode (切換至純 ACC)
 
 # [功能 B: 微觀意圖借用]
-THROTTLE_ACC_PROB = 0.55           # 神經網路強烈想加速時 (>= 0.55)，瞬間借用 ACC
+THROTTLE_ACC_PROB = 0.45           # 神經網路強烈想加速時 (>= 0.55)，瞬間借用 ACC
 
 class AEM:
   def __init__(self):
