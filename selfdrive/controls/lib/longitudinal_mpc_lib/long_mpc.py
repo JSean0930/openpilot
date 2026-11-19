@@ -54,7 +54,7 @@ T_IDXS_LST = [index_function(idx, max_val=MAX_T, max_idx=N) for idx in range(N+1
 T_IDXS = np.array(T_IDXS_LST)
 FCW_IDXS = T_IDXS < 5.0
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
-COMFORT_BRAKE = 3.0
+COMFORT_BRAKE = 2.0
 STOP_DISTANCE = 5.0
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
@@ -73,11 +73,11 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
 
 def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
   if personality==log.LongitudinalPersonality.relaxed:
-    return 1.25
+    return 1.2
   elif personality==log.LongitudinalPersonality.standard:
     return 1.1
   elif personality==log.LongitudinalPersonality.aggressive:
-    return 1.25
+    return 1.0
   else:
     raise NotImplementedError("Longitudinal personality not supported")
 
@@ -159,7 +159,7 @@ def gen_long_ocp():
   # instead.
   #offset_val = fmax(0.1, fmin(10.0, v_ego))
   v_thresh = 30.0 / 3.6
-  offset_val = fmin(10.0, fmax(0.1, 0.1 + (v_ego - v_thresh)))
+  offset_val = fmin(10.0, fmax(1.0, 1.0 + (v_ego - v_thresh)))
   v_denom = v_ego + offset_val
   
   costs = [((x_obstacle - x_ego) - (desired_dist_comfort)) / v_denom,
