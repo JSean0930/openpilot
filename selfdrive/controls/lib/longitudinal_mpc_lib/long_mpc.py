@@ -158,7 +158,8 @@ def gen_long_ocp():
   # or other object. In e2e mode we can use x_position targets as a cost
   # instead.
   #offset_val = fmax(0.1, fmin(10.0, v_ego))
-  offset_val = 0.1
+  v_thresh = 30.0 / 3.6
+  offset_val = fmin(10.0, fmax(0.1, 0.1 + (v_ego - v_thresh)))
   v_denom = v_ego + offset_val
   
   costs = [((x_obstacle - x_ego) - (desired_dist_comfort)) / v_denom,
