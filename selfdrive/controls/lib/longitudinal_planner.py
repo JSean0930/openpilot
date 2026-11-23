@@ -30,6 +30,10 @@ MIN_ALLOW_THROTTLE_SPEED = 2.5
 _A_TOTAL_MAX_V = [2.0,  2.7, 3.7]
 _A_TOTAL_MAX_BP = [15., 20., 28.]
 
+# acc/blended 模式 crossfade 速率 (1/s)：0.25 s 進 blended、0.67 s 回 acc
+BLEND_RATE_TO_BLENDED = 4.0
+BLEND_RATE_TO_ACC = 1.5
+
 class DPFlags:
   ACM = 1
   AEM = 2
@@ -70,6 +74,7 @@ class LongitudinalPlanner:
     self.prev_accel_clip = [ACCEL_MIN, ACCEL_MAX]
     self.output_a_target = 0.0
     self.output_should_stop = False
+    self.blend_weight = 0.0
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -178,17 +183,28 @@ class LongitudinalPlanner:
 
     mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
     if dp_flags & DPFlags.AEM:
-      self.aem.update_states(model_msg=sm['modelV2'], radar_msg=sm['radarState'], v_ego=sm['carState'].vEgo)
-      mode = self.aem.get_mode(mode)
+      # AEM 只在 planner 內部決定模式，不寫 ExperimentalMode 參數
+      self.aem.update_states(model_msg=sm['modelV2'], radar_msg=sm['radarState'], v_ego=v_ego)
+      mode = self.aem.get_mode(self.aem.get_base_mode(mode))
 
-    if mode == 'blended':
-      output_a_target = min(output_a_target_e2e, output_a_target_mpc)
-      self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
-      if output_a_target < output_a_target_mpc:
-        self.mpc.source = LongitudinalPlanSource.e2e
+    # acc <-> blended 切換以 crossfade 過渡，避免 a_target 跳階（頓/竄）
+    # 往 blended（可能更多煞車，安全方向）較快，往 acc（放掉 e2e 煞車）較慢
+    blend_target = 1.0 if mode == 'blended' else 0.0
+    if reset_state:
+      self.blend_weight = blend_target
     else:
-      output_a_target = output_a_target_mpc
+      rate = BLEND_RATE_TO_BLENDED if blend_target > self.blend_weight else BLEND_RATE_TO_ACC
+      step = rate * self.dt
+      self.blend_weight = float(np.clip(blend_target, self.blend_weight - step, self.blend_weight + step))
+
+    output_a_target_blended = min(output_a_target_e2e, output_a_target_mpc)
+    output_a_target = output_a_target_mpc + self.blend_weight * (output_a_target_blended - output_a_target_mpc)
+    if self.blend_weight > 0.5:
+      self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
+    else:
       self.output_should_stop = output_should_stop_mpc
+    if self.blend_weight > 0.0 and output_a_target_blended < output_a_target_mpc:
+      self.mpc.source = LongitudinalPlanSource.e2e
 
     for idx in range(2):
       accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
