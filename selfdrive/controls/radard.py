@@ -30,6 +30,12 @@ VISION_A_LEAD_TAU = 0.15
 
 VISION_PROB_LOCK = 0.40   
 VISION_PROB_UNLOCK = 0.20 
+
+# 雷達 dRel 互補濾波：|vRel| (m/s) -> 時間常數 τ (s)
+DREL_FILTER_VREL_BP = [0.0, 2.0, 5.0]
+DREL_FILTER_TAU_V   = [0.25, 0.12, 0.05]
+DREL_SNAP_CLOSER = 1.0   # m，量測比預測近超過此值 → 直接採用量測
+DREL_SNAP_ANY = 4.0      # m，任一方向差距超過此值 → 直接採用量測（換反射點/新目標）
 # =======================================================================
 
 _LEAD_ACCEL_TAU = 0.8 
@@ -82,10 +88,18 @@ class Track:
       self.filtered_dRel = d_rel
       self.dRel_initialized = True
     else:
+      # 互補濾波：以 vRel 積分做預測（高頻），以雷達量測修正（低頻）。
+      # 時間常數依 |vRel| 調整：相對速度大（切入/急煞/快速接近）時幾乎直接信任雷達，
+      # 穩定跟車時只濾掉雜訊。原本固定 95%/85% 的運動學信任 ≈ τ 1.0 s，vRel 有偏差時距離會漂移。
       predicted_dRel = self.filtered_dRel + (v_rel * DT_MDL)
-      trust_kinematic = float(np.interp(v_ego, [0.0, 30.0], [0.95, 0.85]))
-      trust_radar = 1.0 - trust_kinematic
-      self.filtered_dRel = trust_kinematic * predicted_dRel + trust_radar * d_rel
+      innovation = d_rel - predicted_dRel
+      tau = float(np.interp(abs(v_rel), DREL_FILTER_VREL_BP, DREL_FILTER_TAU_V))
+      if innovation < -DREL_SNAP_CLOSER or abs(innovation) > DREL_SNAP_ANY:
+        # 量測顯示「比預測更近」超過門檻（安全方向），或差距大到像換了反射點/目標：直接採用量測
+        self.filtered_dRel = d_rel
+      else:
+        alpha = DT_MDL / (tau + DT_MDL)
+        self.filtered_dRel = predicted_dRel + alpha * innovation
 
     self.dRel = self.filtered_dRel
     self.yRel = y_rel
