@@ -43,6 +43,10 @@ class DesireHelper:
     self.dp_lat_lca_speed = float(dp_lat_lca_speed * CV.MPH_TO_MS)
     self.dp_lat_lca_auto_sec = dp_lat_lca_auto_sec
     self.dp_lat_lca_auto_sec_start = 0.
+    # dp: auto lane change is only armed by a fresh blinker activation. After a completed lane change with the
+    # blinker still on (state goes finishing -> preLaneChange), the old timer start was already expired, which
+    # triggered a second, immediate lane change. Now a further change needs a torque nudge or a blinker re-arm.
+    self.dp_lat_lca_auto_armed = False
 
   @staticmethod
   def get_lane_change_direction(CS):
@@ -56,6 +60,7 @@ class DesireHelper:
     if not lateral_active or self.lane_change_timer > LANE_CHANGE_TIME_MAX:
       self.lane_change_state = LaneChangeState.off
       self.lane_change_direction = LaneChangeDirection.none
+      self.dp_lat_lca_auto_armed = False
     else:
       # LaneChangeState.off
       c_time = time.monotonic()
@@ -64,6 +69,7 @@ class DesireHelper:
         self.lane_change_ll_prob = 1.0
         if self.dp_lat_lca_auto_sec > 0.:
           self.dp_lat_lca_auto_sec_start = c_time
+          self.dp_lat_lca_auto_armed = True
 
         # Initialize lane change direction to prevent UI alert flicker
         self.lane_change_direction = self.get_lane_change_direction(carstate)
@@ -81,7 +87,7 @@ class DesireHelper:
                               ((carstate.rightBlindspot or right_edge_detected) and self.lane_change_direction == LaneChangeDirection.right))
 
         # reset timer
-        if self.dp_lat_lca_auto_sec > 0.:
+        if self.dp_lat_lca_auto_sec > 0. and self.dp_lat_lca_auto_armed:
           if blindspot_detected:
             self.dp_lat_lca_auto_sec_start = c_time
           else:
@@ -93,6 +99,7 @@ class DesireHelper:
           self.lane_change_direction = LaneChangeDirection.none
         elif torque_applied and not blindspot_detected:
           self.lane_change_state = LaneChangeState.laneChangeStarting
+          self.dp_lat_lca_auto_armed = False
 
       # LaneChangeState.laneChangeStarting
       elif self.lane_change_state == LaneChangeState.laneChangeStarting:
