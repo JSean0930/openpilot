@@ -238,6 +238,14 @@ class CarController(CarControllerBase):
         a_ego_future = a_ego_blended + j_ego * future_t
 
         if CC.longActive:
+          # humanlike: while physically stopped the brakes are holding the car, aEgo cannot follow a negative
+          # (brake unwinding) or not-yet-effective positive request, so any integral built here is pure windup:
+          # negative while unwinding the brakes (start hesitation), positive during PCM lag (lurch once moving).
+          # Also drop the integral left over from the stop approach so it cannot delay the next start.
+          at_standstill = CS.out.standstill
+          if at_standstill:
+            self.long_pid.i = 0.0
+
           # constantly slowly unwind integral to recover from large temporary errors
           self.long_pid.i -= ACCEL_PID_UNWIND * float(np.sign(self.long_pid.i))
 
@@ -253,7 +261,7 @@ class CarController(CarControllerBase):
           pcm_accel_cmd = self.long_pid.update(error_future,
                                                speed=CS.out.vEgo,
                                                feedforward=pcm_accel_cmd,
-                                               freeze_integrator=actuators.longControlState != LongCtrlState.pid)
+                                               freeze_integrator=actuators.longControlState != LongCtrlState.pid or at_standstill)
         else:
           self.long_pid.reset()
 
