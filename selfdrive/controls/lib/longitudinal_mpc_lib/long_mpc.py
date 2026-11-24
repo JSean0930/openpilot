@@ -55,7 +55,7 @@ T_IDXS = np.array(T_IDXS_LST)
 FCW_IDXS = T_IDXS < 5.0
 T_DIFFS = np.diff(T_IDXS, prepend=[0.])
 COMFORT_BRAKE = 2.0
-STOP_DISTANCE = 5.0
+STOP_DISTANCE = 3.5  # 停車時與前車距離（原 5.0；使用者手動約 2.6 m）
 CRUISE_MIN_ACCEL = -1.2
 CRUISE_MAX_ACCEL = 1.6
 MIN_X_LEAD_FACTOR = 0.5
@@ -71,15 +71,29 @@ def get_jerk_factor(personality=log.LongitudinalPersonality.standard):
     raise NotImplementedError("Longitudinal personality not supported")
 
 
-def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard):
+# 速度相依跟車時距 (s)，依使用者手動駕駛資料（車距 ≈ 0.63 s·v + 2.1 m）與安全餘裕折衷：
+#   穩態車距 = T·v + STOP_DISTANCE；standard 約為 30 km/h 9.5 m、50 km/h 15 m、70 km/h 22.6 m、100 km/h 31 m
+#   市區比原本（0.9 s + 5 m）近，50 km/h 以上與原本相當
+T_FOLLOW_V_EGO_BP = [0.0, 8.33, 13.89, 19.44, 27.78]  # m/s = 0, 30, 50, 70, 100 km/h
+T_FOLLOW_STANDARD = [0.70, 0.72, 0.83, 0.98, 1.00]
+T_FOLLOW_AGGRESSIVE = [0.62, 0.64, 0.75, 0.90, 0.92]
+T_FOLLOW_RELAXED = [0.95, 0.97, 1.08, 1.23, 1.25]
+# personality 切換時 T_FOLLOW 的最大變化率 (s/s)，避免期望車距瞬間跳變
+T_FOLLOW_MAX_RATE = 0.1
+
+def get_T_FOLLOW(personality=log.LongitudinalPersonality.standard, v_ego=None):
   if personality==log.LongitudinalPersonality.relaxed:
-    return 1.0
+    t_follow_v = T_FOLLOW_RELAXED
   elif personality==log.LongitudinalPersonality.standard:
-    return 0.9
+    t_follow_v = T_FOLLOW_STANDARD
   elif personality==log.LongitudinalPersonality.aggressive:
-    return 0.8
+    t_follow_v = T_FOLLOW_AGGRESSIVE
   else:
     raise NotImplementedError("Longitudinal personality not supported")
+  if v_ego is None:
+    # 無車速資訊（如產生 acados 程式碼的預設參數）：取 0 速時距
+    return t_follow_v[0]
+  return float(np.interp(v_ego, T_FOLLOW_V_EGO_BP, t_follow_v))
 
 def get_stopped_equivalence_factor(v_lead):
   return (v_lead**2) / (2 * COMFORT_BRAKE)
@@ -226,6 +240,7 @@ def gen_long_ocp():
 class LongitudinalMpc:
   def __init__(self, dt=DT_MDL):
     self.dt = dt
+    self.t_follow = None  # 經變化率限制後實際使用的 T_FOLLOW（不隨 solver reset 清除）
     self.solver = AcadosOcpSolverCython(MODEL_NAME, ACADOS_SOLVER_TYPE, N)
     self.reset()
     self.source = LongitudinalPlanSource.cruise
@@ -324,8 +339,14 @@ class LongitudinalMpc:
     return lead_xv
 
   def update(self, radarstate, v_cruise, personality=log.LongitudinalPersonality.standard):
-    t_follow = get_T_FOLLOW(personality)
     v_ego = self.x0[1]
+    t_follow_target = get_T_FOLLOW(personality, v_ego)
+    if self.t_follow is None:
+      self.t_follow = t_follow_target
+    else:
+      max_step = T_FOLLOW_MAX_RATE * self.dt
+      self.t_follow = float(np.clip(t_follow_target, self.t_follow - max_step, self.t_follow + max_step))
+    t_follow = self.t_follow
     self.status = radarstate.leadOne.status or radarstate.leadTwo.status
 
     lead_xv_0 = self.process_lead(radarstate.leadOne)

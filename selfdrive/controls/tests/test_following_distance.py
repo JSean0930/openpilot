@@ -10,7 +10,7 @@ from openpilot.selfdrive.test.longitudinal_maneuvers.maneuver import Maneuver
 
 def desired_follow_distance(v_ego, v_lead, t_follow=None):
   if t_follow is None:
-    t_follow = get_T_FOLLOW()
+    t_follow = get_T_FOLLOW(v_ego=v_ego)
   return get_safe_obstacle_distance(v_ego, t_follow) - get_stopped_equivalence_factor(v_lead)
 
 def run_following_distance_simulation(v_lead, t_end=100.0, e2e=False, personality=0):
@@ -40,7 +40,7 @@ class TestFollowingDistance:
   def test_following_distance(self):
     v_lead = float(self.speed)
     simulation_steady_state = run_following_distance_simulation(v_lead, e2e=self.e2e, personality=self.personality)
-    correct_steady_state = desired_follow_distance(v_lead, v_lead, get_T_FOLLOW(self.personality))
+    correct_steady_state = desired_follow_distance(v_lead, v_lead, get_T_FOLLOW(self.personality, v_lead))
     err_ratio = 0.2 if self.e2e else 0.1
     abs_err_margin = 0.5 if v_lead > 0.0 else 1.15
     assert simulation_steady_state == pytest.approx(correct_steady_state, abs=err_ratio * correct_steady_state + abs_err_margin)
