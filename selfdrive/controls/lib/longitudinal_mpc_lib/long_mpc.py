@@ -158,8 +158,12 @@ def gen_long_ocp():
   # or other object. In e2e mode we can use x_position targets as a cost
   # instead.
   #offset_val = fmax(0.1, fmin(10.0, v_ego))
+  # 車距誤差的正規化分母（上游固定為 v_ego + 10）。原本低速下限 1.0 讓 0~30 km/h 的
+  # 車距成本比上游重 10~100 倍 → 停走時對每一公尺誤差都猛修正（頓、竄）。下限改 5.0：
+  # 靜止時約為上游 4 倍、48 km/h 起與上游相同，仍保留「低速貼得緊一點」的意圖。
   v_thresh = 30.0 / 3.6
-  offset_val = fmin(10.0, fmax(1.0, 1.0 + (v_ego - v_thresh)))
+  offset_min = 5.0
+  offset_val = fmin(10.0, fmax(offset_min, offset_min + (v_ego - v_thresh)))
   v_denom = v_ego + offset_val
   
   costs = [((x_obstacle - x_ego) - (desired_dist_comfort)) / v_denom,
