@@ -22,6 +22,9 @@ VisualAlert = structs.CarControl.HUDControl.VisualAlert
 ACCEL_WINDUP_LIMIT = 4.0 * DT_CTRL * 3  # m/s^2 / frame
 ACCEL_WINDDOWN_LIMIT = -4.0 * DT_CTRL * 3  # m/s^2 / frame
 ACCEL_PID_UNWIND = 0.03 * DT_CTRL * 3  # m/s^2 / frame
+# humanlike: while physically stopped, releasing the standstill brake hold (negative part of the request only)
+# produces no vehicle jerk, so unwind it faster. -2.0 (stopAccel) -> 0 takes ~0.2 s instead of ~0.5 s.
+ACCEL_STANDSTILL_UNWIND_LIMIT = 10.0 * DT_CTRL * 3  # m/s^2 / frame
 
 MAX_PITCH_COMPENSATION = 1.5  # m/s^2
 
@@ -217,7 +220,12 @@ class CarController(CarControllerBase):
         # internal PCM gas command can get stuck unwinding from negative accel so we apply a generous rate limit
         pcm_accel_cmd = actuators.accel
         if CC.longActive:
-          pcm_accel_cmd = rate_limit(pcm_accel_cmd, self.prev_accel, ACCEL_WINDDOWN_LIMIT, ACCEL_WINDUP_LIMIT)
+          requested_accel = pcm_accel_cmd
+          pcm_accel_cmd = rate_limit(requested_accel, self.prev_accel, ACCEL_WINDDOWN_LIMIT, ACCEL_WINDUP_LIMIT)
+          if CS.out.standstill and not stopping and self.prev_accel < 0. and requested_accel > self.prev_accel:
+            # faster brake release, capped at 0 so the positive (gas) side keeps the normal jerk limit
+            fast_release = min(rate_limit(requested_accel, self.prev_accel, ACCEL_WINDDOWN_LIMIT, ACCEL_STANDSTILL_UNWIND_LIMIT), 0.)
+            pcm_accel_cmd = max(pcm_accel_cmd, fast_release)
         self.prev_accel = pcm_accel_cmd
 
         # calculate amount of acceleration PCM should apply to reach target, given pitch.
