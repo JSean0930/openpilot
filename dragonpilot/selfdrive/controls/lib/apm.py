@@ -38,15 +38,7 @@ class APM:
       if v_ego > APM_RELAXED_ACTIVATE_SPEED:
         self._relaxed_active = True
 
-    # 3. 輸出最終的駕駛風格 (Personality)
-    # 高速域：進入 Relaxed (慵懶/長車距)
-    if self._relaxed_active:
-      return log.LongitudinalPersonality.relaxed
-      
-    # 低速域：進入 Aggressive (積極/短車距)
-    if self._aggressive_active:
-      return log.LongitudinalPersonality.aggressive
-
-    # 中速域 (約 50 ~ 85 km/h)：交還控制權，使用車機螢幕上設定的預設風格
+    # 2026-11-24：跟車時距已改為依車速查表（long_mpc.py T_FOLLOW_*），市區近、高速遠已涵蓋，
+    # 不再切換 personality：低速切 aggressive 會把 jerk 成本減半，造成走走停停時煞車又急又重；
+    # 高速切 relaxed 會讓車距比原本遠。狀態機保留以便日後需要時恢復。
     return personality
-
