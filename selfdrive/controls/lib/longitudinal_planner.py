@@ -18,7 +18,8 @@ from dragonpilot.selfdrive.controls.lib.acm import ACM
 from dragonpilot.selfdrive.controls.lib.aem import AEM
 from dragonpilot.selfdrive.controls.lib.apm import APM
 
-A_CRUISE_MAX_VALS = [1.3,   1.2,    1.0,    0.75,   0.55,   0.35,   0.15]
+# 低速上限依你的起步數據調高（原 1.3/1.2/1.0）：前車起步 1.5~2.2 m/s²，OP 卡在 1.3 跟不上；車端 ACCEL_MAX 1.5 仍會再夾
+A_CRUISE_MAX_VALS = [1.6,   1.5,    1.2,    0.75,   0.55,   0.35,   0.15]
 A_CRUISE_MAX_BP   = [0.0,   2.78,   8.33,   15.0,   20.0,   25.0,   30.0]
 
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
