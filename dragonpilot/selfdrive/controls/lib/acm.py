@@ -14,148 +14,148 @@ for non-commercial purposes only, subject to the following conditions:
   the copyright holder.
 
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+ACM v2（人性滑行）— 依駕駛者手動資料重寫，2026-11
+
+舊版的兩個問題：
+1. self.enabled 從未被設成 True，模組永遠不作用。
+2. 它只改 a_desired_trajectory；但 get_accel_from_plan 的輸出是
+   2*(v_target - v_now)/t - a_now，抬高 a_now 反而讓煞車更重。
+
+新版直接作用在 MPC 的輸出加速度上（與 e2e 混合之前），只會「放軟」：
+- 不會比 MPC 多煞，也不會比 MPC 多加速。
+- e2e（紅燈、停止線等）的煞車不受影響，因為 planner 之後仍取 min(e2e, mpc)。
+
+兩種情境：
+A. 接近較慢的前車：依物理算出「等速減速剛好在使用者習慣車距前追平」所需的減速度，
+   並且至少用自然滑行的減速度。MPC 要的煞車比這個重時才放軟。
+   接近中且 TTC < LIFT_OFF_TTC 時不再加油（收油）。
+B. 稍微超過設定速度、前方沒有要處理的車：只用自然滑行，不額外踩煞車。
 """
 
-import time
+import math
 import numpy as np
-from openpilot.common.swaglog import cloudlog
 
-# Configuration parameters
-SPEED_RATIO = 0.98  # Must be within 2% over cruise speed
-TTC_THRESHOLD = 3.0  # seconds - disable ACM when lead is within this time
+# ---- 使用者手動資料（routes 53~5b，手動 113 分）----
+# 放油門、不踩煞車時的自然減速度 P50（車速 m/s）
+COAST_BP = [0.0, 8.3, 11.1, 30.0]
+COAST_V = [-0.10, -0.15, -0.32, -0.40]
+# 使用者穩態跟車：車距 ≈ 0.68 s × 車速 + 1.3 m；放軟時最多讓車距縮到這裡（另加 0.7 m 餘裕）
+USER_T_FOLLOW = 0.68
+USER_D0 = 2.0
+# 使用者在 TTC 中位數 10.7 s 放油門
+LIFT_OFF_TTC = 11.0
 
-# Emergency thresholds - IMMEDIATELY disable ACM
-EMERGENCY_TTC = 2.0  # seconds - emergency situation
-EMERGENCY_RELATIVE_SPEED = 10.0  # m/s (~36 km/h closing speed - only for rapid closing)
-EMERGENCY_DECEL_THRESHOLD = -1.5  # m/s² - if MPC wants this much braking, emergency disable
+# ---- 安全條件：任一不成立就不介入 ----
+MIN_V_EGO = 5.0           # m/s，18 km/h 以下交給 MPC（停走已另外調過）
+MIN_V_LEAD = 3.0          # m/s，前車靜止或幾乎靜止交給 MPC
+MIN_TTC = 4.0             # s，使用者 TTC 3~5 s 時 67% 已在踩煞車
+MIN_A_LEAD = -1.0         # m/s²，前車在煞車就不放軟
+MAX_MPC_BRAKE = -1.5      # m/s²，MPC 要比這個更重的煞車就不放軟
+MIN_GAP_MARGIN = 1.0      # m，離使用者習慣車距少於這個就不放軟
+BRAKE_MARGIN = 1.1        # 物理需求的減速度再乘上這個倍數
+OVER_CRUISE_MAX = 2.5     # m/s，超過設定速度 9 km/h 以內才只用滑行
 
-# Safety cooldown after lead detection
-LEAD_COOLDOWN_TIME = 0.5  # seconds - brief cooldown to handle sensor glitches
+# 介入權重的變化率 (1/s)：進入 0.5 s、退出 0.2 s（退出＝恢復 MPC 煞車，要快）
+RATE_IN = 2.0
+RATE_OUT = 5.0
 
-# Speed-based distance scaling - more practical for real traffic
-SPEED_BP = [0., 10., 20., 30.]  # m/s (0, 36, 72, 108 km/h)
-MIN_DIST_V = [15., 20., 25., 30.]  # meters - closer to original 25m baseline
+SOURCE_LEAD = ('lead0', 'lead1')
+SOURCE_CRUISE = 'cruise'
+
+
+def coast_accel(v_ego):
+  return float(np.interp(v_ego, COAST_BP, COAST_V))
+
+
+def pitch_coast_accel(pitch):
+  # 與 longitudinal_planner.get_coast_accel 相同的擬合；上坡更負、下坡較不負
+  return math.sin(pitch) * -5.65 - 0.3
 
 
 class ACM:
-  def __init__(self):
-    self.enabled = False
-    self._is_speed_over_cruise = False
-    self._has_lead = False
-    self._active_prev = False
-    self._last_lead_time = 0.0  # Track when we last saw a lead
-
+  def __init__(self, dt=0.05):
+    self.dt = dt
+    self.weight = 0.0
     self.active = False
-    self.just_disabled = False
+    self.mode = ''        # 'lead' / 'cruise' / ''
+    self.a_floor = 0.0
+    self.a_ceil = 0.0
+    self.a_soft_last = 0.0
 
-  def _check_emergency_conditions(self, lead, v_ego, current_time):
-    """Check for emergency conditions that require immediate ACM disable."""
-    if not lead or not lead.status:
-      return False
+  def reset(self):
+    self.weight = 0.0
+    self.active = False
+    self.mode = ''
 
-    self.lead_ttc = lead.dRel / max(v_ego, 0.1)
-    relative_speed = v_ego - lead.vLead  # Positive = closing
+  def _lead_target(self, a_mpc, v_ego, lead):
+    """情境 A：回傳 (floor, ceil) 或 None。"""
+    if lead is None or not lead.status:
+      return None
+    d, v_lead, a_lead = lead.dRel, lead.vLead, lead.aLeadK
+    if v_ego < MIN_V_EGO or v_lead < MIN_V_LEAD or a_lead < MIN_A_LEAD or a_mpc < MAX_MPC_BRAKE:
+      return None
+    v_rel = v_lead - v_ego                     # < 0 表示正在接近
+    gap = d - (USER_T_FOLLOW * v_lead + USER_D0)
+    if gap < MIN_GAP_MARGIN:
+      return None
 
-    # Speed-adaptive minimum distance
-    min_dist_for_speed = np.interp(v_ego, SPEED_BP, MIN_DIST_V)
-
-    # Emergency disable conditions - only for truly dangerous situations
-    # Require BOTH close distance AND (fast closing OR very short TTC)
-    if lead.dRel < min_dist_for_speed and (
-        self.lead_ttc < EMERGENCY_TTC or
-        relative_speed > EMERGENCY_RELATIVE_SPEED):
-
-      self._last_lead_time = current_time
-      if self.active:  # Only log if we're actually disabling
-        cloudlog.warning(f"ACM emergency disable: dRel={lead.dRel:.1f}m, TTC={self.lead_ttc:.1f}s, relSpeed={relative_speed:.1f}m/s")
-      return True
-
-    return False
-
-  def _update_lead_status(self, lead, v_ego, current_time):
-    """Update lead vehicle detection status."""
-    if lead and lead.status:
-      self.lead_ttc = lead.dRel / max(v_ego, 0.1)
-
-      if self.lead_ttc < TTC_THRESHOLD:
-        self._has_lead = True
-        self._last_lead_time = current_time
-      else:
-        self._has_lead = False
+    a_lead_safe = min(a_lead, 0.0)             # 不指望前車會加速
+    if v_rel < -0.1:
+      ttc = d / -v_rel
+      if ttc < MIN_TTC:
+        return None
+      b_req = v_rel ** 2 / (2.0 * gap)
+      floor = min(coast_accel(v_ego), a_lead_safe - BRAKE_MARGIN * b_req)
+      ceil = 0.0 if (ttc < LIFT_OFF_TTC and a_lead < 0.3) else math.inf
     else:
-      self._has_lead = False
-      self.lead_ttc = float('inf')
+      # 沒在接近：拉開距離只用滑行
+      floor = coast_accel(v_ego) + a_lead_safe
+      ceil = math.inf
+    return floor, ceil
 
-  def _check_cooldown(self, current_time):
-    """Check if we're still in cooldown period after lead detection."""
-    time_since_lead = current_time - self._last_lead_time
-    return time_since_lead < LEAD_COOLDOWN_TIME
+  def _cruise_target(self, v_ego, v_cruise, lead, pitch):
+    """情境 B：稍微超過設定速度時只滑行。"""
+    if v_ego < MIN_V_EGO or not (v_cruise < v_ego < v_cruise + OVER_CRUISE_MAX):
+      return None
+    if lead is not None and lead.status:
+      v_rel = lead.vLead - v_ego
+      if v_rel < -0.1 and lead.dRel / -v_rel < LIFT_OFF_TTC:
+        return None
+    floor = min(pitch_coast_accel(pitch), 0.0)
+    return floor, math.inf
 
-  def _should_activate(self, user_ctrl_lon, v_ego, v_cruise, in_cooldown):
-    """Determine if ACM should be active based on all conditions."""
-    self._is_speed_over_cruise = v_ego > (v_cruise * SPEED_RATIO)
-
-    return (not user_ctrl_lon and
-            not self._has_lead and
-            not in_cooldown and
-            self._is_speed_over_cruise)
-
-  def update_states(self, cc, rs, user_ctrl_lon, v_ego, v_cruise):
-    """Update ACM state with multiple safety checks."""
-    # Basic validation
-    if not self.enabled or len(cc.orientationNED) != 3:
+  def update(self, a_mpc, v_ego, v_cruise, lead, source, pitch=0.0):
+    """回傳放軟後的 MPC 加速度。只會介於 a_mpc 與 a_mpc 的較溫和值之間。"""
+    target = None
+    mode = ''
+    if a_mpc < MAX_MPC_BRAKE:
+      # MPC 要重煞：立刻完全交還
+      self.weight = 0.0
+      self.mode = ''
       self.active = False
-      return
+      return float(a_mpc)
+    if source in SOURCE_LEAD:
+      target = self._lead_target(a_mpc, v_ego, lead)
+      mode = 'lead'
+    elif source == SOURCE_CRUISE:
+      target = self._cruise_target(v_ego, v_cruise, lead, pitch)
+      mode = 'cruise'
 
-    current_time = time.monotonic()
-    lead = rs.leadOne
+    if target is None:
+      # 退出：從上一次的放軟值在 1/RATE_OUT 秒內回到 MPC
+      self.weight = max(0.0, self.weight - RATE_OUT * self.dt)
+      # 夾在 0 與 a_mpc 之間：退出途中也不會比 MPC 多煞或多加速
+      a_soft = float(min(max(self.a_soft_last, min(a_mpc, 0.0)), max(a_mpc, 0.0)))
+      if self.weight == 0.0:
+        self.mode = ''
+    else:
+      self.a_floor, self.a_ceil = target
+      self.weight = min(1.0, self.weight + RATE_IN * self.dt)
+      self.mode = mode
+      # floor <= 0、ceil 為 0 或 inf，所以 a_mpc <= 0 時結果仍 <= 0（不會變成加速）
+      a_soft = min(max(a_mpc, self.a_floor), self.a_ceil)
+      self.a_soft_last = a_soft
 
-    # Check emergency conditions first (highest priority)
-    if self._check_emergency_conditions(lead, v_ego, current_time):
-      self.active = False
-      self._active_prev = self.active
-      return
-
-    # Update normal lead status
-    self._update_lead_status(lead, v_ego, current_time)
-
-    # Check cooldown period
-    in_cooldown = self._check_cooldown(current_time)
-
-    # Determine if ACM should be active
-    self.active = self._should_activate(user_ctrl_lon, v_ego, v_cruise, in_cooldown)
-
-    # Track state changes for logging
-    self.just_disabled = self._active_prev and not self.active
-    if self.active and not self._active_prev:
-      cloudlog.info(f"ACM activated: v_ego={v_ego*3.6:.1f} km/h, v_cruise={v_cruise*3.6:.1f} km/h")
-    elif self.just_disabled:
-      cloudlog.info("ACM deactivated")
-
-    self._active_prev = self.active
-
-  def update_a_desired_trajectory(self, a_desired_trajectory):
-    """
-    Modify acceleration trajectory to allow coasting.
-    SAFETY: Check for any strong braking request and abort.
-    """
-    if not self.active:
-      return a_desired_trajectory
-
-    # SAFETY CHECK: If MPC wants significant braking, DON'T suppress it
-    min_accel = np.min(a_desired_trajectory)
-    if min_accel < EMERGENCY_DECEL_THRESHOLD:
-      cloudlog.warning(f"ACM aborting: MPC requested {min_accel:.2f} m/s² braking")
-      self.active = False  # Immediately deactivate
-      return a_desired_trajectory  # Return unmodified trajectory
-
-    # Only suppress very mild braking (> -1.0 m/s²)
-    # This allows coasting but preserves any meaningful braking
-    modified_trajectory = np.copy(a_desired_trajectory)
-    for i in range(len(modified_trajectory)):
-      if -1.0 < modified_trajectory[i] < 0:
-        # Only suppress very gentle braking for cruise control
-        modified_trajectory[i] = 0.0
-      # Any braking stronger than -1.0 m/s² is preserved!
-
-    return modified_trajectory
+    self.active = target is not None
+    return float(a_mpc + self.weight * (a_soft - a_mpc))

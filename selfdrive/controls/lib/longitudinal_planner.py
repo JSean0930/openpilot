@@ -79,7 +79,7 @@ class LongitudinalPlanner:
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
-    self.acm = ACM()
+    self.acm = ACM(DT_MDL)
     self.aem = AEM()
     self.apm = APM()
 
@@ -158,11 +158,6 @@ class LongitudinalPlanner:
 
     self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
-    # ACM - Adaptive Coasting Module
-    if dp_flags & DPFlags.ACM:
-      user_control = long_control_off if self.CP.openpilotLongitudinalControl else not sm['selfdriveState'].enabled
-      self.acm.update_states(sm['carControl'], sm['radarState'], user_control, v_ego, v_cruise)
-      self.a_desired_trajectory = self.acm.update_a_desired_trajectory(self.a_desired_trajectory)
     self.j_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC[:-1], self.mpc.j_solution)
 
     # TODO counter is only needed because radar is glitchy, remove once radar is gone
@@ -178,6 +173,17 @@ class LongitudinalPlanner:
     action_t =  self.CP.longitudinalActuatorDelay + DT_MDL
     output_a_target_mpc, output_should_stop_mpc = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
                                                                         action_t=action_t, vEgoStopping=self.CP.vEgoStopping)
+    # ACM v2（人性滑行）：只放軟 MPC 的輸出，e2e 的煞車仍由下方 min(e2e, mpc) 保留
+    if dp_flags & DPFlags.ACM and not reset_state:
+      src = self.mpc.source
+      src_name = ('lead0' if src == LongitudinalPlanSource.lead0 else
+                  'lead1' if src == LongitudinalPlanSource.lead1 else
+                  'cruise' if src == LongitudinalPlanSource.cruise else '')
+      orientation = sm['carControl'].orientationNED
+      pitch = orientation[1] if len(orientation) == 3 else 0.0
+      output_a_target_mpc = self.acm.update(output_a_target_mpc, v_ego, v_cruise, sm['radarState'].leadOne, src_name, pitch)
+    else:
+      self.acm.reset()
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
