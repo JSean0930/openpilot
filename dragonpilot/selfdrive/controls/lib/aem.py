@@ -20,7 +20,7 @@ EXPERIMENTAL_ENABLE_SPEED = 60.0   # 低於此速度：基礎模式 blended
 EXPERIMENTAL_DISABLE_SPEED = 70.0  # 高於此速度：基礎模式 acc
 
 # [功能 B: 微觀意圖借用]
-THROTTLE_ACC_PROB = 0.45           # blended 基礎：gasPressProb >= 此值 → 借用 ACC
+THROTTLE_ACC_PROB = 0.25           # blended 基礎：gasPressProb >= 此值 → 借用 ACC
 THROTTLE_BLENDED_PROB_BP = [0.0, 5.0]    # m/s
 THROTTLE_BLENDED_PROB_V = [0.30, 0.50]   # acc 基礎：gasPressProb <= 此值 → 借用 BLENDED
 THROTTLE_BLENDED_PROB = THROTTLE_BLENDED_PROB_V[0]  # 相容舊名稱（靜止時門檻）
