@@ -2,7 +2,7 @@ import itertools
 import random
 import types
 
-from dragonpilot.selfdrive.controls.lib.acm import ACM, MAX_MPC_BRAKE, USER_T_FOLLOW, USER_D0, coast_accel
+from dragonpilot.selfdrive.controls.lib.acm import ACM, MAX_MPC_BRAKE, USER_T_FOLLOW, USER_D0, GAP_RAMP_LO, coast_accel
 
 
 def lead(d, v_lead, a_lead=0.0, status=True):
@@ -119,5 +119,28 @@ def test_closed_loop_gap_never_below_user_gap():
       a += (hist.pop(0) - a) * 0.3
       v = max(0.0, v + a * 0.05)
       d += (vl - v) * 0.05
-      min_margin = min(min_margin, d - (USER_T_FOLLOW * vl + USER_D0 - 1.0))
+      min_margin = min(min_margin, d - (USER_T_FOLLOW * vl + USER_D0))
     assert min_margin > 0.0, (v0, vl, d0, min_margin)
+
+
+def test_lift_off_even_when_mpc_source_is_cruise():
+  acm = ACM()
+  # 1127 試車 0000062 @10:41：前車 84 m、接近 7.9 m/s（TTC 10.6 s）、前車在減速
+  assert settle(acm, 0.8, 12.2, lead(83.5, 4.4, a_lead=-0.75), 'cruise', v_cruise=25.0) == 0.0
+
+
+def test_no_softening_near_user_gap():
+  acm = ACM()
+  v_lead = 5.7
+  d = USER_T_FOLLOW * v_lead + USER_D0 + GAP_RAMP_LO - 0.1
+  assert settle(acm, -0.9, 6.6, lead(d, v_lead)) == -0.9
+
+
+def test_softening_grows_with_gap_margin():
+  outs = []
+  for extra in [3.0, 5.0, 7.0, 12.0]:
+    acm = ACM()
+    v_lead = 11.0
+    d = USER_T_FOLLOW * v_lead + USER_D0 + extra
+    outs.append(settle(acm, -1.0, 12.0, lead(d, v_lead)))
+  assert outs == sorted(outs) and outs[0] > -1.0

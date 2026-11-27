@@ -52,7 +52,10 @@ MIN_V_LEAD = 3.0          # m/s，前車靜止或幾乎靜止交給 MPC
 MIN_TTC = 4.0             # s，使用者 TTC 3~5 s 時 67% 已在踩煞車
 MIN_A_LEAD = -1.0         # m/s²，前車在煞車就不放軟
 MAX_MPC_BRAKE = -1.5      # m/s²，MPC 要比這個更重的煞車就不放軟
-MIN_GAP_MARGIN = 1.0      # m，離使用者習慣車距少於這個就不放軟
+# 離使用者習慣車距的餘裕：2 m 以下不放軟，2→8 m 線性放大到完全放軟
+# （1127 試車：餘裕 1~3 m 時放軟，有 23% 在 3 s 內變成要 < -1.2 的補煞）
+GAP_RAMP_LO = 2.0
+GAP_RAMP_HI = 8.0
 BRAKE_MARGIN = 1.1        # 物理需求的減速度再乘上這個倍數
 OVER_CRUISE_MAX = 2.5     # m/s，超過設定速度 9 km/h 以內才只用滑行
 
@@ -89,7 +92,7 @@ class ACM:
     self.mode = ''
 
   def _lead_target(self, a_mpc, v_ego, lead):
-    """情境 A：回傳 (floor, ceil) 或 None。"""
+    """情境 A：回傳 (floor, scale) 或 None。scale 是依車距餘裕的放軟比例。"""
     if lead is None or not lead.status:
       return None
     d, v_lead, a_lead = lead.dRel, lead.vLead, lead.aLeadK
@@ -97,8 +100,9 @@ class ACM:
       return None
     v_rel = v_lead - v_ego                     # < 0 表示正在接近
     gap = d - (USER_T_FOLLOW * v_lead + USER_D0)
-    if gap < MIN_GAP_MARGIN:
+    if gap < GAP_RAMP_LO:
       return None
+    scale = float(np.interp(gap, [GAP_RAMP_LO, GAP_RAMP_HI], [0.0, 1.0]))
 
     a_lead_safe = min(a_lead, 0.0)             # 不指望前車會加速
     if v_rel < -0.1:
@@ -107,12 +111,21 @@ class ACM:
         return None
       b_req = v_rel ** 2 / (2.0 * gap)
       floor = min(coast_accel(v_ego), a_lead_safe - BRAKE_MARGIN * b_req)
-      ceil = 0.0 if (ttc < LIFT_OFF_TTC and a_lead < 0.3) else math.inf
     else:
       # 沒在接近：拉開距離只用滑行
       floor = coast_accel(v_ego) + a_lead_safe
-      ceil = math.inf
-    return floor, ceil
+    return floor, scale
+
+  @staticmethod
+  def _lift_off_ceil(v_ego, lead):
+    """接近較慢前車、TTC < LIFT_OFF_TTC 時不再加油。不論 MPC 的 source。
+    （1127 試車：前車 84 m 外減速、TTC 10.6 s，MPC 標 cruise，OP 仍在 +0.8 加速）"""
+    if v_ego < MIN_V_EGO or lead is None or not lead.status or lead.aLeadK >= 0.3:
+      return math.inf
+    v_rel = lead.vLead - v_ego
+    if v_rel < -0.5 and lead.dRel / -v_rel < LIFT_OFF_TTC:
+      return 0.0
+    return math.inf
 
   def _cruise_target(self, v_ego, v_cruise, lead, pitch):
     """情境 B：稍微超過設定速度時只滑行。"""
@@ -123,7 +136,7 @@ class ACM:
       if v_rel < -0.1 and lead.dRel / -v_rel < LIFT_OFF_TTC:
         return None
     floor = min(pitch_coast_accel(pitch), 0.0)
-    return floor, math.inf
+    return floor, 1.0
 
   def update(self, a_mpc, v_ego, v_cruise, lead, source, pitch=0.0):
     """回傳放軟後的 MPC 加速度。只會介於 a_mpc 與 a_mpc 的較溫和值之間。"""
@@ -141,6 +154,11 @@ class ACM:
     elif source == SOURCE_CRUISE:
       target = self._cruise_target(v_ego, v_cruise, lead, pitch)
       mode = 'cruise'
+    ceil = self._lift_off_ceil(v_ego, lead)
+    if target is None and ceil != math.inf and a_mpc > 0.0:
+      # 只有 MPC 想加速時才單獨啟動收油；煞車中仍走退出漸變
+      target = (-math.inf, 0.0)
+      mode = 'lift'
 
     if target is None:
       # 退出：從上一次的放軟值在 1/RATE_OUT 秒內回到 MPC
@@ -150,11 +168,13 @@ class ACM:
       if self.weight == 0.0:
         self.mode = ''
     else:
-      self.a_floor, self.a_ceil = target
+      self.a_floor, scale = target
+      self.a_ceil = ceil
       self.weight = min(1.0, self.weight + RATE_IN * self.dt)
       self.mode = mode
       # floor <= 0、ceil 為 0 或 inf，所以 a_mpc <= 0 時結果仍 <= 0（不會變成加速）
-      a_soft = min(max(a_mpc, self.a_floor), self.a_ceil)
+      a_floor_scaled = a_mpc + scale * (self.a_floor - a_mpc) if self.a_floor > a_mpc else a_mpc
+      a_soft = min(a_floor_scaled, self.a_ceil)
       self.a_soft_last = a_soft
 
     self.active = target is not None
