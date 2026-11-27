@@ -17,6 +17,7 @@ from openpilot.common.swaglog import cloudlog
 from dragonpilot.selfdrive.controls.lib.acm import ACM
 from dragonpilot.selfdrive.controls.lib.aem import AEM
 from dragonpilot.selfdrive.controls.lib.apm import APM
+from dragonpilot.selfdrive.controls.lib.launch_follow import LaunchFollow
 
 # 低速上限依你的起步數據調高（原 1.3/1.2/1.0）：前車起步 1.5~2.2 m/s²，OP 卡在 1.3 跟不上；車端 ACCEL_MAX 1.5 仍會再夾
 A_CRUISE_MAX_VALS = [1.6,   1.5,    1.2,    0.75,   0.55,   0.35,   0.15]
@@ -81,6 +82,7 @@ class LongitudinalPlanner:
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
     self.acm = ACM(DT_MDL)
+    self.launch_follow = LaunchFollow(DT_MDL)
     self.aem = AEM()
     self.apm = APM()
 
@@ -212,6 +214,14 @@ class LongitudinalPlanner:
       self.output_should_stop = output_should_stop_mpc
     if self.blend_weight > 0.0 and output_a_target_blended < output_a_target_mpc:
       self.mpc.source = LongitudinalPlanSource.e2e
+
+    # 起步跟隨：MPC 同意要走時立刻給足起步力道；blended 下 e2e 要停（紅燈等）就不介入
+    if reset_state:
+      self.launch_follow.reset()
+    else:
+      e2e_stop = self.blend_weight > 0.5 and output_should_stop_e2e
+      output_a_target, self.output_should_stop = self.launch_follow.update(
+        v_ego, sm['radarState'].leadOne, output_a_target, self.output_should_stop, e2e_stop)
 
     for idx in range(2):
       accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
