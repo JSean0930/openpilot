@@ -15,7 +15,7 @@ from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
 from dragonpilot.selfdrive.controls.lib.acm import ACM
-from dragonpilot.selfdrive.controls.lib.aem import AEM
+from dragonpilot.selfdrive.controls.lib.stop_and_go import StopAndGo, model_features
 from dragonpilot.selfdrive.controls.lib.apm import APM
 from dragonpilot.selfdrive.controls.lib.launch_follow import LaunchFollow
 
@@ -83,7 +83,7 @@ class LongitudinalPlanner:
     self.j_desired_trajectory = np.zeros(CONTROL_N)
     self.acm = ACM(DT_MDL)
     self.launch_follow = LaunchFollow(DT_MDL)
-    self.aem = AEM()
+    self.stop_go = StopAndGo(DT_MDL)
     self.apm = APM()
 
   @staticmethod
@@ -190,38 +190,52 @@ class LongitudinalPlanner:
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
-    mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
+    lead_one = sm['radarState'].leadOne
     if dp_flags & DPFlags.AEM:
-      # AEM 只在 planner 內部決定模式，不寫 ExperimentalMode 參數
-      self.aem.update_states(model_msg=sm['modelV2'], radar_msg=sm['radarState'], v_ego=v_ego)
-      mode = self.aem.get_mode(self.aem.get_base_mode(mode))
-
-    # acc <-> blended 切換以 crossfade 過渡，避免 a_target 跳階（頓/竄）
-    # 往 blended（可能更多煞車，安全方向）較快，往 acc（放掉 e2e 煞車）較慢
-    blend_target = 1.0 if mode == 'blended' else 0.0
-    if reset_state:
-      self.blend_weight = blend_target
+      # 紅綠燈停走（取代舊 AEM 的油門意圖借用）：平常走 ACC/MPC，依模型速度軌跡收油/停車/起步
+      if reset_state:
+        self.stop_go.reset()
+        self.output_should_stop = output_should_stop_mpc
+        output_a_target = output_a_target_mpc
+      else:
+        md = sm['modelV2']
+        feats = None
+        if len(md.velocity.x) == ModelConstants.IDX_N and len(md.position.x) == ModelConstants.IDX_N:
+          feats = model_features(ModelConstants.T_IDXS, md.velocity.x, md.position.x)
+        output_a_target, self.output_should_stop, used_e2e = self.stop_go.update(
+          v_ego, output_a_target_mpc, output_should_stop_mpc, output_a_target_e2e, output_should_stop_e2e, feats, lead_one, sm['carState'].aEgo)
+        if used_e2e or (self.stop_go.active and output_a_target < output_a_target_mpc - 0.05):
+          self.mpc.source = LongitudinalPlanSource.e2e
+      self.blend_weight = 1.0 if self.stop_go.active else 0.0
+      e2e_stop = self.stop_go.holding
     else:
-      rate = BLEND_RATE_TO_BLENDED if blend_target > self.blend_weight else BLEND_RATE_TO_ACC
-      step = rate * self.dt
-      self.blend_weight = float(np.clip(blend_target, self.blend_weight - step, self.blend_weight + step))
+      mode = 'blended' if sm['selfdriveState'].experimentalMode else 'acc'
+      # acc <-> blended 切換以 crossfade 過渡，避免 a_target 跳階（頓/竄）
+      # 往 blended（可能更多煞車，安全方向）較快，往 acc（放掉 e2e 煞車）較慢
+      blend_target = 1.0 if mode == 'blended' else 0.0
+      if reset_state:
+        self.blend_weight = blend_target
+      else:
+        rate = BLEND_RATE_TO_BLENDED if blend_target > self.blend_weight else BLEND_RATE_TO_ACC
+        step = rate * self.dt
+        self.blend_weight = float(np.clip(blend_target, self.blend_weight - step, self.blend_weight + step))
 
-    output_a_target_blended = min(output_a_target_e2e, output_a_target_mpc)
-    output_a_target = output_a_target_mpc + self.blend_weight * (output_a_target_blended - output_a_target_mpc)
-    if self.blend_weight > 0.5:
-      self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
-    else:
-      self.output_should_stop = output_should_stop_mpc
-    if self.blend_weight > 0.0 and output_a_target_blended < output_a_target_mpc:
-      self.mpc.source = LongitudinalPlanSource.e2e
+      output_a_target_blended = min(output_a_target_e2e, output_a_target_mpc)
+      output_a_target = output_a_target_mpc + self.blend_weight * (output_a_target_blended - output_a_target_mpc)
+      if self.blend_weight > 0.5:
+        self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
+      else:
+        self.output_should_stop = output_should_stop_mpc
+      if self.blend_weight > 0.0 and output_a_target_blended < output_a_target_mpc:
+        self.mpc.source = LongitudinalPlanSource.e2e
+      e2e_stop = self.blend_weight > 0.5 and output_should_stop_e2e
 
-    # 起步跟隨：MPC 同意要走時立刻給足起步力道；blended 下 e2e 要停（紅燈等）就不介入
+    # 起步跟隨：MPC 同意要走時立刻給足起步力道；紅燈停住（或 blended 下 e2e 要停）就不介入
     if reset_state:
       self.launch_follow.reset()
     else:
-      e2e_stop = self.blend_weight > 0.5 and output_should_stop_e2e
       output_a_target, self.output_should_stop = self.launch_follow.update(
-        v_ego, sm['radarState'].leadOne, output_a_target, self.output_should_stop, e2e_stop)
+        v_ego, lead_one, output_a_target, self.output_should_stop, e2e_stop)
 
     for idx in range(2):
       accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
