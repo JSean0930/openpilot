@@ -155,7 +155,7 @@ class LongitudinalPlanner:
     if dp_flags & DPFlags.APM:
       personality = self.apm.get_personality(v_ego, personality)
 
-    self.mpc.set_weights(prev_accel_constraint, personality=personality)
+    self.mpc.set_weights(prev_accel_constraint, personality=personality, v_ego=v_ego)
     self.mpc.set_cur_state(self.v_desired_filter.x, self.a_desired)
     self.mpc.update(sm['radarState'], v_cruise, personality=personality)
 

@@ -9,6 +9,7 @@ from openpilot.common.swaglog import cloudlog
 # WARNING: imports outside of constants will not trigger a rebuild
 from openpilot.selfdrive.modeld.constants import index_function
 from openpilot.selfdrive.controls.radard import _LEAD_ACCEL_TAU
+from dragonpilot.selfdrive.controls.lib.highway_smooth import highway_jerk_factor, damp_lead_accel
 
 if __name__ == '__main__':  # generating code
   from acados.acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
@@ -292,8 +293,9 @@ class LongitudinalMpc:
     for i in range(N):
       self.solver.cost_set(i, 'Zl', Zl)
 
-  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard):
-    jerk_factor = get_jerk_factor(personality)
+  def set_weights(self, prev_accel_constraint=True, personality=log.LongitudinalPersonality.standard, v_ego=0.0):
+    # 高速平順巡航：50→80 km/h 逐步把 jerk factor 提高到 2.0（見 highway_smooth.py）
+    jerk_factor = highway_jerk_factor(v_ego, get_jerk_factor(personality))
     a_change_cost = A_CHANGE_COST if prev_accel_constraint else 0
     cost_weights = [X_EGO_OBSTACLE_COST, X_EGO_COST, V_EGO_COST, A_EGO_COST, jerk_factor * a_change_cost, jerk_factor * J_EGO_COST]
     constraint_cost_weights = [LIMIT_COST, LIMIT_COST, LIMIT_COST, DANGER_ZONE_COST]
@@ -320,7 +322,8 @@ class LongitudinalMpc:
     if lead is not None and lead.status:
       x_lead = lead.dRel
       v_lead = lead.vLead
-      a_lead = lead.aLeadK
+      # 高速時前車輕微加減速只採信一半，重煞完全採信（見 highway_smooth.py）
+      a_lead = damp_lead_accel(v_ego, lead.aLeadK)
       a_lead_tau = lead.aLeadTau
     else:
       # Fake a fast lead car, so mpc can keep running in the same mode
